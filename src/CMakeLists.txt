@@ -1,7 +1,7 @@
 set(SRC
   f90_assert.F90
-  hdf5_c_binding.F90
-  hl_hdf5.F90
+  vtkhdf_h5_c_binding.F90
+  vtkhdf_hl_h5.F90
   vtkhdf_file_type.F90
   vtkhdf_ug_type.F90
 )
@@ -12,7 +12,7 @@ set_property(SOURCE ${MPI_USERS} APPEND PROPERTY COMPILE_OPTIONS
   "$<$<COMPILE_LANG_AND_ID:Fortran,NAG>:-mismatch;-w>")
 
 # Separate C target to prevent HDF5/MPI C build details from contaminating Fortran targets
-add_library(cshim STATIC hdf5_c_binding_ext.c)
+add_library(cshim STATIC vtkhdf_h5_c_shim.c)
 target_link_libraries(cshim PUBLIC MPI::MPI_C HDF5::HDF5)
 if (BUILD_SHARED_LIBS)
   set_target_properties(cshim PROPERTIES POSITION_INDEPENDENT_CODE ON)

@@ -1,9 +1,8 @@
 !!
-!! HDF5_C_BINDING
+!! VTKHDF_H5_C_BINDING
 !!
-!! Bindings to a very small subset of low-level HDF5 C functions. The
-!! provided bindings are primarily limited to the needs of HL_HDF5 and
-!! VTKHDF_FILE_TYPE.
+!! Private bindings to a relatively small subset of HDF5 C functions that
+!! are used by the VTKHDF modules.
 !!
 !! Neil Carlson <neil.n.carlson@gmail.com>
 !! March 2024
@@ -24,7 +23,7 @@
 !! initialized.
 !!
 
-module hdf5_c_binding
+module vtkhdf_h5_c_binding
 
   use iso_c_binding
   implicit none
@@ -727,4 +726,4 @@ contains
                              lcpl_id_, lapl_id_)
   end function
 
-end module hdf5_c_binding
+end module vtkhdf_h5_c_binding

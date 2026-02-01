@@ -3,10 +3,10 @@
 !!
 !! This module defines an auxiliary derived type for managing an HDF5 tree that
 !! stores an UnstructuredGrid VTKHDF dataset. It serves as a core component of
-!! the VTKHDF_FILE exporter type.
+!! the VTKHDF_FILE type.
 !!
 !! Neil Carlson <neil.n.carlson@gmail.com>
-!! March 2024; refactored for parallel HDF5 January 2026
+!! January 2026
 !!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!
@@ -17,8 +17,8 @@
 !!
 !! This module was written for version 2.5 of the format.
 !!
-!! This implementation supports static and time dependent datasets (node and cell
-!! based), but both assume a single static mesh.
+!! This implementation supports static and time dependent data (point and
+!! cell), but both assume a single static mesh.
 !!
 
 #include "f90_assert.fpp"
@@ -26,8 +26,8 @@
 module vtkhdf_ug_type
 
   use,intrinsic :: iso_fortran_env
-  use hdf5_c_binding
-  use hl_hdf5
+  use vtkhdf_h5_c_binding
+  use vtkhdf_hl_h5
   implicit none
   private
 
@@ -36,28 +36,28 @@ module vtkhdf_ug_type
     integer :: nnode, ncell, nnode_tot, ncell_tot, nproc, npart
     logical :: temporal = .false.
     integer :: nsteps = -1
-    type(temporal_dataset), pointer :: temporal_point_dsets => null()
-    type(temporal_dataset), pointer :: temporal_cell_dsets => null()
+    type(temporal_data), pointer :: temporal_point_data => null()
+    type(temporal_data), pointer :: temporal_cell_data => null()
   contains
     procedure :: init
     procedure :: write_mesh
     procedure :: write_time_step
-    procedure :: write_cell_dataset_real64, write_cell_dataset_int32
-    procedure :: write_point_dataset_real64
-    procedure :: register_temporal_cell_dataset_real64
-    procedure :: register_temporal_point_dataset_real64
-    procedure :: write_temporal_cell_dataset_real64
-    procedure :: write_temporal_point_dataset_real64
+    procedure :: write_cell_data_real64, write_cell_data_int32
+    procedure :: write_point_data_real64
+    procedure :: register_temporal_cell_data_real64
+    procedure :: register_temporal_point_data_real64
+    procedure :: write_temporal_cell_data_real64
+    procedure :: write_temporal_point_data_real64
     procedure :: close
   end type
 
-  type :: temporal_dataset
+  type :: temporal_data
     character(:), allocatable :: name
     integer :: next_offset = 0
     logical :: flag = .false.
-    type(temporal_dataset), pointer :: next => null()
+    type(temporal_data), pointer :: next => null()
   contains
-    final :: temporal_dataset_delete
+    final :: temporal_data_delete
   end type
 
   integer, parameter :: vtkhdf_version(*) = [2,5]
@@ -134,8 +134,8 @@ contains
     if (this%cgrp_id > 0) this%cgrp_id = H5Gclose(this%cgrp_id)
     if (this%pgrp_id > 0) this%pgrp_id = H5Gclose(this%pgrp_id)
     if (this%root_id > 0) this%root_id = H5Gclose(this%root_id)
-    if (associated(this%temporal_cell_dsets)) deallocate(this%temporal_cell_dsets)
-    if (associated(this%temporal_point_dsets)) deallocate(this%temporal_point_dsets)
+    if (associated(this%temporal_cell_data)) deallocate(this%temporal_cell_data)
+    if (associated(this%temporal_point_data)) deallocate(this%temporal_point_data)
     call default_initialize(this)
   contains
     subroutine default_initialize(this)
@@ -143,8 +143,8 @@ contains
     end subroutine
   end subroutine
 
-  recursive subroutine temporal_dataset_delete(this)
-    type(temporal_dataset), intent(inout) :: this
+  recursive subroutine temporal_data_delete(this)
+    type(temporal_data), intent(inout) :: this
     if (associated(this%next)) deallocate(this%next)
   end subroutine
 
@@ -239,7 +239,7 @@ contains
   !! temporal file supporting time-dependent datasets, this dataset is
   !! static and not associated with any time step.
 
-  subroutine write_cell_dataset_real64(this, name, array, stat, errmsg)
+  subroutine write_cell_data_real64(this, name, array, stat, errmsg)
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
     real(real64), intent(in) :: array(..)
@@ -252,7 +252,7 @@ contains
     call h5_write_dataset(this%cgrp_id, name, array, stat, errmsg)
   end subroutine
 
-  subroutine write_cell_dataset_int32(this, name, array, stat, errmsg)
+  subroutine write_cell_data_int32(this, name, array, stat, errmsg)
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
     integer(int32), intent(in) :: array(..)
@@ -270,7 +270,7 @@ contains
   !! temporal file supporting time-dependent datasets, this dataset is
   !! static and not associated with any time step.
 
-  subroutine write_point_dataset_real64(this, name, array, stat, errmsg)
+  subroutine write_point_data_real64(this, name, array, stat, errmsg)
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
     real(real64), intent(in) :: array(..)
@@ -290,7 +290,7 @@ contains
   !! values themselves are not accessed. Scalar, vector, and tensor-valued mesh
   !! data are supported (rank-1, 2, and 3 MOLD).
 
-  subroutine register_temporal_point_dataset_real64(this, name, mold, stat, errmsg)
+  subroutine register_temporal_point_data_real64(this, name, mold, stat, errmsg)
 
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
@@ -298,7 +298,7 @@ contains
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
-    type(temporal_dataset), pointer :: new
+    type(temporal_data), pointer :: new
 
     INSIST(this%nsteps == 0)
 
@@ -307,8 +307,8 @@ contains
     associate (chunk_size => this%nnode_tot)
       call h5_create_unlimited_dataset(this%pgrp_id, name, mold, chunk_size, stat, errmsg)
     end associate
-    new%next => this%temporal_point_dsets
-    this%temporal_point_dsets => new
+    new%next => this%temporal_point_data
+    this%temporal_point_data => new
     if (stat /= 0) return
 
     associate (mold => [1], chunk_size => 100)
@@ -324,7 +324,7 @@ contains
   !! values themselves are not accessed. Scalar, vector, and tensor-valued mesh
   !! data are supported (rank-1, 2, and 3 MOLD).
 
-  subroutine register_temporal_cell_dataset_real64(this, name, mold, stat, errmsg)
+  subroutine register_temporal_cell_data_real64(this, name, mold, stat, errmsg)
 
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
@@ -332,7 +332,7 @@ contains
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
-    type(temporal_dataset), pointer :: new
+    type(temporal_data), pointer :: new
 
     INSIST(this%nsteps == 0)
 
@@ -341,8 +341,8 @@ contains
     associate (chunk_size => this%ncell_tot)
       call h5_create_unlimited_dataset(this%cgrp_id, name, mold, chunk_size, stat, errmsg)
     end associate
-    new%next => this%temporal_cell_dsets
-    this%temporal_cell_dsets => new
+    new%next => this%temporal_cell_data
+    this%temporal_cell_data => new
     if (stat /= 0) return
 
     associate (mold => [1], chunk_size => 100)
@@ -359,7 +359,7 @@ contains
     class(vtkhdf_ug), intent(inout) :: this
     real(real64), intent(in) :: time
 
-    type(temporal_dataset), pointer :: tmp
+    type(temporal_data), pointer :: tmp
     integer :: stat
     character(:), allocatable :: errmsg
 
@@ -388,7 +388,7 @@ contains
     !! (except initially). This will be overwritten when the dataset is written
     !! to for this time step.
 
-    tmp => this%temporal_point_dsets
+    tmp => this%temporal_point_data
     do while (associated(tmp))
       tmp%flag = .false.  ! dataset not yet written for this time step
       call h5_append_to_dataset(this%pogrp_id, tmp%name, tmp%next_offset, stat, errmsg, root=0)
@@ -396,7 +396,7 @@ contains
       tmp => tmp%next
     end do
 
-    tmp => this%temporal_cell_dsets
+    tmp => this%temporal_cell_data
     do while (associated(tmp))
       tmp%flag = .false.  ! dataset not yet written for this time step
       call h5_append_to_dataset(this%cogrp_id, tmp%name, tmp%next_offset, stat, errmsg, root=0)
@@ -409,7 +409,7 @@ contains
   !! Write the cell-based data ARRAY for the named time-dependent cell dataset.
   !! The data is associated with the current time step.
 
-  subroutine write_temporal_cell_dataset_real64(this, name, array, stat, errmsg)
+  subroutine write_temporal_cell_data_real64(this, name, array, stat, errmsg)
 
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
@@ -418,7 +418,7 @@ contains
     character(:), allocatable :: errmsg
 
     integer, allocatable :: dims(:)
-    type(temporal_dataset), pointer :: dset
+    type(temporal_data), pointer :: dset
 
     INSIST(this%nsteps >= 0)
 
@@ -426,7 +426,7 @@ contains
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
     INSIST(dims(size(dims)) == this%ncell)
 
-    dset => this%temporal_cell_dsets
+    dset => this%temporal_cell_data
     do while (associated(dset))
       if (dset%name == name) exit
       dset => dset%next
@@ -456,7 +456,7 @@ contains
   !! Write the node-based data ARRAY for the named time-dependent cell dataset.
   !! The data is associated with the current time step.
 
-  subroutine write_temporal_point_dataset_real64(this, name, array, stat, errmsg)
+  subroutine write_temporal_point_data_real64(this, name, array, stat, errmsg)
 
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
@@ -465,7 +465,7 @@ contains
     character(:), allocatable :: errmsg
 
     integer, allocatable :: dims(:)
-    type(temporal_dataset), pointer :: dset
+    type(temporal_data), pointer :: dset
 
     INSIST(this%nsteps >= 0)
 
@@ -473,7 +473,7 @@ contains
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
     INSIST(dims(size(dims)) == this%nnode)
 
-    dset => this%temporal_point_dsets
+    dset => this%temporal_point_data
     do while (associated(dset))
       if (dset%name == name) exit
       dset => dset%next

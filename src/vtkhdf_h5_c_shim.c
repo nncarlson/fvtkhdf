@@ -1,5 +1,9 @@
+/* H5 interface functions that must be done from the C side */
+
 #include "hdf5.h"
 #include "mpi.h"
+
+/* Functions to return object IDs that are created at run time */
 hid_t H5P_DATASET_CREATE_value() { return H5P_DATASET_CREATE; }
 hid_t H5P_GROUP_CREATE_value() { return H5P_GROUP_CREATE; }
 hid_t H5P_FILE_ACCESS_value() {return H5P_FILE_ACCESS; }

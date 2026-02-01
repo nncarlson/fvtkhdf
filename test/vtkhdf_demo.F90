@@ -58,16 +58,16 @@ program vtkhdf_demo
     y(2,:) = y(2,:) + 1 ! everyone shifts up
   end do
 
-  !!!! Register the datasets that evolve with time.
+  !!!! Register the data arrays that evolve with time.
 
   do j = 0, nproc-1
-    call vizfile%register_temporal_cell_dataset(name(j), 'cell-scalar', s0, stat, errmsg)
+    call vizfile%register_temporal_cell_data(name(j), 'cell-scalar', s0, stat, errmsg)
     if (stat /= 0) error stop errmsg
-    call vizfile%register_temporal_cell_dataset(name(j), 'cell-vector', v0, stat, errmsg)
+    call vizfile%register_temporal_cell_data(name(j), 'cell-vector', v0, stat, errmsg)
     if (stat /= 0) error stop errmsg
-    call vizfile%register_temporal_point_dataset(name(j), 'point-scalar', s0, stat, errmsg)
+    call vizfile%register_temporal_point_data(name(j), 'point-scalar', s0, stat, errmsg)
     if (stat /= 0) error stop errmsg
-    call vizfile%register_temporal_point_dataset(name(j), 'point-vector', v0, stat, errmsg)
+    call vizfile%register_temporal_point_data(name(j), 'point-vector', v0, stat, errmsg)
     if (stat /= 0) error stop errmsg
   end do
 
@@ -79,18 +79,18 @@ program vtkhdf_demo
   do j = 0, nproc-1
     if (abs(rank-j) <= 1) then
       call get_scalar_cell_data(y, cnode, xcnode, s)
-      call vizfile%write_temporal_cell_dataset(name(j), 'cell-scalar', s, stat, errmsg)
+      call vizfile%write_temporal_cell_data(name(j), 'cell-scalar', s, stat, errmsg)
       call get_vector_cell_data(y, cnode, xcnode, v)
-      call vizfile%write_temporal_cell_dataset(name(j), 'cell-vector', v, stat, errmsg)
+      call vizfile%write_temporal_cell_data(name(j), 'cell-vector', v, stat, errmsg)
       call get_scalar_point_data(y, s)
-      call vizfile%write_temporal_point_dataset(name(j), 'point-scalar', s, stat, errmsg)
+      call vizfile%write_temporal_point_data(name(j), 'point-scalar', s, stat, errmsg)
       call get_vector_point_data(y, v)
-      call vizfile%write_temporal_point_dataset(name(j), 'point-vector', v, stat, errmsg)
+      call vizfile%write_temporal_point_data(name(j), 'point-vector', v, stat, errmsg)
     else ! pass 0-sized data
-      call vizfile%write_temporal_cell_dataset(name(j), 'cell-scalar', s0, stat, errmsg)
-      call vizfile%write_temporal_cell_dataset(name(j), 'cell-vector',  v0, stat, errmsg)
-      call vizfile%write_temporal_point_dataset(name(j), 'point-scalar', s0, stat, errmsg)
-      call vizfile%write_temporal_point_dataset(name(j), 'point-vector',  v0, stat, errmsg)
+      call vizfile%write_temporal_cell_data(name(j), 'cell-scalar', s0, stat, errmsg)
+      call vizfile%write_temporal_cell_data(name(j), 'cell-vector',  v0, stat, errmsg)
+      call vizfile%write_temporal_point_data(name(j), 'point-scalar', s0, stat, errmsg)
+      call vizfile%write_temporal_point_data(name(j), 'point-vector',  v0, stat, errmsg)
     end if
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do
@@ -103,18 +103,18 @@ program vtkhdf_demo
   do j = 0, nproc-1
     if (abs(rank-j) <= 1) then
       call get_scalar_cell_data(y, cnode, xcnode, s)
-      call vizfile%write_temporal_cell_dataset(name(j), 'cell-scalar', s+1, stat, errmsg)
+      call vizfile%write_temporal_cell_data(name(j), 'cell-scalar', s+1, stat, errmsg)
       call get_vector_cell_data(y, cnode, xcnode, v)
-      call vizfile%write_temporal_cell_dataset(name(j), 'cell-vector', v+1, stat, errmsg)
+      call vizfile%write_temporal_cell_data(name(j), 'cell-vector', v+1, stat, errmsg)
       call get_scalar_point_data(y, s)
-      call vizfile%write_temporal_point_dataset(name(j), 'point-scalar', s+1, stat, errmsg)
+      call vizfile%write_temporal_point_data(name(j), 'point-scalar', s+1, stat, errmsg)
       call get_vector_point_data(y, v)
-      call vizfile%write_temporal_point_dataset(name(j), 'point-vector', v+1, stat, errmsg)
+      call vizfile%write_temporal_point_data(name(j), 'point-vector', v+1, stat, errmsg)
     else ! pass 0-sized data
-      call vizfile%write_temporal_cell_dataset(name(j), 'cell-scalar', s0, stat, errmsg)
-      call vizfile%write_temporal_cell_dataset(name(j), 'cell-vector',  v0, stat, errmsg)
-      call vizfile%write_temporal_point_dataset(name(j), 'point-scalar', s0, stat, errmsg)
-      call vizfile%write_temporal_point_dataset(name(j), 'point-vector',  v0, stat, errmsg)
+      call vizfile%write_temporal_cell_data(name(j), 'cell-scalar', s0, stat, errmsg)
+      call vizfile%write_temporal_cell_data(name(j), 'cell-vector',  v0, stat, errmsg)
+      call vizfile%write_temporal_point_data(name(j), 'point-scalar', s0, stat, errmsg)
+      call vizfile%write_temporal_point_data(name(j), 'point-vector',  v0, stat, errmsg)
     end if
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do
@@ -126,18 +126,18 @@ program vtkhdf_demo
   do j = 0, nproc-1
     if (abs(rank-j) <= 1) then
       call get_scalar_cell_data(y, cnode, xcnode, s)
-      call vizfile%write_cell_dataset(name(j), 'static-cell-scalar', s, stat, errmsg)
+      call vizfile%write_cell_data(name(j), 'static-cell-scalar', s, stat, errmsg)
       call get_vector_cell_data(y, cnode, xcnode, v)
-      call vizfile%write_cell_dataset(name(j), 'static-cell-vector', v, stat, errmsg)
+      call vizfile%write_cell_data(name(j), 'static-cell-vector', v, stat, errmsg)
       call get_scalar_point_data(y, s)
-      call vizfile%write_point_dataset(name(j), 'static-point-scalar', s, stat, errmsg)
+      call vizfile%write_point_data(name(j), 'static-point-scalar', s, stat, errmsg)
       call get_vector_point_data(y, v)
-      call vizfile%write_point_dataset(name(j), 'static-point-vector', v, stat, errmsg)
+      call vizfile%write_point_data(name(j), 'static-point-vector', v, stat, errmsg)
     else ! pass 0-sized data
-      call vizfile%write_cell_dataset(name(j), 'static-cell-scalar', s0, stat, errmsg)
-      call vizfile%write_cell_dataset(name(j), 'static-cell-vector',  v0, stat, errmsg)
-      call vizfile%write_point_dataset(name(j), 'static-point-scalar', s0, stat, errmsg)
-      call vizfile%write_point_dataset(name(j), 'static-point-vector',  v0, stat, errmsg)
+      call vizfile%write_cell_data(name(j), 'static-cell-scalar', s0, stat, errmsg)
+      call vizfile%write_cell_data(name(j), 'static-cell-vector',  v0, stat, errmsg)
+      call vizfile%write_point_data(name(j), 'static-point-scalar', s0, stat, errmsg)
+      call vizfile%write_point_data(name(j), 'static-point-vector',  v0, stat, errmsg)
     end if
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do

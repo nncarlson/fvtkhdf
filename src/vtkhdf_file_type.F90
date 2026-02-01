@@ -6,7 +6,7 @@
 !! The format uses HDF5 for on-disk storage.
 !!
 !! Neil Carlson <neil.n.carlson@gmail.com>
-!! March 2024; refactored January 2026
+!! January 2026
 !!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!
@@ -18,12 +18,9 @@
 !! This module was written for version 2.5 of the format.
 !!
 !! This module uses the "MultiBlockDataSet" type of format. It supports static
-!! and time dependent datasets (point and cell based), but both assume a single
-!! static mesh. The "Assembly" dataset hierarchy is limited to a flat collection
+!! and time dependent data (point and cell), but assumes a single static mesh.
+!! The "Assembly" dataset hierarchy is limited to a flat collection
 !! of UnstructuredGrid blocks.
-!!
-!! This module is currently serial only: data must be collated onto a single
-!! process and written from that process using this object.
 !!
 
 #include "f90_assert.fpp"
@@ -31,8 +28,8 @@
 module vtkhdf_file_type
 
   use,intrinsic :: iso_fortran_env
-  use hdf5_c_binding
-  use hl_hdf5
+  use vtkhdf_h5_c_binding
+  use vtkhdf_hl_h5
   use vtkhdf_ug_type
   implicit none
   private
@@ -46,18 +43,18 @@ module vtkhdf_file_type
     procedure :: create, create_block
     procedure :: write_block_mesh
     procedure :: write_time_step
-    generic :: write_cell_dataset  => write_cell_dataset_real64, write_cell_dataset_int32
-    generic :: write_point_dataset => write_point_dataset_real64
-    generic :: register_temporal_cell_dataset  => register_temporal_cell_dataset_real64
-    generic :: register_temporal_point_dataset => register_temporal_point_dataset_real64
-    generic :: write_temporal_cell_dataset  => write_temporal_cell_dataset_real64
-    generic :: write_temporal_point_dataset => write_temporal_point_dataset_real64
-    procedure, private :: write_cell_dataset_real64, write_cell_dataset_int32
-    procedure, private :: write_point_dataset_real64
-    procedure, private :: register_temporal_cell_dataset_real64
-    procedure, private :: register_temporal_point_dataset_real64
-    procedure, private :: write_temporal_cell_dataset_real64
-    procedure, private :: write_temporal_point_dataset_real64
+    generic :: write_cell_data  => write_cell_data_real64, write_cell_data_int32
+    generic :: write_point_data => write_point_data_real64
+    generic :: register_temporal_cell_data  => register_temporal_cell_data_real64
+    generic :: register_temporal_point_data => register_temporal_point_data_real64
+    generic :: write_temporal_cell_data  => write_temporal_cell_data_real64
+    generic :: write_temporal_point_data => write_temporal_point_data_real64
+    procedure, private :: write_cell_data_real64, write_cell_data_int32
+    procedure, private :: write_point_data_real64
+    procedure, private :: register_temporal_cell_data_real64
+    procedure, private :: register_temporal_point_data_real64
+    procedure, private :: write_temporal_cell_data_real64
+    procedure, private :: write_temporal_point_data_real64
     procedure :: close
     procedure, private :: get_block_ptr
     !final :: vtkhdf_file_delete
@@ -246,7 +243,7 @@ contains
   !! supported. In the case of a temporal block supporting time-dependent
   !! datasets, this dataset is static and not associated with any time step.
 
-  subroutine write_cell_dataset_real64(this, block_name, name, array, stat, errmsg)
+  subroutine write_cell_data_real64(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     real(real64), intent(in) :: array(..)
@@ -255,10 +252,10 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%write_cell_dataset_real64(name, array, stat, errmsg)
+    call bptr%write_cell_data_real64(name, array, stat, errmsg)
   end subroutine
 
-  subroutine write_cell_dataset_int32(this, block_name, name, array, stat, errmsg)
+  subroutine write_cell_data_int32(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     integer(int32), intent(in) :: array(..)
@@ -267,7 +264,7 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%write_cell_dataset_int32(name, array, stat, errmsg)
+    call bptr%write_cell_data_int32(name, array, stat, errmsg)
   end subroutine
 
   !! Writes the point-based data ARRAY to a new named cell dataset for the
@@ -275,7 +272,7 @@ contains
   !! supported. In the case of a temporal block supporting time-dependent
   !! datasets, this dataset is static and not associated with any time step.
 
-  subroutine write_point_dataset_real64(this, block_name, name, array, stat, errmsg)
+  subroutine write_point_data_real64(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     real(real64), intent(in) :: array(..)
@@ -284,7 +281,7 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%write_point_dataset_real64(name, array, stat, errmsg)
+    call bptr%write_point_data_real64(name, array, stat, errmsg)
   end subroutine
 
   !! Register the specified NAME as a time-dependent point dataset for the
@@ -295,7 +292,7 @@ contains
   !! themselves are not accessed. Scalar, vector, and tensor-valued mesh
   !! data are supported (rank-1, 2, and 3 MOLD).
 
-  subroutine register_temporal_point_dataset_real64(this, block_name, name, mold, stat, errmsg)
+  subroutine register_temporal_point_data_real64(this, block_name, name, mold, stat, errmsg)
     class(vtkhdf_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
     real(real64), intent(in) :: mold(..)
@@ -304,7 +301,7 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%register_temporal_point_dataset_real64(name, mold, stat, errmsg)
+    call bptr%register_temporal_point_data_real64(name, mold, stat, errmsg)
   end subroutine
 
   !! Register the specified NAME as a time-dependent cell dataset for the
@@ -315,7 +312,7 @@ contains
   !! themselves are not accessed. Scalar, vector, and tensor-valued mesh
   !! data are supported (rank-1, 2, and 3 MOLD).
 
-  subroutine register_temporal_cell_dataset_real64(this, block_name, name, mold, stat, errmsg)
+  subroutine register_temporal_cell_data_real64(this, block_name, name, mold, stat, errmsg)
     class(vtkhdf_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
     real(real64), intent(in) :: mold(..)
@@ -324,7 +321,7 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%register_temporal_cell_dataset_real64(name, mold, stat, errmsg)
+    call bptr%register_temporal_cell_data_real64(name, mold, stat, errmsg)
   end subroutine
 
   !! Mark the start of a new time step with time value TIME. Subsequent output
@@ -345,7 +342,7 @@ contains
   !! for the specified mesh block. The data is associated with the current
   !! time step.
 
-  subroutine write_temporal_point_dataset_real64(this, block_name, name, array, stat, errmsg)
+  subroutine write_temporal_point_data_real64(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     real(real64), intent(in) :: array(..)
@@ -354,14 +351,14 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%write_temporal_point_dataset_real64(name, array, stat, errmsg)
+    call bptr%write_temporal_point_data_real64(name, array, stat, errmsg)
   end subroutine
 
   !! Write the cell-based data ARRAY to the named time-dependent cell dataset
   !! for the specified mesh block. The data is associated with the current
   !! time step.
 
-  subroutine write_temporal_cell_dataset_real64(this, block_name, name, array, stat, errmsg)
+  subroutine write_temporal_cell_data_real64(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     real(real64), intent(in) :: array(..)
@@ -370,7 +367,7 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%write_temporal_cell_dataset_real64(name, array, stat, errmsg)
+    call bptr%write_temporal_cell_data_real64(name, array, stat, errmsg)
   end subroutine
 
   !! This auxiliary procedure returns a pointer to the named block, or a null

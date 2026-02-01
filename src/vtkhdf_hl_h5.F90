@@ -1,16 +1,12 @@
 !!
-!! HL_HDF5
+!! VTKHDF_HL_H5
 !!
-!! A high-level layer over parallel HDF5 which provides simplified procedures
-!! for writing attributes, datasets, creating extendable datasets (of a
-!! specific form) and incrementally appending to them. The provided procedures
-!! are primarily limited to the needs of VTKHDF_FILE_TYPE. This depends on, and
-!! supplements, the procedures from HDF5_C_BINDING which provides a limited
-!! custom low-level binding to HDF5's C interface. These procedures are all
-!! collective.
+!! An application-specific layer over parallel HDF5 that provides single-call
+!! procedures for writing attributes and datasets, creating and appending to
+!! extendable datasets, and other utilities for private use by VTKHDF modules.
 !!
 !! Neil Carlson <neil.n.carlson@gmail.com>
-!! March 2024; updated to parallel HDF5 January 2026
+!! January 2026
 !!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!
@@ -20,24 +16,13 @@
 !! opened with a file access property list that enables MPI and collective
 !! metadata operations and writes, as in the following:
 !!
-!!   use mpi
-!!   use hdf5_c_binding
-!!   use iso_c_binding, only: c_bool
-!!   type(hid_t) :: fapl, file_id
-!!   integer :: stat
-!!   fapl = H5Pcreate(H5P_FILE_ACCESS)
-!!   stat = H5Pset_fapl_mpio(fapl, MPI_COMM_WORLD)
-!!   stat = H5Pset_all_coll_metadata_ops(fapl, is_collective=.true._c_bool)
-!!   stat = H5Pset_coll_metadata_write(fapl, is_collective=.true._c_bool)
-!!   file_id = H5Fcreate('my_file.h5', H5F_ACC_TRUNC, H5P_DEFAULT, fapl)
-!!
 
 #include "f90_assert.fpp"
 
-module hl_hdf5
+module vtkhdf_hl_h5
 
   use,intrinsic :: iso_fortran_env
-  use hdf5_c_binding
+  use vtkhdf_h5_c_binding
   implicit none
   private
 
@@ -1001,4 +986,4 @@ contains
     istat = H5Fclose(file_id)
   end function
 
-end module hl_hdf5
+end module vtkhdf_hl_h5
