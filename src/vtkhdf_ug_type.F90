@@ -27,15 +27,19 @@ module vtkhdf_ug_type
 
   use,intrinsic :: iso_fortran_env
   use vtkhdf_h5_c_binding
-  use vtkhdf_hl_h5
+  use vtkhdf_h5
+  use mpi
   implicit none
   private
 
   type, public :: vtkhdf_ug
-    integer(hid_t) :: root_id=0, cgrp_id=0, pgrp_id=0, steps_id=0, cogrp_id=0, pogrp_id=0
-    integer :: nnode, ncell, nnode_tot, ncell_tot, nproc, npart
+    integer :: comm = MPI_COMM_NULL
+    integer(hid_t) :: root_id=0, cgrp_id=0, pgrp_id=0
+    integer :: nproc, npart
+    integer :: nnode, ncell, nnode_tot, ncell_tot
     logical :: temporal = .false.
     integer :: nsteps = -1
+    integer(hid_t) :: steps_id=0, cogrp_id=0, pogrp_id=0
     type(temporal_data), pointer :: temporal_point_data => null()
     type(temporal_data), pointer :: temporal_cell_data => null()
   contains
@@ -68,14 +72,20 @@ contains
   !! supporting time-dependent data, specify the optional argument
   !! TEMPORAL to true; otherwise a static group is created by default.
 
-  subroutine init(this, loc_id, name, stat, errmsg, temporal)
+  subroutine init(this, loc_id, name, comm, stat, errmsg, temporal)
 
     class(vtkhdf_ug), intent(inout) :: this
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     logical, intent(in), optional :: temporal
+
+    integer :: istat ! ignored return status
+
+    this%comm = comm
+    call MPI_Comm_size(this%comm, this%nproc, istat)
 
     this%root_id = H5Gcreate(loc_id, name)
     INSIST(this%root_id > 0)
@@ -170,7 +180,7 @@ contains
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
-    integer :: idum(0)
+    integer :: istat, idum(0)
 
     INSIST(this%root_id > 0)
 
@@ -182,54 +192,47 @@ contains
     ASSERT(minval(cnode) >= 1)
     ASSERT(maxval(cnode) <= this%nnode)
 
-    block
-      use mpi
-      integer :: comm, istat
-      comm = h5_mpi_comm(this%root_id)
-      call MPI_Allreduce(this%nnode, this%nnode_tot, 1, MPI_INTEGER, MPI_SUM, comm, istat)
-      call MPI_Allreduce(this%ncell, this%ncell_tot, 1, MPI_INTEGER, MPI_SUM, comm, istat)
-      call MPI_Allreduce(merge(1, 0, this%ncell>0), this%npart, 1, MPI_INTEGER, MPI_SUM, comm, istat) ! see NB above
-      call MPI_Comm_size(comm, this%nproc, istat)
-      call MPI_Comm_free(comm, istat)
-    end block
+    call MPI_Allreduce(this%nnode, this%nnode_tot, 1, MPI_INTEGER, MPI_SUM, this%comm, istat)
+    call MPI_Allreduce(this%ncell, this%ncell_tot, 1, MPI_INTEGER, MPI_SUM, this%comm, istat)
+    call MPI_Allreduce(merge(1, 0, this%ncell>0), this%npart, 1, MPI_INTEGER, MPI_SUM, this%comm, istat) ! see NB above
 
     if (this%ncell > 0) then
-      call h5_write_dataset(this%root_id, 'NumberOfPoints', this%nnode, stat, errmsg)
+      call h5_write_dataset(this%root_id, 'NumberOfPoints', this%nnode, this%comm, stat, errmsg)
     else ! see NB above
-      call h5_write_dataset(this%root_id, 'NumberOfPoints', idum, stat, errmsg)
+      call h5_write_dataset(this%root_id, 'NumberOfPoints', idum, this%comm, stat, errmsg)
     end if
     INSIST(stat == 0)
 
     if (this%ncell > 0) then
-      call h5_write_dataset(this%root_id, 'NumberOfCells',  this%ncell, stat, errmsg)
+      call h5_write_dataset(this%root_id, 'NumberOfCells',  this%ncell, this%comm, stat, errmsg)
     else ! see NB above
-      call h5_write_dataset(this%root_id, 'NumberOfCells',  idum, stat, errmsg)
+      call h5_write_dataset(this%root_id, 'NumberOfCells',  idum, this%comm, stat, errmsg)
     end if
     INSIST(stat == 0)
 
     if (this%ncell > 0) then
-      call h5_write_dataset(this%root_id, 'NumberOfConnectivityIds', size(cnode), stat, errmsg)
+      call h5_write_dataset(this%root_id, 'NumberOfConnectivityIds', size(cnode), this%comm, stat, errmsg)
     else ! see NB above
-      call h5_write_dataset(this%root_id, 'NumberOfConnectivityIds', idum, stat, errmsg)
+      call h5_write_dataset(this%root_id, 'NumberOfConnectivityIds', idum, this%comm, stat, errmsg)
     end if
     INSIST(stat == 0)
 
     if (this%ncell > 0) then
-      call h5_write_dataset(this%root_id, 'Offsets', xcnode-1, stat, errmsg) ! offsets instead of starting indices
+      call h5_write_dataset(this%root_id, 'Offsets', xcnode-1, this%comm, stat, errmsg) ! offsets instead of starting indices
     else ! see NB above
-      call h5_write_dataset(this%root_id, 'Offsets', idum, stat, errmsg)
+      call h5_write_dataset(this%root_id, 'Offsets', idum, this%comm, stat, errmsg)
     end if
     INSIST(stat == 0)
 
     if (this%ncell > 0) then
-      call h5_write_dataset(this%root_id, 'Connectivity', cnode-1, stat, errmsg)  ! 0-based indexing
+      call h5_write_dataset(this%root_id, 'Connectivity', cnode-1, this%comm, stat, errmsg)  ! 0-based indexing
     else ! workaround for gfortran bug https://gcc.gnu.org/bugzilla/show_bug.cgi?id=123899
-      call h5_write_dataset(this%root_id, 'Connectivity', idum, stat, errmsg)
+      call h5_write_dataset(this%root_id, 'Connectivity', idum, this%comm, stat, errmsg)
     endif
     INSIST(stat == 0)
-    call h5_write_dataset(this%root_id, 'Types', types, stat, errmsg)
+    call h5_write_dataset(this%root_id, 'Types', types, this%comm, stat, errmsg)
     INSIST(stat == 0)
-    call h5_write_dataset(this%root_id, 'Points', x, stat, errmsg)
+    call h5_write_dataset(this%root_id, 'Points', x, this%comm, stat, errmsg)
     INSIST(stat == 0)
 
   end subroutine
@@ -249,7 +252,7 @@ contains
     dims = shape(array)
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
     INSIST(dims(size(dims)) == this%ncell)
-    call h5_write_dataset(this%cgrp_id, name, array, stat, errmsg)
+    call h5_write_dataset(this%cgrp_id, name, array, this%comm, stat, errmsg)
   end subroutine
 
   subroutine write_cell_data_int32(this, name, array, stat, errmsg)
@@ -262,7 +265,7 @@ contains
     dims = shape(array)
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
     INSIST(dims(size(dims)) == this%ncell)
-    call h5_write_dataset(this%cgrp_id, name, array, stat, errmsg)
+    call h5_write_dataset(this%cgrp_id, name, array, this%comm, stat, errmsg)
   end subroutine
 
   !! Writes the point-based data ARRAY to a new named point dataset. Scalar,
@@ -280,7 +283,7 @@ contains
     dims = shape(array)
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
     INSIST(dims(size(dims)) == this%nnode)
-    call h5_write_dataset(this%pgrp_id, name, array, stat, errmsg)
+    call h5_write_dataset(this%pgrp_id, name, array, this%comm, stat, errmsg)
   end subroutine
 
   !! Register the specified name as a time-dependent point dataset. This writes

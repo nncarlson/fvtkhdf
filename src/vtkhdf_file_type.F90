@@ -28,14 +28,16 @@
 module vtkhdf_file_type
 
   use,intrinsic :: iso_fortran_env
+  use mpi
   use vtkhdf_h5_c_binding
-  use vtkhdf_hl_h5
+  use vtkhdf_h5
   use vtkhdf_ug_type
   implicit none
   private
 
   type, public :: vtkhdf_file
     private
+    integer :: comm = MPI_COMM_NULL
     integer(hid_t) :: file_id = -1, vtk_id=-1, ass_id=-1
     integer :: next_bid = 0
     type(pdc_block), pointer :: blocks => null()
@@ -104,10 +106,13 @@ contains
     integer(c_int) :: flag
     integer :: istat ! ignored status result
 
+    call MPI_Comm_dup(comm, this%comm, istat) ! may abort on invalid comm
+    INSIST(istat == MPI_SUCCESS)
+
     call init_hdf5
 
     fapl = H5Pcreate(H5P_FILE_ACCESS)
-    stat = H5Pset_fapl_mpio(fapl, comm)
+    stat = H5Pset_fapl_mpio(fapl, this%comm)
     stat = H5Pset_all_coll_metadata_ops(fapl, is_collective=.true._c_bool)
     stat = H5Pset_coll_metadata_write(fapl, is_collective=.true._c_bool)
     this%file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl)
@@ -187,7 +192,7 @@ contains
     new%next => this%blocks
     this%blocks => new
 
-    call new%b%init(this%vtk_id, name, stat, errmsg, temporal)
+    call new%b%init(this%vtk_id, name, this%comm, stat, errmsg, temporal)
     if (stat /= 0) return
     call h5_write_attr(new%b%root_id, 'Index', this%next_bid, stat, errmsg)
     INSIST(stat == 0)
