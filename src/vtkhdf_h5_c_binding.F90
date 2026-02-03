@@ -31,38 +31,50 @@ module vtkhdf_h5_c_binding
 
   !! Header file constants from from H5Ipublic.h
   integer, parameter :: hid_t = c_int64_t
+  integer(c_int), parameter :: H5I_INVALID_HID = -1
 
   !! Header file constants from H5public.h
   integer, parameter :: hsize_t = c_int64_t ! really uint64_t
 
   !! Header file constants from H5Spublic.h
-  integer(c_int), parameter :: H5S_SCALAR = 0
-  integer(c_int), parameter :: H5S_SELECT_SET = 0
-  integer(hid_t), parameter :: H5S_ALL = 0
-  integer(hsize_t), parameter :: H5S_UNLIMITED = -1
+  integer(c_int),   parameter :: H5S_ALL = 0
+  integer(hsize_t), parameter :: H5S_UNLIMITED = -1 ! UINT64_MAX
 
   !! Header file constants from H5Fpublic.h
-  integer(c_int), parameter :: H5F_ACC_TRUNC = 2
-  integer(c_int), parameter :: H5F_ACC_EXCL  = 4
+  integer(c_int), parameter :: H5F_ACC_RDONLY = Z'0000'
+  integer(c_int), parameter :: H5F_ACC_RDWR   = Z'0001'
+  integer(c_int), parameter :: H5F_ACC_TRUNC  = Z'0002'
+  integer(c_int), parameter :: H5F_ACC_EXCL   = Z'0004'
 
   !! Header file constants from H5Ppublic.h
   integer(hid_t), parameter :: H5P_DEFAULT = 0
 
-  !! Header file constants from H5Tpublic.h
-  integer(c_int), parameter :: H5T_STR_SPACEPAD = 2
-
   !! Object IDs that are run-time *copies* of objects on the C side.
   !! These need to be initialized by a call to init_hdf5.
-  integer(hid_t), protected :: H5T_NATIVE_INTEGER
+  integer(hid_t), protected :: H5T_NATIVE_UINT8
+  integer(hid_t), protected :: H5T_NATIVE_INT32
+  integer(hid_t), protected :: H5T_NATIVE_INT64
+  integer(hid_t), protected :: H5T_NATIVE_FLOAT
   integer(hid_t), protected :: H5T_NATIVE_DOUBLE
   integer(hid_t), protected :: H5T_NATIVE_CHARACTER
-  integer(hid_t), protected :: H5T_STD_U8LE
   integer(hid_t), protected :: H5P_DATASET_CREATE
   integer(hid_t), protected :: H5P_GROUP_CREATE
   integer(hid_t), protected :: H5P_CRT_ORDER_TRACKED
   integer(hid_t), protected :: H5P_CRT_ORDER_INDEXED
   integer(hid_t), protected :: H5P_DATASET_XFER
   integer(hid_t), protected :: H5P_FILE_ACCESS
+
+  enum, bind(c) ! H5S_class_t from H5Spublic.h
+    enumerator :: H5S_SCALAR = 0, H5S_SIMPLE, H5S_NULL
+  end enum
+
+  enum, bind(c) ! H5S_seloper_t from H5Spublic.h
+    enumerator :: H5S_SELECT_SET = 0
+  end enum
+
+  enum, bind(c) ! H5T_str_t from H5Tpublic.h
+    enumerator :: H5T_STR_NULLTERM = 0, H5T_STR_NULLPAD, H5T_STR_SPACEPAD
+  end enum
 
   enum, bind(c) ! H5FD_mpio_xfer_t from H5FDmpi.h
     enumerator :: H5FD_MPIO_INDEPENDENT = 0 ! Use independent I/O access
@@ -131,7 +143,7 @@ module vtkhdf_h5_c_binding
   end interface
 
   public :: H5Aclose, H5Awrite
-  public :: H5Acreate, H5Aopen, H5Aexists ! generic module procedures
+  public :: H5Acreate, H5Aopen, H5Aexists
 
   interface H5Acreate
     module procedure H5Acreate, H5Acreate_by_name
@@ -141,13 +153,15 @@ module vtkhdf_h5_c_binding
     module procedure H5Aopen, H5Aopen_by_name
   end interface
 
-  interface H5Aexists
-    module procedure H5Aexists, H5Aexists_by_name
-  end interface
-
   !!!! H5S functions that can be used as-is !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   interface
+!    function H5Screate(type) result(space_id) bind(c,name='H5Screate')
+!      import :: c_int, hid_t
+!      integer(c_int), value :: type
+!      integer(hid_t) :: space_id
+!    end function
+
     function H5Sget_simple_extent_ndims(space_id) &
         result(ndims) bind(c,name='H5Sget_simple_extent_ndims')
       import :: hid_t, c_int
@@ -173,6 +187,12 @@ module vtkhdf_h5_c_binding
       integer(c_int) :: h5err
     end function
 
+    function H5Sselect_none(space_id) result(h5err) bind(c,name='H5Sselect_none')
+      import :: hid_t, c_int
+      integer(hid_t), value :: space_id
+      integer(c_int) :: h5err
+    end function
+
     function H5Sclose(space_id) result(h5err) bind(c,name='H5Sclose')
       import :: hid_t, c_int
       integer(hid_t), value :: space_id
@@ -184,7 +204,7 @@ module vtkhdf_h5_c_binding
   public :: H5Screate, H5Sselect_hyperslab ! module procedures
 
   interface H5Screate
-    module procedure H5Screate_scalar, H5Screate_array
+    module procedure H5Screate, H5Screate_array
   end interface
 
   !!!! H5T functions that can be used as-is !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -250,7 +270,7 @@ module vtkhdf_h5_c_binding
     function H5Dget_type(dset_id) result(type_id) bind(c,name='H5Dget_type')
       import :: hid_t
       integer(hid_t), value :: dset_id
-      integer :: type_id
+      integer(hid_t) :: type_id
     end function
   end interface
 
@@ -298,7 +318,8 @@ module vtkhdf_h5_c_binding
       integer(c_int) :: hdferr
     end function
 
-    function H5Pset_dxpl_mpio(dxpl_id, xfer_mode) result(hdferr) bind(c,name='H5Pset_dxpl_mpio')
+    function H5Pset_dxpl_mpio(dxpl_id, xfer_mode) &
+        result(hdferr) bind(c,name='H5Pset_dxpl_mpio')
       import hid_t, c_int
       integer(hid_t), value :: dxpl_id
       integer(c_int), value :: xfer_mode
@@ -343,45 +364,65 @@ contains
 
   subroutine init_hdf5
     interface
-      function H5P_DATASET_CREATE_value() result(flag) bind(c,name='H5P_DATASET_CREATE_value')
+      function H5P_DATASET_CREATE_value() result(type_id) &
+          bind(c,name='H5P_DATASET_CREATE_value')
         import :: hid_t
-        integer(hid_t) :: flag
+        integer(hid_t) :: type_id
       end function
-      function H5P_GROUP_CREATE_value() result(flag) bind(c,name='H5P_GROUP_CREATE_value')
+      function H5P_GROUP_CREATE_value() result(type_id) &
+          bind(c,name='H5P_GROUP_CREATE_value')
         import :: hid_t
-        integer(hid_t) :: flag
+        integer(hid_t) :: type_id
       end function
-      function H5P_CRT_ORDER_TRACKED_value() result(flag) bind(c,name='H5P_CRT_ORDER_TRACKED_value')
+      function H5P_CRT_ORDER_TRACKED_value() result(type_id) &
+          bind(c,name='H5P_CRT_ORDER_TRACKED_value')
         import :: hid_t
-        integer(hid_t) :: flag
+        integer(hid_t) :: type_id
       end function
-      function H5P_CRT_ORDER_INDEXED_value() result(flag) bind(c,name='H5P_CRT_ORDER_INDEXED_value')
+      function H5P_CRT_ORDER_INDEXED_value() result(type_id) &
+          bind(c,name='H5P_CRT_ORDER_INDEXED_value')
         import :: hid_t
-        integer(hid_t) :: flag
+        integer(hid_t) :: type_id
       end function
-      function H5P_DATASET_XFER_value() result(flag) bind(c,name='H5P_DATASET_XFER_value')
+      function H5P_DATASET_XFER_value() result(type_id) &
+          bind(c,name='H5P_DATASET_XFER_value')
         import :: hid_t
-        integer(hid_t) :: flag
+        integer(hid_t) :: type_id
       end function
-      function H5P_FILE_ACCESS_value() result(flag) bind(c,name='H5P_FILE_ACCESS_value')
+      function H5P_FILE_ACCESS_value() result(type_id) &
+          bind(c,name='H5P_FILE_ACCESS_value')
         import :: hid_t
-        integer(hid_t) :: flag
+        integer(hid_t) :: type_id
       end function
-      function H5T_NATIVE_INTEGER_value() result(flag) bind(c,name='H5T_NATIVE_INTEGER_value')
+      function H5T_NATIVE_UINT8_value() result(type_id) &
+          bind(c,name='H5T_NATIVE_UINT8_value')
         import :: hid_t
-        integer(hid_t) :: flag
+        integer(hid_t) :: type_id
       end function
-      function H5T_NATIVE_CHARACTER_value() result(flag) bind(c,name='H5T_NATIVE_CHARACTER_value')
+      function H5T_NATIVE_INT32_value() result(type_id) &
+          bind(c,name='H5T_NATIVE_INT32_value')
         import :: hid_t
-        integer(hid_t) :: flag
+        integer(hid_t) :: type_id
       end function
-      function H5T_NATIVE_DOUBLE_value() result(flag) bind(c,name='H5T_NATIVE_DOUBLE_value')
+      function H5T_NATIVE_INT64_value() result(type_id) &
+          bind(c,name='H5T_NATIVE_INT64_value')
         import :: hid_t
-        integer(hid_t) :: flag
+        integer(hid_t) :: type_id
       end function
-      function H5T_STD_U8LE_value() result(flag) bind(c,name='H5T_STD_U8LE_value')
+      function H5T_NATIVE_FLOAT_value() result(type_id) &
+          bind(c,name='H5T_NATIVE_FLOAT_value')
         import :: hid_t
-        integer(hid_t) :: flag
+        integer(hid_t) :: type_id
+      end function
+      function H5T_NATIVE_DOUBLE_value() result(type_id) &
+          bind(c,name='H5T_NATIVE_DOUBLE_value')
+        import :: hid_t
+        integer(hid_t) :: type_id
+      end function
+      function H5T_NATIVE_CHARACTER_value() result(type_id) &
+          bind(c,name='H5T_NATIVE_CHARACTER_value')
+        import :: hid_t
+        integer(hid_t) :: type_id
       end function
     end interface
     H5P_DATASET_CREATE = H5P_DATASET_CREATE_value()
@@ -390,10 +431,12 @@ contains
     H5P_CRT_ORDER_INDEXED = H5P_CRT_ORDER_INDEXED_value()
     H5P_DATASET_XFER = H5P_DATASET_XFER_value()
     H5P_FILE_ACCESS = H5P_FILE_ACCESS_value()
-    H5T_NATIVE_INTEGER = H5T_NATIVE_INTEGER_value()
+    H5T_NATIVE_UINT8 = H5T_NATIVE_UINT8_value()
+    H5T_NATIVE_INT32 = H5T_NATIVE_INT32_value()
+    H5T_NATIVE_INT64 = H5T_NATIVE_INT64_value()
+    H5T_NATIVE_FLOAT = H5T_NATIVE_FLOAT_value()
     H5T_NATIVE_DOUBLE = H5T_NATIVE_DOUBLE_value()
     H5T_NATIVE_CHARACTER = H5T_NATIVE_CHARACTER_value()
-    H5T_STD_U8LE = H5T_STD_U8LE_value()
   end subroutine
 
   function H5Fcreate(filename, flags, fcpl_id, fapl_id) result(file_id)
@@ -522,7 +565,7 @@ contains
     attr_id = H5Aopen_by_name_c(loc_id, obj_name//c_null_char, attr_name//c_null_char, H5P_DEFAULT, lapl_id_)
   end function
 
-  logical function H5Aexists(obj_id, attr_name) result(exists)
+  integer function H5Aexists(obj_id, attr_name) result(res)
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: attr_name
     interface
@@ -533,29 +576,11 @@ contains
         integer(c_int) :: res
       end function
     end interface
-    exists = (H5Aexists_c(obj_id, attr_name//c_null_char) > 0)
+    res = H5Aexists_c(obj_id, attr_name//c_null_char) ! >0 yes, 0 no, <0 error
   end function
 
-  logical function H5Aexists_by_name(loc_id, obj_name, attr_name, lapl_id) result(exists)
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: obj_name, attr_name
-    integer(hid_t), intent(in), optional :: lapl_id
-    interface
-      function H5Aexists_by_name_c(loc_id, obj_name, attr_name, lapl_id) &
-          result(res) bind(c,name='H5Aexists_by_name')
-        import :: hid_t, c_int
-        integer(hid_t), value :: loc_id
-        character, intent(in) :: obj_name(*), attr_name(*)
-        integer(hid_t), value :: lapl_id
-        integer(c_int) :: res
-      end function
-    end interface
-    integer(hid_t) :: lapl_id_
-    lapl_id_ = H5P_DEFAULT; if (present(lapl_id)) lapl_id_ = lapl_id
-    exists = (H5Aexists_by_name_c(loc_id, obj_name//c_null_char, attr_name//c_null_char, lapl_id_) > 0)
-  end function
-
-  function H5Screate_scalar() result(space_id)
+  function H5Screate(type) result(space_id)
+    integer(c_int), intent(in) :: type
     integer(hid_t) :: space_id
     interface
       function H5Screate_c(type) result(space_id) bind(c,name='H5Screate')
@@ -564,7 +589,7 @@ contains
         integer(hid_t) :: space_id
       end function
     end interface
-    space_id = H5Screate_c(H5S_SCALAR)
+    space_id = H5Screate_c(type)
   end function
 
   function H5Screate_array(dims, maxdims) result(space_id)

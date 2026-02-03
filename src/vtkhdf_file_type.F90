@@ -28,33 +28,53 @@
 module vtkhdf_file_type
 
   use,intrinsic :: iso_fortran_env
+  use mpi
   use vtkhdf_h5_c_binding
-  use vtkhdf_hl_h5
+  use vtkhdf_h5
   use vtkhdf_ug_type
   implicit none
   private
 
   type, public :: vtkhdf_file
     private
+    integer :: comm = MPI_COMM_NULL
     integer(hid_t) :: file_id = -1, vtk_id=-1, ass_id=-1
     integer :: next_bid = 0
     type(pdc_block), pointer :: blocks => null()
   contains
-    procedure :: create, create_block
+    procedure :: create, add_block
     procedure :: write_block_mesh
     procedure :: write_time_step
-    generic :: write_cell_data  => write_cell_data_real64, write_cell_data_int32
-    generic :: write_point_data => write_point_data_real64
-    generic :: register_temporal_cell_data  => register_temporal_cell_data_real64
-    generic :: register_temporal_point_data => register_temporal_point_data_real64
-    generic :: write_temporal_cell_data  => write_temporal_cell_data_real64
-    generic :: write_temporal_point_data => write_temporal_point_data_real64
-    procedure, private :: write_cell_data_real64, write_cell_data_int32
-    procedure, private :: write_point_data_real64
-    procedure, private :: register_temporal_cell_data_real64
-    procedure, private :: register_temporal_point_data_real64
-    procedure, private :: write_temporal_cell_data_real64
-    procedure, private :: write_temporal_point_data_real64
+    generic :: write_cell_data  => &
+               write_cell_data_real32, write_cell_data_real64, &
+               write_cell_data_int32,  write_cell_data_int64
+    generic :: write_point_data => &
+               write_point_data_real32, write_point_data_real64, &
+               write_point_data_int32,  write_point_data_int64
+    generic :: register_temporal_cell_data  => &
+               register_temporal_cell_data_real32, register_temporal_cell_data_real64, &
+               register_temporal_cell_data_int32,  register_temporal_cell_data_int64
+    generic :: register_temporal_point_data  => &
+               register_temporal_point_data_real32, register_temporal_point_data_real64, &
+               register_temporal_point_data_int32,  register_temporal_point_data_int64
+    generic :: write_temporal_cell_data  => &
+               write_temporal_cell_data_real32, write_temporal_cell_data_real64, &
+               write_temporal_cell_data_int32,  write_temporal_cell_data_int64
+    generic :: write_temporal_point_data  => &
+               write_temporal_point_data_real32, write_temporal_point_data_real64, &
+               write_temporal_point_data_int32,  write_temporal_point_data_int64
+    procedure, private :: write_cell_data_real32,  write_cell_data_real64
+    procedure, private :: write_cell_data_int32,   write_cell_data_int64
+    procedure, private :: write_point_data_real32, write_point_data_real64
+    procedure, private :: write_point_data_int32,  write_point_data_int64
+    procedure, private :: register_temporal_cell_data_real32,  register_temporal_cell_data_real64
+    procedure, private :: register_temporal_cell_data_int32,   register_temporal_cell_data_int64
+    procedure, private :: register_temporal_point_data_real32, register_temporal_point_data_real64
+    procedure, private :: register_temporal_point_data_int32,  register_temporal_point_data_int64
+    procedure, private :: write_temporal_cell_data_real32,  write_temporal_cell_data_real64
+    procedure, private :: write_temporal_cell_data_int32,   write_temporal_cell_data_int64
+    procedure, private :: write_temporal_point_data_real32, write_temporal_point_data_real64
+    procedure, private :: write_temporal_point_data_int32,  write_temporal_point_data_int64
     procedure :: close
     procedure, private :: get_block_ptr
     !final :: vtkhdf_file_delete
@@ -102,12 +122,15 @@ contains
 
     integer(hid_t) :: fapl, crt_prop
     integer(c_int) :: flag
-    integer :: istat ! ignored status result
+    integer :: ierr
+
+    call MPI_Comm_dup(comm, this%comm, ierr) ! may abort on invalid comm
+    INSIST(ierr == MPI_SUCCESS)
 
     call init_hdf5
 
     fapl = H5Pcreate(H5P_FILE_ACCESS)
-    stat = H5Pset_fapl_mpio(fapl, comm)
+    stat = H5Pset_fapl_mpio(fapl, this%comm)
     stat = H5Pset_all_coll_metadata_ops(fapl, is_collective=.true._c_bool)
     stat = H5Pset_coll_metadata_write(fapl, is_collective=.true._c_bool)
     this%file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl)
@@ -116,8 +139,8 @@ contains
       errmsg = 'h5fcreate error'  !TODO: refine msg
       return
     end if
-    istat = H5Pclose(fapl)
-    INSIST(istat == 0)
+    ierr = H5Pclose(fapl)
+    INSIST(ierr == 0)
 
     crt_prop = H5Pcreate(H5P_GROUP_CREATE)
     flag = ior(H5P_CRT_ORDER_TRACKED, H5P_CRT_ORDER_INDEXED)
@@ -127,21 +150,22 @@ contains
     this%vtk_id = H5Gcreate(this%file_id, 'VTKHDF', gcpl_id=crt_prop)
     INSIST(this%vtk_id > 0)
 
-    call h5_write_attr(this%vtk_id, 'Version', vtkhdf_version, stat, errmsg)
+    call h5_write_attr(this%vtk_id, 'Version', vtkhdf_version, this%comm, stat, errmsg)
     INSIST(stat == 0)
     !NB: We stick with the older MB type due to an issue with the modern PDC
     !type; see https://gitlab.kitware.com/vtk/vtk/-/issues/19902
-    !call h5_write_attr(this%vtk_id, 'Type', 'PartitionedDataSetCollection', stat, errmsg)
-    call h5_write_attr(this%vtk_id, 'Type', 'MultiBlockDataSet', stat, errmsg)
+    !call h5_write_attr(this%vtk_id, 'Type', 'PartitionedDataSetCollection', this%comm, stat, errmsg)
+    call h5_write_attr(this%vtk_id, 'Type', 'MultiBlockDataSet', this%comm, stat, errmsg)
     INSIST(stat == 0)
 
     this%ass_id = H5Gcreate(this%vtk_id, 'Assembly', gcpl_id=crt_prop)
     INSIST(this%ass_id > 0)
-    istat = H5Pclose(crt_prop)
+    ierr = H5Pclose(crt_prop)
 
   end subroutine create
 
-  subroutine create_block(this, name, stat, errmsg, temporal)
+
+  subroutine add_block(this, name, stat, errmsg, temporal)
 
     class(vtkhdf_file), intent(inout) :: this
     character(*), intent(in) :: name
@@ -149,63 +173,78 @@ contains
     character(:), allocatable, intent(out) :: errmsg
     logical, intent(in), optional :: temporal
 
-    integer :: n
+    integer :: n, ierr
     type(pdc_block), pointer :: b, new
 
+    !! Ensure the specified NAME is valid
     if (name == '') then
-      stat = -1
+      stat = 1
       errmsg = 'invalid empty block name'
       return
     end if
 
     n = scan(name, './')
     if (n /= 0) then
-      stat = -1
+      stat = 1
       errmsg = 'invalid character "' // name(n:n) // '" in block name'
       return
     end if
 
     if (name == 'Assembly') then
-      stat = -1
+      stat = 1
       errmsg = 'invalid block name "Assembly"'
       return
     end if
 
-    !! Check that the named block has not already been defined.
     b => this%blocks
     do while (associated(b))
       if (b%name == name) then
-        stat = -1
+        stat = 1
         errmsg = 'block "' // name // '" already defined'
         return
       end if
       b => b%next
     end do
 
+    !! Create the UG block group and its HDF5 hierarchy
     allocate(new)
     new%name = name
     new%next => this%blocks
     this%blocks => new
 
-    call new%b%init(this%vtk_id, name, stat, errmsg, temporal)
-    if (stat /= 0) return
-    call h5_write_attr(new%b%root_id, 'Index', this%next_bid, stat, errmsg)
-    INSIST(stat == 0)
+    call new%b%init(this%vtk_id, name, this%comm, stat, errmsg, temporal)
+    if (stat /= 0) then
+      errmsg = 'error adding UnstructuredGrid block "' // name // '": ' // errmsg
+      return
+    end if
+
+    !NB: Unused for MultiBlockDataSet, but required for PartitionedDataSetCollection.
+    call h5_write_attr(new%b%root_id, 'Index', this%next_bid, this%comm, stat, errmsg)
+    if (stat /= 0) then
+      errmsg = 'error adding UnstructuredGrid block "' // name // '": ' // errmsg
+      return
+    end if
     this%next_bid = this%next_bid + 1
 
-    !! Create an Assembly group softlink to the block.
-    stat = H5Lcreate_soft('/VTKHDF/'//name, this%ass_id, name)
-    INSIST(stat == 0)
+    !! Create a softlink in Assembly group to the block group.
+    ierr = H5Lcreate_soft('/VTKHDF/'//name, this%ass_id, name)
+    if (global_any(ierr < 0, this%comm)) then
+      stat = 1
+      errmsg = 'unable to create "Assembly" group link to block "' // name // '"'
+      return
+    end if
 
-  end subroutine
+    stat = 0
+
+  end subroutine add_block
 
   subroutine close(this)
     class(vtkhdf_file), intent(inout) :: this
-    integer :: istat
+    integer :: ierr
     if (associated(this%blocks)) deallocate(this%blocks)
-    if (this%ass_id > 0) istat = H5Gclose(this%ass_id)
-    if (this%vtk_id > 0) istat = H5Gclose(this%vtk_id)
-    if (this%file_id > 0) istat = H5Fclose(this%file_id)
+    if (this%ass_id > 0) ierr = H5Gclose(this%ass_id)
+    if (this%vtk_id > 0) ierr = H5Gclose(this%vtk_id)
+    if (this%file_id > 0) ierr = H5Fclose(this%file_id)
     !call default_initialize(this)
   contains
     subroutine default_initialize(this)
@@ -243,6 +282,18 @@ contains
   !! supported. In the case of a temporal block supporting time-dependent
   !! datasets, this dataset is static and not associated with any time step.
 
+  subroutine write_cell_data_real32(this, block_name, name, array, stat, errmsg)
+    class(vtkhdf_file), intent(in) :: this
+    character(*), intent(in) :: block_name, name
+    real(real32), intent(in) :: array(..)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%write_cell_data_real32(name, array, stat, errmsg)
+  end subroutine
+
   subroutine write_cell_data_real64(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
@@ -267,10 +318,34 @@ contains
     call bptr%write_cell_data_int32(name, array, stat, errmsg)
   end subroutine
 
+  subroutine write_cell_data_int64(this, block_name, name, array, stat, errmsg)
+    class(vtkhdf_file), intent(in) :: this
+    character(*), intent(in) :: block_name, name
+    integer(int64), intent(in) :: array(..)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%write_cell_data_int64(name, array, stat, errmsg)
+  end subroutine
+
   !! Writes the point-based data ARRAY to a new named cell dataset for the
   !! specified mesh block. Scalar, vector, and tensor cell-based data are
   !! supported. In the case of a temporal block supporting time-dependent
   !! datasets, this dataset is static and not associated with any time step.
+
+  subroutine write_point_data_real32(this, block_name, name, array, stat, errmsg)
+    class(vtkhdf_file), intent(in) :: this
+    character(*), intent(in) :: block_name, name
+    real(real32), intent(in) :: array(..)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%write_point_data_real32(name, array, stat, errmsg)
+  end subroutine
 
   subroutine write_point_data_real64(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_file), intent(in) :: this
@@ -284,6 +359,30 @@ contains
     call bptr%write_point_data_real64(name, array, stat, errmsg)
   end subroutine
 
+  subroutine write_point_data_int32(this, block_name, name, array, stat, errmsg)
+    class(vtkhdf_file), intent(in) :: this
+    character(*), intent(in) :: block_name, name
+    integer(int32), intent(in) :: array(..)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%write_point_data_int32(name, array, stat, errmsg)
+  end subroutine
+
+  subroutine write_point_data_int64(this, block_name, name, array, stat, errmsg)
+    class(vtkhdf_file), intent(in) :: this
+    character(*), intent(in) :: block_name, name
+    integer(int64), intent(in) :: array(..)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%write_point_data_int64(name, array, stat, errmsg)
+  end subroutine
+
   !! Register the specified NAME as a time-dependent point dataset for the
   !! specified mesh block. This writes no data, but only configures some
   !! necessary internal metadata. The MOLD array argument shall have the same
@@ -291,6 +390,18 @@ contains
   !! but the last dimension, whose extent is ignored, but the array values
   !! themselves are not accessed. Scalar, vector, and tensor-valued mesh
   !! data are supported (rank-1, 2, and 3 MOLD).
+
+  subroutine register_temporal_point_data_real32(this, block_name, name, mold, stat, errmsg)
+    class(vtkhdf_file), intent(inout) :: this
+    character(*), intent(in) :: block_name, name
+    real(real32), intent(in) :: mold(..)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%register_temporal_point_data_real32(name, mold, stat, errmsg)
+  end subroutine
 
   subroutine register_temporal_point_data_real64(this, block_name, name, mold, stat, errmsg)
     class(vtkhdf_file), intent(inout) :: this
@@ -304,6 +415,30 @@ contains
     call bptr%register_temporal_point_data_real64(name, mold, stat, errmsg)
   end subroutine
 
+  subroutine register_temporal_point_data_int32(this, block_name, name, mold, stat, errmsg)
+    class(vtkhdf_file), intent(inout) :: this
+    character(*), intent(in) :: block_name, name
+    integer(int32), intent(in) :: mold(..)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%register_temporal_point_data_int32(name, mold, stat, errmsg)
+  end subroutine
+
+  subroutine register_temporal_point_data_int64(this, block_name, name, mold, stat, errmsg)
+    class(vtkhdf_file), intent(inout) :: this
+    character(*), intent(in) :: block_name, name
+    integer(int64), intent(in) :: mold(..)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%register_temporal_point_data_int64(name, mold, stat, errmsg)
+  end subroutine
+
   !! Register the specified NAME as a time-dependent cell dataset for the
   !! specified mesh block. This writes no data, but only configures some
   !! necessary internal metadata. The MOLD array argument shall have the same
@@ -311,6 +446,18 @@ contains
   !! but the last dimension, whose extent is ignored, but the array values
   !! themselves are not accessed. Scalar, vector, and tensor-valued mesh
   !! data are supported (rank-1, 2, and 3 MOLD).
+
+  subroutine register_temporal_cell_data_real32(this, block_name, name, mold, stat, errmsg)
+    class(vtkhdf_file), intent(inout) :: this
+    character(*), intent(in) :: block_name, name
+    real(real32), intent(in) :: mold(..)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%register_temporal_cell_data_real32(name, mold, stat, errmsg)
+  end subroutine
 
   subroutine register_temporal_cell_data_real64(this, block_name, name, mold, stat, errmsg)
     class(vtkhdf_file), intent(inout) :: this
@@ -322,6 +469,30 @@ contains
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
     call bptr%register_temporal_cell_data_real64(name, mold, stat, errmsg)
+  end subroutine
+
+  subroutine register_temporal_cell_data_int32(this, block_name, name, mold, stat, errmsg)
+    class(vtkhdf_file), intent(inout) :: this
+    character(*), intent(in) :: block_name, name
+    integer(int32), intent(in) :: mold(..)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%register_temporal_cell_data_int32(name, mold, stat, errmsg)
+  end subroutine
+
+  subroutine register_temporal_cell_data_int64(this, block_name, name, mold, stat, errmsg)
+    class(vtkhdf_file), intent(inout) :: this
+    character(*), intent(in) :: block_name, name
+    integer(int64), intent(in) :: mold(..)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%register_temporal_cell_data_int64(name, mold, stat, errmsg)
   end subroutine
 
   !! Mark the start of a new time step with time value TIME. Subsequent output
@@ -342,6 +513,18 @@ contains
   !! for the specified mesh block. The data is associated with the current
   !! time step.
 
+  subroutine write_temporal_point_data_real32(this, block_name, name, array, stat, errmsg)
+    class(vtkhdf_file), intent(in) :: this
+    character(*), intent(in) :: block_name, name
+    real(real32), intent(in) :: array(..)
+    integer, intent(out) :: stat
+    character(:), allocatable :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%write_temporal_point_data_real32(name, array, stat, errmsg)
+  end subroutine
+
   subroutine write_temporal_point_data_real64(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
@@ -354,9 +537,45 @@ contains
     call bptr%write_temporal_point_data_real64(name, array, stat, errmsg)
   end subroutine
 
+  subroutine write_temporal_point_data_int32(this, block_name, name, array, stat, errmsg)
+    class(vtkhdf_file), intent(in) :: this
+    character(*), intent(in) :: block_name, name
+    integer(int32), intent(in) :: array(..)
+    integer, intent(out) :: stat
+    character(:), allocatable :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%write_temporal_point_data_int32(name, array, stat, errmsg)
+  end subroutine
+
+  subroutine write_temporal_point_data_int64(this, block_name, name, array, stat, errmsg)
+    class(vtkhdf_file), intent(in) :: this
+    character(*), intent(in) :: block_name, name
+    integer(int64), intent(in) :: array(..)
+    integer, intent(out) :: stat
+    character(:), allocatable :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%write_temporal_point_data_int64(name, array, stat, errmsg)
+  end subroutine
+
   !! Write the cell-based data ARRAY to the named time-dependent cell dataset
   !! for the specified mesh block. The data is associated with the current
   !! time step.
+
+  subroutine write_temporal_cell_data_real32(this, block_name, name, array, stat, errmsg)
+    class(vtkhdf_file), intent(in) :: this
+    character(*), intent(in) :: block_name, name
+    real(real32), intent(in) :: array(..)
+    integer, intent(out) :: stat
+    character(:), allocatable :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%write_temporal_cell_data_real32(name, array, stat, errmsg)
+  end subroutine
 
   subroutine write_temporal_cell_data_real64(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_file), intent(in) :: this
@@ -368,6 +587,30 @@ contains
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
     call bptr%write_temporal_cell_data_real64(name, array, stat, errmsg)
+  end subroutine
+
+  subroutine write_temporal_cell_data_int32(this, block_name, name, array, stat, errmsg)
+    class(vtkhdf_file), intent(in) :: this
+    character(*), intent(in) :: block_name, name
+    integer(int32), intent(in) :: array(..)
+    integer, intent(out) :: stat
+    character(:), allocatable :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%write_temporal_cell_data_int32(name, array, stat, errmsg)
+  end subroutine
+
+  subroutine write_temporal_cell_data_int64(this, block_name, name, array, stat, errmsg)
+    class(vtkhdf_file), intent(in) :: this
+    character(*), intent(in) :: block_name, name
+    integer(int64), intent(in) :: array(..)
+    integer, intent(out) :: stat
+    character(:), allocatable :: errmsg
+    type(vtkhdf_ug), pointer :: bptr
+    call this%get_block_ptr(block_name, bptr, stat, errmsg)
+    if (stat /= 0) return
+    call bptr%write_temporal_cell_data_int64(name, array, stat, errmsg)
   end subroutine
 
   !! This auxiliary procedure returns a pointer to the named block, or a null

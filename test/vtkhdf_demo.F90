@@ -47,7 +47,7 @@ program vtkhdf_demo
 
   y = x ! initial node coordinates
   do j = 0, nproc-1 ! block loop
-    call vizfile%create_block(name(j), stat, errmsg, temporal=.true.)
+    call vizfile%add_block(name(j), stat, errmsg, temporal=.true.)
     if (stat /= 0) error stop errmsg
     if (abs(rank-j) <= 1) then
       call vizfile%write_block_mesh(name(j), y, cnode, xcnode, types, stat, errmsg)
