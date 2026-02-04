@@ -53,212 +53,207 @@ module vtkhdf_h5
 
 contains
 
-  subroutine write_attr_int8(obj_id, name, value, stat, errmsg)
+  subroutine write_attr_int8(obj_id, name, value, comm, stat, errmsg)
 
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     integer(int8), intent(in) :: value(..)
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
     integer(hid_t) :: type_id, attr_id
-    integer :: istat
+    integer :: ierr
 
     type_id = H5T_NATIVE_UINT8
 
-    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
+    !TODO: broadcast value from rank 0 to ensure consistency across ranks
+
+    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), comm, attr_id, stat, errmsg)
     if (stat /= 0) return
 
     select rank (value)
     rank (0)
-      stat = H5Awrite(attr_id, type_id, [value])
+      ierr = H5Awrite(attr_id, type_id, [value])
     rank (1)
-      stat = H5Awrite(attr_id, type_id, value)
+      ierr = H5Awrite(attr_id, type_id, value)
     rank (2)
-      stat = H5Awrite(attr_id, type_id, value)
+      ierr = H5Awrite(attr_id, type_id, value)
     rank default
-      stat = 1
-      errmsg = 'unsupported rank for attribute "' // name // '"'
-      istat = H5Aclose(attr_id)
-      return
+      INSIST(.false.)
     end select
-    stat = min(0, stat) ! >= 0 from H5Awrite is successful
 
-    istat = H5Aclose(attr_id)
-
-    if (stat /= 0) then
+    if (global_any(ierr < 0, comm)) then
+      stat = 1
       errmsg = 'error writing attribute "' // name // '"'
-      return
     end if
+
+    ierr = H5Aclose(attr_id)
 
   end subroutine write_attr_int8
 
 
-  subroutine write_attr_int32(obj_id, name, value, stat, errmsg)
+  subroutine write_attr_int32(obj_id, name, value, comm, stat, errmsg)
 
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     integer(int32), intent(in) :: value(..)
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
     integer(hid_t) :: type_id, attr_id
-    integer :: istat
+    integer :: ierr
+
+    !TODO: broadcast value from rank 0 to ensure consistency across ranks
 
     type_id = H5T_NATIVE_INT32
 
-    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
+    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), comm, attr_id, stat, errmsg)
     if (stat /= 0) return
 
     select rank (value)
     rank (0)
-      stat = H5Awrite(attr_id, type_id, [value])
+      ierr = H5Awrite(attr_id, type_id, [value])
     rank (1)
-      stat = H5Awrite(attr_id, type_id, value)
+      ierr = H5Awrite(attr_id, type_id, value)
     rank (2)
-      stat = H5Awrite(attr_id, type_id, value)
+      ierr = H5Awrite(attr_id, type_id, value)
     rank default
-      stat = 1
-      errmsg = 'unsupported rank for attribute "' // name // '"'
-      istat = H5Aclose(attr_id)
-      return
+      INSIST(.false.)
     end select
-    stat = min(0, stat) ! >= 0 from H5Awrite is successful
 
-    istat = H5Aclose(attr_id)
-
-    if (stat /= 0) then
+    if (global_any(ierr < 0, comm)) then
+      stat = 1
       errmsg = 'error writing attribute "' // name // '"'
-      return
     end if
+
+    ierr = H5Aclose(attr_id)
 
   end subroutine write_attr_int32
 
 
-  subroutine write_attr_int64(obj_id, name, value, stat, errmsg)
+  subroutine write_attr_int64(obj_id, name, value, comm, stat, errmsg)
 
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     integer(int64), intent(in) :: value(..)
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
     integer(hid_t) :: type_id, attr_id
-    integer :: istat
+    integer :: ierr
+
+    !TODO: broadcast value from rank 0 to ensure consistency across ranks
 
     type_id = H5T_NATIVE_INT64
 
-    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
+    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), comm, attr_id, stat, errmsg)
     if (stat /= 0) return
 
     select rank (value)
     rank (0)
-      stat = H5Awrite(attr_id, type_id, [value])
+      ierr = H5Awrite(attr_id, type_id, [value])
     rank (1)
-      stat = H5Awrite(attr_id, type_id, value)
+      ierr = H5Awrite(attr_id, type_id, value)
     rank (2)
-      stat = H5Awrite(attr_id, type_id, value)
+      ierr = H5Awrite(attr_id, type_id, value)
     rank default
-      stat = 1
-      errmsg = 'unsupported rank for attribute "' // name // '"'
-      istat = H5Aclose(attr_id)
-      return
+      INSIST(.false.)
     end select
-    stat = min(0, stat) ! >= 0 from H5Awrite is successful
 
-    istat = H5Aclose(attr_id)
-
-    if (stat /= 0) then
+    if (global_any(ierr < 0, comm)) then
+      stat = 1
       errmsg = 'error writing attribute "' // name // '"'
-      return
     end if
+
+    ierr = H5Aclose(attr_id)
 
   end subroutine write_attr_int64
 
 
-  subroutine write_attr_real32(obj_id, name, value, stat, errmsg)
+  subroutine write_attr_real32(obj_id, name, value, comm, stat, errmsg)
 
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     real(real32), intent(in) :: value(..)
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
     integer(hid_t) :: type_id, attr_id
-    integer :: istat
+    integer :: ierr
+
+    !TODO: broadcast value from rank 0 to ensure consistency across ranks
 
     type_id = H5T_NATIVE_FLOAT
 
-    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
+    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), comm, attr_id, stat, errmsg)
     if (stat /= 0) return
 
     select rank (value)
     rank (0)
-      stat = H5Awrite(attr_id, type_id, [value])
+      ierr = H5Awrite(attr_id, type_id, [value])
     rank (1)
-      stat = H5Awrite(attr_id, type_id, value)
+      ierr = H5Awrite(attr_id, type_id, value)
     rank (2)
-      stat = H5Awrite(attr_id, type_id, value)
+      ierr = H5Awrite(attr_id, type_id, value)
     rank default
-      stat = 1
-      errmsg = 'unsupported rank for attribute "' // name // '"'
-      istat = H5Aclose(attr_id)
-      return
+      INSIST(.false.)
     end select
-    stat = min(0, stat) ! >= 0 from H5Awrite is successful
 
-    istat = H5Aclose(attr_id)
-
-    if (stat /= 0) then
+    if (global_any(ierr < 0, comm)) then
+      stat = 1
       errmsg = 'error writing attribute "' // name // '"'
-      return
     end if
+
+    ierr = H5Aclose(attr_id)
 
   end subroutine write_attr_real32
 
 
-  subroutine write_attr_real64(obj_id, name, value, stat, errmsg)
+  subroutine write_attr_real64(obj_id, name, value, comm, stat, errmsg)
 
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     real(real64), intent(in) :: value(..)
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
     integer(hid_t) :: type_id, attr_id
-    integer :: istat
+    integer :: ierr
+
+    !TODO: broadcast value from rank 0 to ensure consistency across ranks
 
     type_id = H5T_NATIVE_DOUBLE
 
-    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
+    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), comm, attr_id, stat, errmsg)
     if (stat /= 0) return
 
     select rank (value)
     rank (0)
-      stat = H5Awrite(attr_id, type_id, [value])
+      ierr = H5Awrite(attr_id, type_id, [value])
     rank (1)
-      stat = H5Awrite(attr_id, type_id, value)
+      ierr = H5Awrite(attr_id, type_id, value)
     rank (2)
-      stat = H5Awrite(attr_id, type_id, value)
+      ierr = H5Awrite(attr_id, type_id, value)
     rank default
-      stat = 1
-      errmsg = 'unsupported rank for attribute "' // name // '"'
-      istat = H5Aclose(attr_id)
-      return
+      INSIST(.false.)
     end select
-    stat = min(0, stat) ! >= 0 from H5Awrite is successful
 
-    istat = H5Aclose(attr_id)
-
-    if (stat /= 0) then
+    if (global_any(ierr < 0, comm)) then
+      stat = 1
       errmsg = 'error writing attribute "' // name // '"'
-      return
     end if
+
+    ierr = H5Aclose(attr_id)
 
   end subroutine write_attr_real64
 
 
-  subroutine write_attr_string(obj_id, name, value, stat, errmsg)
+  subroutine write_attr_string(obj_id, name, value, comm, stat, errmsg)
 
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
@@ -267,43 +262,46 @@ contains
 #else
     character(*), intent(in) :: value(..)
 #endif
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
     integer(hid_t) :: type_id, attr_id
-    integer :: istat
+    integer :: ierr
+
+    !TODO: broadcast value from rank 0 to ensure consistency across ranks
 
     type_id = H5Tcopy(H5T_NATIVE_CHARACTER)
     INSIST(type_id > 0)
-    istat = H5Tset_size(type_id, len(value, kind=c_size_t))
-    istat = min(0, stat) ! >= 0 from H5Tset_size is successful
-    INSIST(istat == 0)
+    ierr = H5Tset_size(type_id, len(value, kind=c_size_t))
+    ierr = min(0, stat) ! >= 0 from H5Tset_size is successful
+    INSIST(ierr == 0)
 
-    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
+    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), comm, attr_id, stat, errmsg)
     if (stat /= 0) return
 
 #ifdef INTEL_BUG20240327
-    stat = H5Awrite(attr_id, type_id, [value])
+    ierr = H5Awrite(attr_id, type_id, [value])
 #else
     select rank (value)
     rank (0)
-      stat = H5Awrite(attr_id, type_id, [value])
+      ierr = H5Awrite(attr_id, type_id, [value])
     rank (1)
-      stat = H5Awrite(attr_id, type_id, value)
+      ierr = H5Awrite(attr_id, type_id, value)
     rank (2)
-      stat = H5Awrite(attr_id, type_id, value)
+      ierr = H5Awrite(attr_id, type_id, value)
     rank default
-      stat = 1
-      errmsg = 'unsupported rank for attribute "' // name // '"'
-      istat = H5Aclose(attr_id)
-      istat = H5Tclose(type_id)
-      return
+      INSIST(.false.)
     end select
 #endif
-    stat = min(0, stat) ! >= 0 from H5Awrite is successful
 
-    istat = H5Aclose(attr_id)
-    istat = H5Tclose(type_id)
+    if (global_any(ierr < 0, comm)) then
+      stat = 1
+      errmsg = 'error writing attribute "' // name // '"'
+    end if
+
+    ierr = H5Aclose(attr_id)
+    ierr = H5Tclose(type_id)
 
     if (stat /= 0) then
       errmsg = 'error writing attribute "' // name // '"'
@@ -313,57 +311,62 @@ contains
   end subroutine write_attr_string
 
 
-  subroutine get_attr_id(obj_id, name, type_id, dims, attr_id, stat, errmsg)
+  subroutine get_attr_id(obj_id, name, type_id, dims, comm, attr_id, stat, errmsg)
 
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     integer(hid_t), intent(in) :: type_id
     integer(hsize_t), intent(in) :: dims(:) ! the Fortran shape
+    integer, intent(in) :: comm
     integer(hid_t), intent(out) :: attr_id
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
     integer(hid_t) :: space_id
-    integer :: istat ! ignored status result
+    integer :: ierr
 
-    stat = 0
+    !! Try to open on all ranks
+    attr_id = H5Aopen(obj_id, name)
 
-    if (H5Aexists(obj_id, name)) then  ! open the attribute
-
-      attr_id = H5Aopen(obj_id, name)
-      if (attr_id < 0) then
+    if (global_any(attr_id >= 0, comm)) then ! some opened successfully
+      if (global_any(attr_id < 0, comm)) then ! and some failed to open
         stat = 1
-        errmsg = 'unable to open attribute "' // name // '"'
+        errmsg = 'inconsistent result opening attribute "' // name // '" across ranks'
+        if (attr_id >= 0) ierr = H5Aclose(attr_id)
         return
       end if
-
-      !NB: we assume type_id and dims match the attribute
-
-    else ! create the attribute
-
-      select case (size(dims))
-      case (0)
-        space_id = H5Screate(H5S_SCALAR)
-      case (1)
-        space_id = H5Screate(dims)
-      case (2:)
-        block
-          integer(hsize_t) :: c_dims(size(dims))
-          c_dims = dims(size(dims):1:-1) ! reverse order for the C shape
-          space_id = H5Screate(c_dims)
-        end block
-      end select
-      INSIST(space_id > 0)
-
-      attr_id = H5Acreate(obj_id, name, type_id, space_id)
-      if (attr_id < 0) then
-        stat = 1
-        errmsg = 'unable to create attribute "' // name // '"'
-        return
-      end if
-      istat = H5Sclose(space_id)
-
+      !! All opened successfully
+      stat = 0
+      !TODO: Validate its type and shape against the inputs
+      return
     end if
+
+    !! Nobody opened, so create it
+    select case (size(dims))
+    case (0)
+      space_id = H5Screate(H5S_SCALAR)
+    case (1)
+      space_id = H5Screate(dims)
+    case (2:)
+      block
+        integer(hsize_t) :: c_dims(size(dims))
+        c_dims = dims(size(dims):1:-1) ! reverse order for the C shape
+        space_id = H5Screate(c_dims)
+      end block
+    end select
+    INSIST(space_id > 0)
+
+    attr_id = H5Acreate(obj_id, name, type_id, space_id)
+    if (global_any(attr_id < 0, comm)) then
+      stat = 1
+      errmsg = 'unable to create attribute "' // name // '"'
+      if (attr_id >= 0) ierr = H5Aclose(attr_id)
+      ierr = H5Sclose(space_id)
+      return
+    end if
+
+    ierr = H5Sclose(space_id)
+    stat = 0
 
   end subroutine get_attr_id
 
@@ -409,7 +412,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (collective_failed(ierr < 0, comm)) then
+    if (global_any(ierr < 0, comm)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -453,7 +456,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (collective_failed(ierr < 0, comm)) then
+    if (global_any(ierr < 0, comm)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -497,7 +500,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (collective_failed(ierr < 0, comm)) then
+    if (global_any(ierr < 0, comm)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -541,7 +544,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (collective_failed(ierr < 0, comm)) then
+    if (global_any(ierr < 0, comm)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -585,7 +588,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (collective_failed(ierr < 0, comm)) then
+    if (global_any(ierr < 0, comm)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -667,7 +670,7 @@ contains
     data_space_id = H5Screate(data_dims)
     INSIST(data_space_id > 0)
     dset_id = H5Dcreate(loc_id, name, type_id, data_space_id)
-    if (collective_failed(dset_id < 0, comm)) then
+    if (global_any(dset_id < 0, comm)) then
       stat = 1
       errmsg = 'error creating dataset "' // name // '"'
       ierr = H5Sclose(data_space_id)
@@ -696,7 +699,7 @@ contains
       ierr = H5Sselect_none(data_space_id)
     end if
 
-    if (collective_failed(ierr < 0,comm)) then
+    if (global_any(ierr < 0,comm)) then
       stat = 1
       errmsg = 'error creating hyperslab of dataset "' // name // '"'
       ierr = H5Sclose(data_space_id)
@@ -714,28 +717,18 @@ contains
 
   end subroutine write_dataset_aux
 
-  logical function collective_failed(local_failed, comm) result(failed)
-    logical, intent(in) :: local_failed
-    integer, intent(in) :: comm
-    integer :: local_stat, global_stat, ierr
-    local_stat = merge(1, 0, local_failed)
-    call MPI_Allreduce(local_stat, global_stat, 1, MPI_INT, MPI_MAX, comm, ierr)
-    INSIST(ierr == MPI_SUCCESS)
-    failed = (global_stat /= 0)
-  end function
-
   !! Check the parallel consistency of TYPE_ID (DEBUGGING)
   logical function type_id_is_valid(comm, type_id)
 
     integer, intent(in) :: comm
     integer(hid_t), intent(in) :: type_id
 
-    integer :: istat
+    integer :: ierr
     integer(int64) :: p_local(2), p_global(2)
 
     p_local = [type_id, -type_id] ! cast to a known MPI type
-    call MPI_Allreduce(p_local, p_global, 2, MPI_INT64_T, MPI_MIN, comm, istat)
-    INSIST(istat == MPI_SUCCESS)
+    call MPI_Allreduce(p_local, p_global, 2, MPI_INT64_T, MPI_MIN, comm, ierr)
+    INSIST(ierr == MPI_SUCCESS)
     type_id_is_valid = (p_global(1) == -p_global(2))
 
   end function type_id_is_valid
@@ -752,9 +745,9 @@ contains
 
     !! Check that DIMS has the same size on all ranks
     p_local = [size(c_dims), -size(c_dims)]
-    call MPI_Allreduce(p_local, p_global, 2, MPI_INT, MPI_MIN, comm, istat)
+    call MPI_Allreduce(p_local, p_global, 2, MPI_INTEGER, MPI_MIN, comm, istat)
     INSIST(istat == MPI_SUCCESS)
-    c_dims_is_valid = (p_global(1) == -p_global(2))
+    c_dims_is_valid = (p_global(1) == -p_global(2)) ! equal min and max values
 
     if (c_dims_is_valid .and. size(c_dims) > 1) then
       !! Check that C_DIMS has the same extent in all dimensions but the first.
@@ -763,7 +756,7 @@ contains
       allocate(q_global, mold=q_local)
       call MPI_Allreduce(q_local, q_global, size(q_local), MPI_INT64_T, MPI_MIN, comm, istat)
       INSIST(istat == MPI_SUCCESS)
-      c_dims_is_valid = all(q_global + q_global(size(q_global):1:-1) == 0)
+      c_dims_is_valid = all(q_global + q_global(size(q_global):1:-1) == 0) ! equal min and max values in each dimension
       if (c_dims_is_valid) c_dims_is_valid = all(c_dims(2:) > 0)
     end if
 
@@ -775,12 +768,12 @@ contains
     integer, intent(in) :: comm
     integer, intent(in) :: chunk_size
 
-    integer :: istat
+    integer :: ierr
     integer :: p_local(2), p_global(2)
 
     p_local = [chunk_size, -chunk_size]
-    call MPI_Allreduce(p_local, p_global, 2, MPI_INT, MPI_MIN, comm, istat)
-    INSIST(istat == MPI_SUCCESS)
+    call MPI_Allreduce(p_local, p_global, 2, MPI_INTEGER, MPI_MIN, comm, ierr)
+    INSIST(ierr == MPI_SUCCESS)
     chunk_is_valid = (p_global(1) == -p_global(2))
     if (chunk_is_valid) chunk_is_valid = (chunk_size > 0)
 
@@ -792,24 +785,24 @@ contains
     integer, intent(in) :: comm
     integer, intent(in), optional :: root
 
-    integer :: n, p_local(2), p_global(2), istat, nproc
+    integer :: n, p_local(2), p_global(2), ierr, nproc
 
     !! Check that all ranks specified root or that none did.
     n = merge(1, 0, present(root))
     p_local = [n, -n]
-    call MPI_Allreduce(p_local, p_global, 2, MPI_INT, MPI_MIN, comm, istat)
-    INSIST(istat == MPI_SUCCESS)
+    call MPI_Allreduce(p_local, p_global, 2, MPI_INTEGER, MPI_MIN, comm, ierr)
+    INSIST(ierr == MPI_SUCCESS)
     root_is_valid = (p_global(1) == -p_global(2))
 
     if (root_is_valid .and. present(root)) then
       !! Check that all ranks specified the same valid value.
       p_local = [root, -root]
-      call MPI_Allreduce(p_local, p_global, 2, MPI_INT, MPI_MIN, comm, istat)
-      INSIST(istat == MPI_SUCCESS)
-      root_is_valid = (p_global(1) == -p_global(2)) ! same?
+      call MPI_Allreduce(p_local, p_global, 2, MPI_INTEGER, MPI_MIN, comm, ierr)
+      INSIST(ierr == MPI_SUCCESS)
+      root_is_valid = (p_global(1) == -p_global(2))
       if (root_is_valid) then! Check that the value of root is valid
-        call MPI_Comm_size(comm, nproc, istat)
-        INSIST(istat == MPI_SUCCESS)
+        call MPI_Comm_size(comm, nproc, ierr)
+        INSIST(ierr == MPI_SUCCESS)
         root_is_valid = (root >= 0) .and. (root < nproc)
       end if
     end if
@@ -829,44 +822,48 @@ contains
   !! in the extendible dimension. No data is written to the dataset, and its
   !! extent in the extendible dimension starts at 0.
 
-  subroutine create_unlimited_dataset_int32(loc_id, name, mold, chunk_size, stat, errmsg)
+  subroutine create_unlimited_dataset_int32(loc_id, name, mold, chunk_size, comm, stat, errmsg)
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     integer(int32), intent(in) :: mold(..)
     integer, intent(in) :: chunk_size
     integer, intent(out) :: stat
+    integer, intent(in) :: comm
     character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(loc_id, name, H5T_NATIVE_INT32, shape(mold,hsize_t), chunk_size, stat, errmsg)
+    call create_unlimited_dataset_aux(loc_id, name, H5T_NATIVE_INT32, shape(mold,hsize_t), chunk_size, comm, stat, errmsg)
   end subroutine
 
-  subroutine create_unlimited_dataset_int64(loc_id, name, mold, chunk_size, stat, errmsg)
+  subroutine create_unlimited_dataset_int64(loc_id, name, mold, chunk_size, comm, stat, errmsg)
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     integer(int64), intent(in) :: mold(..)
     integer, intent(in) :: chunk_size
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(loc_id, name, H5T_NATIVE_INT64, shape(mold,hsize_t), chunk_size, stat, errmsg)
+    call create_unlimited_dataset_aux(loc_id, name, H5T_NATIVE_INT64, shape(mold,hsize_t), chunk_size, comm, stat, errmsg)
   end subroutine
 
-  subroutine create_unlimited_dataset_real32(loc_id, name, mold, chunk_size, stat, errmsg)
+  subroutine create_unlimited_dataset_real32(loc_id, name, mold, chunk_size, comm, stat, errmsg)
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     real(real32), intent(in) :: mold(..)
     integer, intent(in) :: chunk_size
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(loc_id, name, H5T_NATIVE_FLOAT, shape(mold,hsize_t), chunk_size, stat, errmsg)
+    call create_unlimited_dataset_aux(loc_id, name, H5T_NATIVE_FLOAT, shape(mold,hsize_t), chunk_size, comm, stat, errmsg)
   end subroutine
 
-  subroutine create_unlimited_dataset_real64(loc_id, name, mold, chunk_size, stat, errmsg)
+  subroutine create_unlimited_dataset_real64(loc_id, name, mold, chunk_size, comm, stat, errmsg)
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     real(real64), intent(in) :: mold(..)
     integer, intent(in) :: chunk_size
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(loc_id, name, H5T_NATIVE_DOUBLE, shape(mold,hsize_t), chunk_size, stat, errmsg)
+    call create_unlimited_dataset_aux(loc_id, name, H5T_NATIVE_DOUBLE, shape(mold,hsize_t), chunk_size, comm, stat, errmsg)
   end subroutine
 
 
@@ -919,7 +916,7 @@ contains
     INSIST(ierr >= 0)
 
     dset_id = H5Dcreate(loc_id, name, type_id, space_id, dcpl_id=dcpl_id)
-    if (collective_failed(dset_id < 0, comm)) then
+    if (global_any(dset_id < 0, comm)) then
       stat = 1
       errmsg = 'error creating unlimited dataset "' // name // '"'
       ierr = H5Pclose(dcpl_id)
@@ -950,237 +947,173 @@ contains
   !! apply. Moreover this must still be called collectively as extending the
   !! size of the dataset is itself a collective operation.
 
-  subroutine append_to_dataset_int32(loc_id, name, data, stat, errmsg, root)
+  subroutine append_to_dataset_int32(loc_id, name, array, comm, stat, errmsg, root)
 
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
-    integer(int32), intent(in) :: data(..)
+    integer(int32), intent(in) :: array(..)
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
 
     integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
-    integer :: istat
+    integer :: ierr
 
     type_id = H5T_NATIVE_INT32
 
-    call append_to_dataset_aux(loc_id, name, type_id, shape(data, hsize_t), &
-        dset_id, mem_space_id, data_space_id, stat, errmsg, root)
+    call append_to_dataset_aux(loc_id, name, type_id, shape(array, hsize_t), comm, &
+        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
-    if (mem_space_id == 0) then
-      istat = H5Dclose(dset_id)
-      return
-    end if
-
-    !! Set the transfer mode
-    dxpl = H5Pcreate(H5P_DATASET_XFER)
-    if (present(root)) then ! only root writes
-      stat = H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_INDEPENDENT)
-    else  ! all write
-      stat = H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE)
-    end if
-    INSIST(stat == 0)
-
-    select rank (data)
+    select rank (array)
     rank (0)
-      stat = H5Dwrite(dset_id, type_id, [data], mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
     rank (1)
-      stat = H5Dwrite(dset_id, type_id, data, mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
     rank (2)
-      stat = H5Dwrite(dset_id, type_id, data, mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
     rank default
-      stat = 1
-      errmsg = 'unsupported rank'
-      return
+      INSIST(.false.)
     end select
-    stat = min(0, stat) ! >= 0 from H5Dwrite is successful
 
-    istat = H5Pclose(dxpl)
-    istat = h5sclose(mem_space_id)
-    istat = h5sclose(data_space_id)
-    istat = h5dclose(dset_id)
-
-    if (stat /= 0) then
+    if (global_any(ierr < 0, comm)) then
+      stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
-      return
     end if
+
+    ierr = H5Pclose(dxpl)
+    ierr = h5sclose(mem_space_id)
+    ierr = h5sclose(data_space_id)
+    ierr = h5dclose(dset_id)
 
   end subroutine append_to_dataset_int32
 
-  subroutine append_to_dataset_int64(loc_id, name, data, stat, errmsg, root)
+  subroutine append_to_dataset_int64(loc_id, name, array, comm, stat, errmsg, root)
 
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
-    integer(int64), intent(in) :: data(..)
+    integer(int64), intent(in) :: array(..)
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
 
     integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
-    integer :: istat
+    integer :: ierr
 
     type_id = H5T_NATIVE_INT64
 
-    call append_to_dataset_aux(loc_id, name, type_id, shape(data, hsize_t), &
-        dset_id, mem_space_id, data_space_id, stat, errmsg, root)
+    call append_to_dataset_aux(loc_id, name, type_id, shape(array, hsize_t), comm, &
+        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
-    if (mem_space_id == 0) then
-      istat = H5Dclose(dset_id)
-      return
-    end if
-
-    !! Set the transfer mode
-    dxpl = H5Pcreate(H5P_DATASET_XFER)
-    if (present(root)) then ! only root writes
-      stat = H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_INDEPENDENT)
-    else  ! all write
-      stat = H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE)
-    end if
-    INSIST(stat == 0)
-
-    select rank (data)
+    select rank (array)
     rank (0)
-      stat = H5Dwrite(dset_id, type_id, [data], mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
     rank (1)
-      stat = H5Dwrite(dset_id, type_id, data, mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
     rank (2)
-      stat = H5Dwrite(dset_id, type_id, data, mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
     rank default
-      stat = 1
-      errmsg = 'unsupported rank'
-      return
+      INSIST(.false.)
     end select
-    stat = min(0, stat) ! >= 0 from H5Dwrite is successful
 
-    istat = H5Pclose(dxpl)
-    istat = h5sclose(mem_space_id)
-    istat = h5sclose(data_space_id)
-    istat = h5dclose(dset_id)
-
-    if (stat /= 0) then
+    if (global_any(ierr < 0, comm)) then
+      stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
-      return
     end if
+
+    ierr = H5Pclose(dxpl)
+    ierr = h5sclose(mem_space_id)
+    ierr = h5sclose(data_space_id)
+    ierr = h5dclose(dset_id)
 
   end subroutine append_to_dataset_int64
 
 
-  subroutine append_to_dataset_real32(loc_id, name, data, stat, errmsg, root)
+  subroutine append_to_dataset_real32(loc_id, name, array, comm, stat, errmsg, root)
 
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
-    real(real32), intent(in) :: data(..)
+    real(real32), intent(in) :: array(..)
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
 
     integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
-    integer :: istat
+    integer :: ierr
 
     type_id = H5T_NATIVE_FLOAT
 
-    call append_to_dataset_aux(loc_id, name, type_id, shape(data, hsize_t), &
-        dset_id, mem_space_id, data_space_id, stat, errmsg, root)
+    call append_to_dataset_aux(loc_id, name, type_id, shape(array, hsize_t), comm, &
+        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
-    if (mem_space_id == 0) then ! process doesn't write
-      istat = H5Dclose(dset_id)
-      return
-    end if
-
-    !! Set the transfer mode
-    dxpl = H5Pcreate(H5P_DATASET_XFER)
-    if (present(root)) then ! only root writes
-      stat = H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_INDEPENDENT)
-    else  ! all write
-      stat = H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE)
-    end if
-    INSIST(stat == 0)
-
-    select rank (data)
+    select rank (array)
     rank (0)
-      stat = H5Dwrite(dset_id, type_id, [data], mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
     rank (1)
-      stat = H5Dwrite(dset_id, type_id, data, mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
     rank (2)
-      stat = H5Dwrite(dset_id, type_id, data, mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
     rank default
-      stat = 1
-      errmsg = 'unsupported rank'
-      return
+      INSIST(.false.)
     end select
-    stat = min(0, stat) ! >= 0 from H5Dwrite is successful
 
-    istat = H5Pclose(dxpl)
-    istat = h5sclose(mem_space_id)
-    istat = h5sclose(data_space_id)
-    istat = h5dclose(dset_id)
-
-    if (stat /= 0) then
+    if (global_any(ierr < 0, comm)) then
+      stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
-      return
     end if
+
+    ierr = H5Pclose(dxpl)
+    ierr = h5sclose(mem_space_id)
+    ierr = h5sclose(data_space_id)
+    ierr = h5dclose(dset_id)
 
   end subroutine append_to_dataset_real32
 
 
-  subroutine append_to_dataset_real64(loc_id, name, data, stat, errmsg, root)
+  subroutine append_to_dataset_real64(loc_id, name, array, comm, stat, errmsg, root)
 
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
-    real(real64), intent(in) :: data(..)
+    real(real64), intent(in) :: array(..)
+    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
 
     integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
-    integer :: istat
+    integer :: ierr
 
     type_id = H5T_NATIVE_DOUBLE
 
-    call append_to_dataset_aux(loc_id, name, type_id, shape(data, hsize_t), &
-        dset_id, mem_space_id, data_space_id, stat, errmsg, root)
+    call append_to_dataset_aux(loc_id, name, type_id, shape(array, hsize_t), comm, &
+        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
-    if (mem_space_id == 0) then ! process doesn't write
-      istat = H5Dclose(dset_id)
-      return
-    end if
-
-    !! Set the transfer mode
-    dxpl = H5Pcreate(H5P_DATASET_XFER)
-    if (present(root)) then ! only root writes
-      stat = H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_INDEPENDENT)
-    else  ! all write
-      stat = H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE)
-    end if
-    INSIST(stat == 0)
-
-    select rank (data)
+    select rank (array)
     rank (0)
-      stat = H5Dwrite(dset_id, type_id, [data], mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
     rank (1)
-      stat = H5Dwrite(dset_id, type_id, data, mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
     rank (2)
-      stat = H5Dwrite(dset_id, type_id, data, mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
     rank default
-      stat = 1
-      errmsg = 'unsupported rank'
-      return
+      INSIST(.false.)
     end select
-    stat = min(0, stat) ! >= 0 from H5Dwrite is successful
 
-    istat = H5Pclose(dxpl)
-    istat = h5sclose(mem_space_id)
-    istat = h5sclose(data_space_id)
-    istat = h5dclose(dset_id)
-
-    if (stat /= 0) then
+    if (global_any(ierr < 0, comm)) then
+      stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
-      return
     end if
+
+    ierr = H5Pclose(dxpl)
+    ierr = h5sclose(mem_space_id)
+    ierr = h5sclose(data_space_id)
+    ierr = h5dclose(dset_id)
 
   end subroutine append_to_dataset_real64
 
@@ -1203,18 +1136,20 @@ contains
   !! must still be called collectively because it extends the size of the
   !! dataset, which is a collective operation.
 
-  subroutine append_to_dataset_aux(loc_id, name, type_id, dims, &
-      dset_id, mem_space_id, data_space_id, stat, errmsg, root)
+  subroutine append_to_dataset_aux(loc_id, name, type_id, dims, comm, &
+      dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
 
     integer(hid_t), intent(in) :: loc_id, type_id
     character(*), intent(in) :: name
     integer(hsize_t), intent(in) :: dims(:)
-    integer(hid_t), intent(out) :: dset_id, data_space_id, mem_space_id
+    integer, intent(in) :: comm
+    integer(hid_t), intent(out) :: dset_id, data_space_id, mem_space_id, dxpl
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
 
-    integer :: ndims, istat, comm, rank
+    integer :: ndims, ierr, rank
+    logical :: rank_writes
     integer(hid_t) :: dset_type_id
     integer(hsize_t) :: n
     integer(hsize_t), allocatable :: mem_dims(:), data_dims(:), start(:)
@@ -1229,7 +1164,7 @@ contains
 
     !! Open the dataset and get its current shape (DATA_DIMS)
     dset_id = H5Dopen(loc_id, name)
-    if (dset_id < 0) then
+    if (global_any(dset_id < 0, comm)) then
       stat = 1
       errmsg = 'unable to open dataset "' // name // '"'
       return
@@ -1240,85 +1175,102 @@ contains
     INSIST(ndims > 0)
     allocate(data_dims(ndims))
     ndims = H5Sget_simple_extent_dims(data_space_id, data_dims)
-    istat = H5Sclose(data_space_id)
+    INSIST(ndims > 0)
+    ierr = H5Sclose(data_space_id)
 
-    !! Verify data rank compatibility
-    if (size(mem_dims) /= size(data_dims)) then
+    ASSERT(c_dims_is_valid(comm, mem_dims))
+    ASSERT(type_id_is_valid(comm, type_id))
+    ASSERT(root_is_valid(comm, root))
+
+    !! Validate data rank compatibility
+    if (global_any(size(mem_dims) /= size(data_dims), comm)) then
       stat = 1
       errmsg = 'rank of appended data is incompatible with dataset "' // name // '"'
-      istat = H5Dclose(dset_id)
+      ierr = H5Dclose(dset_id)
       return
     end if
 
-    !! Verify data shape compatibility
-    if (any(mem_dims(2:) /= data_dims(2:))) then
-      stat = 1
-      errmsg = 'shape of appended data is incompatible with dataset "' // name // '"'
-      return
-    end if
-
-!TODO: H5Tequal doesn't recognize dset_type_id as a type ID for some reason!
-!    !! Verify data type compatibility
-!    dset_type_id = H5Dget_type(dset_id)
-!    INSIST(dset_type_id > 0)
-!    if (H5Tequal(dset_type_id, type_id) <= 0) then
-!      errmsg = 'type of appended data is incompatible with dataset "' // name // '"'
-!      istat = H5Tclose(dset_type_id)
-!      istat = H5Dclose(dset_id)
-!      return
-!    end if
-!    istat = H5Tclose(dset_type_id)
-
-    comm = h5_mpi_comm(dset_id)
-    call MPI_Comm_rank(comm, rank, istat)
-
-    if (present(root)) then
-      if (rank /= root) mem_dims(1) = 0
-    end if
-
-    !! Starting index for the dataset hyperslab
-    allocate(start, mold=mem_dims)
-    start = 0
-    call MPI_Scan(mem_dims(1), n, 1, MPI_INT64_T, MPI_SUM, comm, istat)
-    start(1) = data_dims(1) + n - mem_dims(1)
-
-    !! Resize the dataset to accommodate the data to be appended
-    call MPI_Allreduce(mem_dims(1), n, 1, MPI_INT64_T, MPI_SUM, comm, istat)
-    call MPI_Comm_free(comm, istat)
-    data_dims(1) = data_dims(1) + n
-    stat = H5Dset_extent(dset_id, data_dims)
-    stat = min(0, stat) ! >= 0 from H5Dset_extent is successful
-    if (stat /= 0) then
-      errmsg = 'error resizing dataset "' // name // '"'
-      istat = H5Dclose(dset_id)
-      return
-    end if
-
-    if (present(root)) then
-      if (rank /= root) then ! process will not participate in the actual write
-        mem_space_id = 0
-        data_space_id = 0
+    !! Validate fixed extents
+    if (size(data_dims) > 1) then
+      if (global_any(any(mem_dims(2:) /= data_dims(2:)), comm)) then
+        stat = 1
+        errmsg = 'shape of appended data is incompatible with dataset "' // name // '"'
         return
       end if
     end if
 
-    !! Create the dataspace for the data array to be written
-    mem_space_id = H5Screate(mem_dims)
+    !! Validate data type compatibility
+    dset_type_id = H5Dget_type(dset_id)
+    INSIST(dset_type_id > 0)
+    if (global_any(H5Tequal(dset_type_id, type_id) <= 0, comm)) then
+      errmsg = 'type of appended data is incompatible with dataset "' // name // '"'
+      stat = 1
+      ierr = H5Tclose(dset_type_id)
+      ierr = H5Dclose(dset_id)
+      return
+    end if
+    ierr = H5Tclose(dset_type_id)
+
+    if (present(root)) then
+      call MPI_Comm_rank(comm, rank, ierr)
+      INSIST(ierr == MPI_SUCCESS)
+      rank_writes = (rank == root)
+    else
+      rank_writes = .true.
+    end if
+
+    if (.not.rank_writes) mem_dims(1) = 0 ! ignore their data
+
+    !! Starting index for the dataset hyperslab for this rank
+    allocate(start, mold=mem_dims)
+    start = 0
+    call MPI_Scan(mem_dims(1), n, 1, MPI_INT64_T, MPI_SUM, comm, ierr)
+    INSIST(ierr == MPI_SUCCESS)
+    start(1) = data_dims(1) + n - mem_dims(1)
+
+    !! Resize the dataset to accommodate the data to be appended
+    call MPI_Allreduce(mem_dims(1), n, 1, MPI_INT64_T, MPI_SUM, comm, ierr)
+    INSIST(ierr == MPI_SUCCESS)
+    data_dims(1) = data_dims(1) + n
+    ierr = H5Dset_extent(dset_id, data_dims)
+    if (global_any(ierr < 0, comm)) then
+      stat = 1
+      errmsg = 'error resizing dataset "' // name // '"'
+      ierr = H5Dclose(dset_id)
+      return
+    end if
+
+    if (mem_dims(1) > 0) then
+      mem_space_id = H5Screate(mem_dims)
+    else
+      mem_space_id = H5Screate(H5S_NULL)
+    end if
     INSIST(mem_space_id > 0)
 
     !! Create the dataspace corresponding to appended elements in dataset
     data_space_id = H5Dget_space(dset_id)
-    stat = H5Sselect_hyperslab(data_space_id, H5S_SELECT_SET, start, mem_dims)
-    stat = min(0, stat) ! >= 0 from H5Sselect_hyperslab is successful
-    if (stat /= 0) then
+    INSIST(data_space_id > 0)
+    if (rank_writes .and. mem_dims(1) > 0) then
+      ierr = H5Sselect_hyperslab(data_space_id, H5S_SELECT_SET, start, mem_dims)
+    else ! 0-size
+      ierr = H5Sselect_none(data_space_id)
+    end if
+
+    if (global_any(ierr < 0, comm)) then
       stat = 1
       errmsg = 'error creating hyperslab of dataset "' // name // '"'
-      istat = H5Sclose(data_space_id)
-      istat = H5Sclose(mem_space_id)
-      istat = H5Dclose(dset_id)
+      ierr = H5Sclose(data_space_id)
+      ierr = H5Sclose(mem_space_id)
+      ierr = H5Dclose(dset_id)
       return
     end if
 
+    dxpl = H5Pcreate(H5P_DATASET_XFER)
+    INSIST(dxpl > 0)
+    ierr = H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE)
+    INSIST(ierr == 0)
+
+    stat = 0
   end subroutine append_to_dataset_aux
 
   !! Get a copy of the MPI communicator
@@ -1335,6 +1287,28 @@ contains
     INSIST(stat >= 0)
     istat = H5Pclose(fapl)
     istat = H5Fclose(file_id)
+  end function
+
+  !! Returns true if MASK is true on at least one rank; otherwise returns false.
+  logical function global_any(mask, comm)
+    logical, intent(in) :: mask
+    integer, intent(in) :: comm
+    integer :: local_stat, global_stat, ierr
+    local_stat = merge(0, 1, mask) ! 0 is T, 1 is F
+    call MPI_Allreduce(local_stat, global_stat, 1, MPI_INTEGER, MPI_MIN, comm, ierr)
+    INSIST(ierr == MPI_SUCCESS)
+    global_any = (global_stat == 0)
+  end function
+
+  !! Returns true if MASK is true on all ranks; otherwise returns false.
+  logical function global_all(mask, comm)
+    logical, intent(in) :: mask
+    integer, intent(in) :: comm
+    integer :: local_stat, global_stat, ierr
+    local_stat = merge(0, 1, mask) ! 0 is T, 1 is F
+    call MPI_Allreduce(local_stat, global_stat, 1, MPI_INTEGER, MPI_MAX, comm, ierr)
+    INSIST(ierr == MPI_SUCCESS)
+    global_all = (global_stat == 0)
   end function
 
 end module vtkhdf_h5

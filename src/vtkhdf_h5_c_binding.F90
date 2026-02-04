@@ -143,7 +143,7 @@ module vtkhdf_h5_c_binding
   end interface
 
   public :: H5Aclose, H5Awrite
-  public :: H5Acreate, H5Aopen, H5Aexists ! generic module procedures
+  public :: H5Acreate, H5Aopen, H5Aexists
 
   interface H5Acreate
     module procedure H5Acreate, H5Acreate_by_name
@@ -151,10 +151,6 @@ module vtkhdf_h5_c_binding
 
   interface H5Aopen
     module procedure H5Aopen, H5Aopen_by_name
-  end interface
-
-  interface H5Aexists
-    module procedure H5Aexists, H5Aexists_by_name
   end interface
 
   !!!! H5S functions that can be used as-is !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -274,7 +270,7 @@ module vtkhdf_h5_c_binding
     function H5Dget_type(dset_id) result(type_id) bind(c,name='H5Dget_type')
       import :: hid_t
       integer(hid_t), value :: dset_id
-      integer :: type_id
+      integer(hid_t) :: type_id
     end function
   end interface
 
@@ -568,7 +564,7 @@ contains
     attr_id = H5Aopen_by_name_c(loc_id, obj_name//c_null_char, attr_name//c_null_char, H5P_DEFAULT, lapl_id_)
   end function
 
-  logical function H5Aexists(obj_id, attr_name) result(exists)
+  integer function H5Aexists(obj_id, attr_name) result(res)
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: attr_name
     interface
@@ -579,26 +575,7 @@ contains
         integer(c_int) :: res
       end function
     end interface
-    exists = (H5Aexists_c(obj_id, attr_name//c_null_char) > 0)
-  end function
-
-  logical function H5Aexists_by_name(loc_id, obj_name, attr_name, lapl_id) result(exists)
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: obj_name, attr_name
-    integer(hid_t), intent(in), optional :: lapl_id
-    interface
-      function H5Aexists_by_name_c(loc_id, obj_name, attr_name, lapl_id) &
-          result(res) bind(c,name='H5Aexists_by_name')
-        import :: hid_t, c_int
-        integer(hid_t), value :: loc_id
-        character, intent(in) :: obj_name(*), attr_name(*)
-        integer(hid_t), value :: lapl_id
-        integer(c_int) :: res
-      end function
-    end interface
-    integer(hid_t) :: lapl_id_
-    lapl_id_ = H5P_DEFAULT; if (present(lapl_id)) lapl_id_ = lapl_id
-    exists = (H5Aexists_by_name_c(loc_id, obj_name//c_null_char, attr_name//c_null_char, lapl_id_) > 0)
+    res = H5Aexists_c(obj_id, attr_name//c_null_char) ! >0 yes, 0 no, <0 error
   end function
 
   function H5Screate(type) result(space_id)

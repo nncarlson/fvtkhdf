@@ -132,12 +132,12 @@ contains
     this%vtk_id = H5Gcreate(this%file_id, 'VTKHDF', gcpl_id=crt_prop)
     INSIST(this%vtk_id > 0)
 
-    call h5_write_attr(this%vtk_id, 'Version', vtkhdf_version, stat, errmsg)
+    call h5_write_attr(this%vtk_id, 'Version', vtkhdf_version, this%comm, stat, errmsg)
     INSIST(stat == 0)
     !NB: We stick with the older MB type due to an issue with the modern PDC
     !type; see https://gitlab.kitware.com/vtk/vtk/-/issues/19902
-    !call h5_write_attr(this%vtk_id, 'Type', 'PartitionedDataSetCollection', stat, errmsg)
-    call h5_write_attr(this%vtk_id, 'Type', 'MultiBlockDataSet', stat, errmsg)
+    !call h5_write_attr(this%vtk_id, 'Type', 'PartitionedDataSetCollection', this%comm, stat, errmsg)
+    call h5_write_attr(this%vtk_id, 'Type', 'MultiBlockDataSet', this%comm, stat, errmsg)
     INSIST(stat == 0)
 
     this%ass_id = H5Gcreate(this%vtk_id, 'Assembly', gcpl_id=crt_prop)
@@ -194,7 +194,7 @@ contains
 
     call new%b%init(this%vtk_id, name, this%comm, stat, errmsg, temporal)
     if (stat /= 0) return
-    call h5_write_attr(new%b%root_id, 'Index', this%next_bid, stat, errmsg)
+    call h5_write_attr(new%b%root_id, 'Index', this%next_bid, this%comm, stat, errmsg)
     INSIST(stat == 0)
     this%next_bid = this%next_bid + 1
 

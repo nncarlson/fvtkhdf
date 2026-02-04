@@ -90,9 +90,9 @@ contains
     this%root_id = H5Gcreate(loc_id, name)
     INSIST(this%root_id > 0)
 
-    call h5_write_attr(this%root_id, 'Version', vtkhdf_version, stat, errmsg)
+    call h5_write_attr(this%root_id, 'Version', vtkhdf_version, this%comm, stat, errmsg)
     INSIST(stat == 0)
-    call h5_write_attr(this%root_id, 'Type', 'UnstructuredGrid', stat, errmsg)
+    call h5_write_attr(this%root_id, 'Type', 'UnstructuredGrid', this%comm, stat, errmsg)
     INSIST(stat == 0)
 
     this%cgrp_id = H5Gcreate(this%root_id, 'CellData')
@@ -114,21 +114,21 @@ contains
       INSIST(this%pogrp_id > 0)
 
       this%nsteps = 0
-      call h5_write_attr(this%steps_id, 'NSteps', this%nsteps, stat, errmsg)
+      call h5_write_attr(this%steps_id, 'NSteps', this%nsteps, this%comm, stat, errmsg)
       INSIST(stat == 0)
 
       associate (imold => [1], rmold => [1.0_real64], chunk_size => 100)
-        call h5_create_unlimited_dataset(this%steps_id, 'Values', rmold, chunk_size, stat, errmsg)
+        call h5_create_unlimited_dataset(this%steps_id, 'Values', rmold, chunk_size, this%comm, stat, errmsg)
         INSIST(stat == 0)
-        call h5_create_unlimited_dataset(this%steps_id, 'PointOffsets', imold, chunk_size, stat, errmsg)
+        call h5_create_unlimited_dataset(this%steps_id, 'PointOffsets', imold, chunk_size, this%comm, stat, errmsg)
         INSIST(stat == 0)
-        call h5_create_unlimited_dataset(this%steps_id, 'CellOffsets', imold, chunk_size, stat, errmsg)
+        call h5_create_unlimited_dataset(this%steps_id, 'CellOffsets', imold, chunk_size, this%comm, stat, errmsg)
         INSIST(stat == 0)
-        call h5_create_unlimited_dataset(this%steps_id, 'ConnectivityIdOffsets', imold, chunk_size, stat, errmsg)
+        call h5_create_unlimited_dataset(this%steps_id, 'ConnectivityIdOffsets', imold, chunk_size, this%comm, stat, errmsg)
         INSIST(stat == 0)
-        call h5_create_unlimited_dataset(this%steps_id, 'NumberOfParts', imold, chunk_size, stat, errmsg)
+        call h5_create_unlimited_dataset(this%steps_id, 'NumberOfParts', imold, chunk_size, this%comm, stat, errmsg)
         INSIST(stat == 0)
-        call h5_create_unlimited_dataset(this%steps_id, 'PartOffsets', imold, chunk_size, stat, errmsg)
+        call h5_create_unlimited_dataset(this%steps_id, 'PartOffsets', imold, chunk_size, this%comm, stat, errmsg)
         INSIST(stat == 0)
       end associate
 
@@ -308,14 +308,14 @@ contains
     allocate(new)
     new%name = name
     associate (chunk_size => this%nnode_tot)
-      call h5_create_unlimited_dataset(this%pgrp_id, name, mold, chunk_size, stat, errmsg)
+      call h5_create_unlimited_dataset(this%pgrp_id, name, mold, chunk_size, this%comm, stat, errmsg)
     end associate
     new%next => this%temporal_point_data
     this%temporal_point_data => new
     if (stat /= 0) return
 
     associate (mold => [1], chunk_size => 100)
-      call h5_create_unlimited_dataset(this%pogrp_id, name, mold, chunk_size, stat, errmsg)
+      call h5_create_unlimited_dataset(this%pogrp_id, name, mold, chunk_size, this%comm, stat, errmsg)
     end associate
 
   end subroutine
@@ -342,14 +342,14 @@ contains
     allocate(new)
     new%name = name
     associate (chunk_size => this%ncell_tot)
-      call h5_create_unlimited_dataset(this%cgrp_id, name, mold, chunk_size, stat, errmsg)
+      call h5_create_unlimited_dataset(this%cgrp_id, name, mold, chunk_size, this%comm, stat, errmsg)
     end associate
     new%next => this%temporal_cell_data
     this%temporal_cell_data => new
     if (stat /= 0) return
 
     associate (mold => [1], chunk_size => 100)
-      call h5_create_unlimited_dataset(this%cogrp_id, name, mold, chunk_size, stat, errmsg)
+      call h5_create_unlimited_dataset(this%cogrp_id, name, mold, chunk_size, this%comm, stat, errmsg)
     end associate
 
   end subroutine
@@ -369,21 +369,21 @@ contains
     INSIST(this%nsteps >= 0)
 
     this%nsteps = this%nsteps + 1
-    call h5_write_attr(this%steps_id, 'NSteps', this%nsteps, stat, errmsg)
+    call h5_write_attr(this%steps_id, 'NSteps', this%nsteps, this%comm, stat, errmsg)
     INSIST(stat == 0)
 
     !! A single mesh is used for all time steps so there are no offsets
-    call h5_append_to_dataset(this%steps_id, 'Values', time, stat, errmsg, root=0)
+    call h5_append_to_dataset(this%steps_id, 'Values', time, this%comm, stat, errmsg, root=0)
     INSIST(stat == 0)
-    call h5_append_to_dataset(this%steps_id, 'PointOffsets', 0, stat, errmsg, root=0)
+    call h5_append_to_dataset(this%steps_id, 'PointOffsets', 0, this%comm, stat, errmsg, root=0)
     INSIST(stat == 0)
-    call h5_append_to_dataset(this%steps_id, 'CellOffsets', 0, stat, errmsg, root=0)
+    call h5_append_to_dataset(this%steps_id, 'CellOffsets', 0, this%comm, stat, errmsg, root=0)
     INSIST(stat == 0)
-    call h5_append_to_dataset(this%steps_id, 'ConnectivityIdOffsets', 0, stat, errmsg, root=0)
+    call h5_append_to_dataset(this%steps_id, 'ConnectivityIdOffsets', 0, this%comm, stat, errmsg, root=0)
     INSIST(stat == 0)
-    call h5_append_to_dataset(this%steps_id, 'NumberOfParts', this%npart, stat, errmsg, root=0)
+    call h5_append_to_dataset(this%steps_id, 'NumberOfParts', this%npart, this%comm, stat, errmsg, root=0)
     INSIST(stat == 0)
-    call h5_append_to_dataset(this%steps_id, 'PartOffsets', 0, stat, errmsg, root=0)
+    call h5_append_to_dataset(this%steps_id, 'PartOffsets', 0, this%comm, stat, errmsg, root=0)
     INSIST(stat == 0)
 
     !! Set default offsets into point and cell datasets for each of the temporal
@@ -394,7 +394,7 @@ contains
     tmp => this%temporal_point_data
     do while (associated(tmp))
       tmp%flag = .false.  ! dataset not yet written for this time step
-      call h5_append_to_dataset(this%pogrp_id, tmp%name, tmp%next_offset, stat, errmsg, root=0)
+      call h5_append_to_dataset(this%pogrp_id, tmp%name, tmp%next_offset, this%comm, stat, errmsg, root=0)
       INSIST(stat == 0)
       tmp => tmp%next
     end do
@@ -402,7 +402,7 @@ contains
     tmp => this%temporal_cell_data
     do while (associated(tmp))
       tmp%flag = .false.  ! dataset not yet written for this time step
-      call h5_append_to_dataset(this%cogrp_id, tmp%name, tmp%next_offset, stat, errmsg, root=0)
+      call h5_append_to_dataset(this%cogrp_id, tmp%name, tmp%next_offset, this%comm, stat, errmsg, root=0)
       INSIST(stat == 0)
       tmp => tmp%next
     end do
@@ -441,7 +441,7 @@ contains
         errmsg = 'dataset "' // name // '" already written for this time step'
         return
       else
-        call h5_append_to_dataset(this%cgrp_id, name, array, stat, errmsg)
+        call h5_append_to_dataset(this%cgrp_id, name, array, this%comm, stat, errmsg)
         if (stat /= 0) return
         !call h5_write_dataset_element(this%cogrp_id, name, this%nsteps, dset%next_offset, stat, errmsg)
         !if (stat /= 0) return
@@ -488,7 +488,7 @@ contains
         errmsg = 'dataset "' // name // '" already written for this time step'
         return
       else
-        call h5_append_to_dataset(this%pgrp_id, name, array, stat, errmsg)
+        call h5_append_to_dataset(this%pgrp_id, name, array, this%comm, stat, errmsg)
         if (stat /= 0) return
         !call h5_write_dataset_element(this%pogrp_id, name, this%nsteps, dset%next_offset, stat, errmsg)
         !if (stat /= 0) return
