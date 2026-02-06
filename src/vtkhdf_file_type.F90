@@ -38,7 +38,7 @@ module vtkhdf_file_type
   type, public :: vtkhdf_file
     private
     integer :: comm = MPI_COMM_NULL
-    integer(hid_t) :: file_id = -1, vtk_id=-1, ass_id=-1
+    integer(hid_t) :: file_id=H5I_INVALID_HID, vtk_id=H5I_INVALID_HID, ass_id=H5I_INVALID_HID
     integer :: next_bid = 0
     type(pdc_block), pointer :: blocks => null()
   contains
@@ -77,7 +77,7 @@ module vtkhdf_file_type
     procedure, private :: write_temporal_point_data_int32,  write_temporal_point_data_int64
     procedure :: close
     procedure, private :: get_block_ptr
-    !final :: vtkhdf_file_delete
+    final :: vtkhdf_file_delete
   end type
 
   type :: pdc_block
@@ -88,8 +88,7 @@ module vtkhdf_file_type
     final :: pdc_block_delete
   end type
 
-  !! The VTK cell types that are relevant to Truchas.
-  !! NB: The local node ordering for a VTK wedge cell may differ from Truchas
+  !! TODO: get a more exhaustive list, separate module
   integer(int8), parameter, public :: VTK_TETRA = 10
   integer(int8), parameter, public :: VTK_HEXAHEDRON = 12
   integer(int8), parameter, public :: VTK_WEDGE = 13
@@ -99,15 +98,47 @@ module vtkhdf_file_type
 
 contains
 
+  !! Finalizer for VTKHDF_FILE objects. We free heap memory we own but avoid
+  !! doing things that may require syncronization with other ranks (MPI/PHDF5)
+  !! because where implicit finalization occurs it is not guaranteed to be
+  !! collective or ordered with respect to other ranks. This can leak HDF5
+  !! IDs and the MPI communicator, but that is unavoidable. Users should
+  !! always use CLOSE to do a proper collective cleanup and close of the file.
+
   subroutine vtkhdf_file_delete(this)
     type(vtkhdf_file), intent(inout) :: this
     if (associated(this%blocks)) deallocate(this%blocks)
+    this%ass_id  = H5I_INVALID_HID
+    this%vtk_id  = H5I_INVALID_HID
+    this%file_id = H5I_INVALID_HID
+    this%comm = MPI_COMM_NULL
+    this%next_bid = 0
   end subroutine
 
   recursive subroutine pdc_block_delete(this)
     type(pdc_block), intent(inout) :: this
-    call this%b%close
     if (associated(this%next)) deallocate(this%next)
+  end subroutine
+
+  !! Cleanly closes H5 identifiers and the file, and default initializes.
+  subroutine close(this)
+    class(vtkhdf_file), intent(inout) :: this
+    integer :: ierr
+    type(pdc_block), pointer :: p
+    p => this%blocks
+    do while (associated(p))
+      call p%b%close
+      p => p%next
+    end do
+    if (H5Iis_valid(this%ass_id) > 0) ierr = H5Gclose(this%ass_id)
+    if (H5Iis_valid(this%vtk_id) > 0) ierr = H5Gclose(this%vtk_id)
+    if (H5Iis_valid(this%file_id) > 0) ierr = H5Fclose(this%file_id)
+    if (this%comm /= MPI_COMM_NULL) call MPI_Comm_free(this%comm, ierr)
+    call finalize(this) ! free local memory
+  contains
+    subroutine finalize(this)
+      class(vtkhdf_file), intent(out) :: this
+    end subroutine
   end subroutine
 
   subroutine create(this, filename, comm, stat, errmsg)
@@ -120,7 +151,7 @@ contains
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
-    integer(hid_t) :: fapl, crt_prop
+    integer(hid_t) :: fapl, gcpl
     integer(c_int) :: flag
     integer :: ierr
 
@@ -129,38 +160,51 @@ contains
 
     call init_hdf5
 
+    !! Open the file (read/write), overwrite any existing file
     fapl = H5Pcreate(H5P_FILE_ACCESS)
     stat = H5Pset_fapl_mpio(fapl, this%comm)
     stat = H5Pset_all_coll_metadata_ops(fapl, is_collective=.true._c_bool)
     stat = H5Pset_coll_metadata_write(fapl, is_collective=.true._c_bool)
     this%file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl)
-    if (this%file_id < 0) then
+    ierr = H5Pclose(fapl)
+    if (global_any(this%file_id < 0, this%comm)) then
       stat = 1
-      errmsg = 'h5fcreate error'  !TODO: refine msg
+      errmsg = 'failed to open file'
       return
     end if
-    ierr = H5Pclose(fapl)
-    INSIST(ierr == 0)
 
-    crt_prop = H5Pcreate(H5P_GROUP_CREATE)
+    !! Group creation properties for PDC datasets (no harm to others)
+    !! Applies to VTKHDF and Assembly groups
     flag = ior(H5P_CRT_ORDER_TRACKED, H5P_CRT_ORDER_INDEXED)
-    stat = H5Pset_link_creation_order(crt_prop, flag)
+    gcpl = H5Pcreate(H5P_GROUP_CREATE)
+    stat = H5Pset_link_creation_order(gcpl, flag)
     INSIST(stat == 0)
 
-    this%vtk_id = H5Gcreate(this%file_id, 'VTKHDF', gcpl_id=crt_prop)
-    INSIST(this%vtk_id > 0)
+    !! Create the root VTKHDF group and write its attributes
+    this%vtk_id = H5Gcreate(this%file_id, 'VTKHDF', gcpl_id=gcpl)
+    if (global_any(this%vtk_id < 0, this%comm)) then
+      stat = 1
+      errmsg = 'failed to create "VTKHDF" group'
+      return
+    end if
 
     call h5_write_attr(this%vtk_id, 'Version', vtkhdf_version, this%comm, stat, errmsg)
-    INSIST(stat == 0)
+    if (stat /= 0) return
+
     !NB: We stick with the older MB type due to an issue with the modern PDC
     !type; see https://gitlab.kitware.com/vtk/vtk/-/issues/19902
     !call h5_write_attr(this%vtk_id, 'Type', 'PartitionedDataSetCollection', this%comm, stat, errmsg)
     call h5_write_attr(this%vtk_id, 'Type', 'MultiBlockDataSet', this%comm, stat, errmsg)
-    INSIST(stat == 0)
+    if (stat /= 0) return
 
-    this%ass_id = H5Gcreate(this%vtk_id, 'Assembly', gcpl_id=crt_prop)
-    INSIST(this%ass_id > 0)
-    ierr = H5Pclose(crt_prop)
+    !! Create the Assembly group
+    this%ass_id = H5Gcreate(this%vtk_id, 'Assembly', gcpl_id=gcpl)
+    ierr = H5Pclose(gcpl)
+    if (global_any(this%ass_id < 0, this%comm)) then
+      stat = 1
+      errmsg = 'failed to create "Assembly" group'
+      return
+    end if
 
   end subroutine create
 
@@ -237,20 +281,6 @@ contains
     stat = 0
 
   end subroutine add_block
-
-  subroutine close(this)
-    class(vtkhdf_file), intent(inout) :: this
-    integer :: ierr
-    if (associated(this%blocks)) deallocate(this%blocks)
-    if (this%ass_id > 0) ierr = H5Gclose(this%ass_id)
-    if (this%vtk_id > 0) ierr = H5Gclose(this%vtk_id)
-    if (this%file_id > 0) ierr = H5Fclose(this%file_id)
-    !call default_initialize(this)
-  contains
-    subroutine default_initialize(this)
-      class(vtkhdf_file), intent(out) :: this
-    end subroutine
-  end subroutine
 
   !! Write the UnstructuredGrid data for the specified block. The unstructured
   !! mesh is described in the conventional manner by the X, CNODE, and XCNODE

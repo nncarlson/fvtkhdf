@@ -121,9 +121,15 @@ module vtkhdf_h5_c_binding
       integer(hid_t), value :: id
       integer(hid_t) :: file_id
     end function
+
+    function H5Iis_valid(id) result(htri) bind(c,name='H5Iis_valid')
+      import :: hid_t, c_int
+      integer(hid_t), value :: id
+      integer(c_int) :: htri ! >0, true; ==0, false; <0, failure
+    end function
   end interface
 
-  public :: H5Iget_file_id
+  public :: H5Iget_file_id, H5Iis_valid
 
   !!!! H5A functions that can be used as-is !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 

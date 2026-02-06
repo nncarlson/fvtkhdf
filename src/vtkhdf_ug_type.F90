@@ -34,16 +34,19 @@ module vtkhdf_ug_type
 
   type, public :: vtkhdf_ug
     integer :: comm = MPI_COMM_NULL
-    integer(hid_t) :: root_id=0, cgrp_id=0, pgrp_id=0
+    integer(hid_t) :: root_id=H5I_INVALID_HID
+    integer(hid_t) :: cgrp_id=H5I_INVALID_HID, pgrp_id=H5I_INVALID_HID
     integer :: nproc, npart
     integer :: nnode, ncell, nnode_tot, ncell_tot
     logical :: temporal = .false.
     integer :: nsteps = -1
-    integer(hid_t) :: steps_id=0, cogrp_id=0, pogrp_id=0
+    integer(hid_t) :: steps_id=H5I_INVALID_HID
+    integer(hid_t) :: cogrp_id=H5I_INVALID_HID, pogrp_id=H5I_INVALID_HID
     type(temporal_data), pointer :: temporal_point_data => null()
     type(temporal_data), pointer :: temporal_cell_data => null()
   contains
     procedure :: init
+    procedure :: close
     procedure :: write_mesh
     procedure :: write_time_step
     procedure :: write_cell_data_real32,  write_cell_data_real64
@@ -58,7 +61,7 @@ module vtkhdf_ug_type
     procedure :: write_temporal_cell_data_int32,   write_temporal_cell_data_int64
     procedure :: write_temporal_point_data_real32, write_temporal_point_data_real64
     procedure :: write_temporal_point_data_int32,  write_temporal_point_data_int64
-    procedure :: close
+    final :: vtkhdf_ug_delete
   end type
 
   type :: temporal_data
@@ -73,6 +76,46 @@ module vtkhdf_ug_type
   integer, parameter :: vtkhdf_version(*) = [2,5]
 
 contains
+
+  !! Finalizer for VTKHDF_UG_FILE objects. We free heap memory we own but avoid
+  !! doing things that may require syncronization with other ranks (MPI/PHDF5)
+  !! because where implicit finalization occurs it is not guaranteed to be
+  !! collective or ordered with respect to other ranks. This can leak HDF5
+  !! IDs, but that is unavoidable. Users should always use CLOSE to do a proper
+  !! collective cleanup.
+
+  subroutine vtkhdf_ug_delete(this)
+    type(vtkhdf_ug), intent(inout) :: this
+    if (associated(this%temporal_cell_data)) deallocate(this%temporal_cell_data)
+    if (associated(this%temporal_point_data)) deallocate(this%temporal_point_data)
+    this%cogrp_id = H5I_INVALID_HID
+    this%pogrp_id = H5I_INVALID_HID
+    this%steps_id = H5I_INVALID_HID
+    this%cgrp_id  = H5I_INVALID_HID
+    this%pgrp_id  = H5I_INVALID_HID
+    this%root_id  = H5I_INVALID_HID
+  end subroutine
+
+  subroutine close(this)
+    class(vtkhdf_ug), intent(inout) :: this
+    integer :: ierr
+    if (H5Iis_valid(this%cogrp_id) > 0) ierr = H5Gclose(this%cogrp_id)
+    if (H5Iis_valid(this%pogrp_id) > 0) ierr = H5Gclose(this%pogrp_id)
+    if (H5Iis_valid(this%steps_id) > 0) ierr = H5Gclose(this%steps_id)
+    if (H5Iis_valid(this%cgrp_id) > 0) ierr = H5Gclose(this%cgrp_id)
+    if (H5Iis_valid(this%pgrp_id) > 0) ierr = H5Gclose(this%pgrp_id)
+    if (H5Iis_valid(this%root_id) > 0) ierr = H5Gclose(this%root_id)
+    call finalization(this) ! free local memory
+  contains
+    subroutine finalization(this)
+      class(vtkhdf_ug), intent(out) :: this
+    end subroutine
+  end subroutine
+
+  recursive subroutine temporal_data_delete(this)
+    type(temporal_data), intent(inout) :: this
+    if (associated(this%next)) deallocate(this%next)
+  end subroutine
 
   !! Create a new VTKHDF UnstructuredGrid type group. To create a group
   !! supporting time-dependent data, specify the optional argument
@@ -168,29 +211,6 @@ contains
     stat = 0
 
   end subroutine init
-
-  subroutine close(this)
-    class(vtkhdf_ug), intent(inout) :: this
-    integer :: ierr
-    if (this%cogrp_id > 0) ierr = H5Gclose(this%cogrp_id)
-    if (this%pogrp_id > 0) ierr = H5Gclose(this%pogrp_id)
-    if (this%steps_id > 0) ierr = H5Gclose(this%steps_id)
-    if (this%cgrp_id > 0) ierr = H5Gclose(this%cgrp_id)
-    if (this%pgrp_id > 0) ierr = H5Gclose(this%pgrp_id)
-    if (this%root_id > 0) ierr = H5Gclose(this%root_id)
-    if (associated(this%temporal_cell_data)) deallocate(this%temporal_cell_data)
-    if (associated(this%temporal_point_data)) deallocate(this%temporal_point_data)
-    call default_initialize(this)
-  contains
-    subroutine default_initialize(this)
-      type(vtkhdf_ug), intent(out) :: this
-    end subroutine
-  end subroutine
-
-  recursive subroutine temporal_data_delete(this)
-    type(temporal_data), intent(inout) :: this
-    if (associated(this%next)) deallocate(this%next)
-  end subroutine
 
   !! Write the unstructured mesh to the file. The mesh is described in the
   !! conventional manner by the X, CNODE, and XCNODE arrays. The additional
