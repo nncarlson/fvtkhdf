@@ -27,6 +27,16 @@ if (ENABLE_MPI AND NOT HDF5_IS_PARALLEL)
   message(FATAL_ERROR "Parallel HDF5 is required when MPI is enabled, but only serial HDF5 was found")
 endif()
 
+# Compiling requires the Fypp Fortran preprocessor
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_program(FYPP_EXECUTABLE fypp)
+if (NOT FYPP_EXECUTABLE)
+  message(FATAL_ERROR
+    "fypp not found. Install with:\n"
+    "  ${Python3_EXECUTABLE} -m pip install --user fypp\n"
+    "or use your package manager/conda.\n")
+endif()
+
 # Required compiler flags
 
 add_compile_options("$<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-ffree-line-length-none>")
@@ -47,6 +57,10 @@ add_compile_options(
 if(CMAKE_Fortran_COMPILER_ID MATCHES Intel*)
   add_compile_definitions(INTEL_BUG20240327)
 endif()
+
+# Fypp preprocessing modules
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+include(Fypp)
 
 add_subdirectory(src)
 

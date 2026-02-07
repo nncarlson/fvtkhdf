@@ -34,42 +34,55 @@ module vtkhdf_h5
 
   public :: h5_write_attr, h5_create_unlimited_dataset, h5_write_dataset, h5_append_to_dataset
 
+#:set num_specs = [ &
+& {"suffix":"int8",   "decl":"integer(int8)",  "h5type":"H5T_NATIVE_UINT8"}, &
+& {"suffix":"int32",  "decl":"integer(int32)", "h5type":"H5T_NATIVE_INT32"}, &
+& {"suffix":"int64",  "decl":"integer(int64)", "h5type":"H5T_NATIVE_INT64"}, &
+& {"suffix":"real32", "decl":"real(real32)",   "h5type":"H5T_NATIVE_FLOAT"}, &
+& {"suffix":"real64", "decl":"real(real64)",   "h5type":"H5T_NATIVE_DOUBLE"}, &
+&]
+#:set num_specs_no_int8 = [s for s in num_specs if s["suffix"] != "int8"]
   interface h5_write_attr
-    procedure write_attr_int8, write_attr_int32, write_attr_int64
-    procedure write_attr_real32, write_attr_real64
+#:for s in num_specs
+    procedure write_attr_${s["suffix"]}$
+#:endfor
     procedure write_attr_string
   end interface
 
   interface h5_write_dataset
-    procedure write_dataset_int8, write_dataset_int32, write_dataset_int64
-    procedure write_dataset_real32, write_dataset_real64
+#:for s in num_specs
+    procedure write_dataset_${s["suffix"]}$
+#:endfor
   end interface
 
   interface h5_create_unlimited_dataset
-    procedure create_unlimited_dataset_int32, create_unlimited_dataset_int64
-    procedure create_unlimited_dataset_real32, create_unlimited_dataset_real64
+#:for s in num_specs_no_int8
+    procedure create_unlimited_dataset_${s["suffix"]}$
+#:endfor
   end interface
 
   interface h5_append_to_dataset
-    procedure append_to_dataset_int32, append_to_dataset_int64
-    procedure append_to_dataset_real32, append_to_dataset_real64
+#:for s in num_specs_no_int8
+    procedure append_to_dataset_${s["suffix"]}$
+#:endfor
   end interface
 
 contains
+#:for s in num_specs
 
-  subroutine write_attr_int8(ctx, obj_id, name, value, stat, errmsg)
+  subroutine write_attr_${s["suffix"]}$(ctx, obj_id, name, value, stat, errmsg)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
-    integer(int8), intent(in) :: value(..)
+    ${s["decl"]}$, intent(in) :: value(..)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
     integer(hid_t) :: type_id, attr_id
     integer :: ierr
 
-    type_id = H5T_NATIVE_UINT8
+    type_id = ${s["h5type"]}$
 
     !TODO: broadcast value from rank 0 to ensure consistency across ranks
 
@@ -95,172 +108,9 @@ contains
     ierr = H5Aclose(attr_id)
     stat = 0
 
-  end subroutine write_attr_int8
+  end subroutine write_attr_${s["suffix"]}$
 
-
-  subroutine write_attr_int32(ctx, obj_id, name, value, stat, errmsg)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: obj_id
-    character(*), intent(in) :: name
-    integer(int32), intent(in) :: value(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-
-    integer(hid_t) :: type_id, attr_id
-    integer :: ierr
-
-    !TODO: broadcast value from rank 0 to ensure consistency across ranks
-
-    type_id = H5T_NATIVE_INT32
-
-    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
-    if (stat /= 0) return
-
-    select rank (value)
-    rank (0)
-      ierr = H5Awrite(attr_id, type_id, [value])
-    rank (1)
-      ierr = H5Awrite(attr_id, type_id, value)
-    rank (2)
-      ierr = H5Awrite(attr_id, type_id, value)
-    rank default
-      INSIST(.false.)
-    end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing attribute "' // name // '"'
-    end if
-
-    ierr = H5Aclose(attr_id)
-    stat = 0
-
-  end subroutine write_attr_int32
-
-
-  subroutine write_attr_int64(ctx, obj_id, name, value, stat, errmsg)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: obj_id
-    character(*), intent(in) :: name
-    integer(int64), intent(in) :: value(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-
-    integer(hid_t) :: type_id, attr_id
-    integer :: ierr
-
-    !TODO: broadcast value from rank 0 to ensure consistency across ranks
-
-    type_id = H5T_NATIVE_INT64
-
-    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
-    if (stat /= 0) return
-
-    select rank (value)
-    rank (0)
-      ierr = H5Awrite(attr_id, type_id, [value])
-    rank (1)
-      ierr = H5Awrite(attr_id, type_id, value)
-    rank (2)
-      ierr = H5Awrite(attr_id, type_id, value)
-    rank default
-      INSIST(.false.)
-    end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing attribute "' // name // '"'
-    end if
-
-    ierr = H5Aclose(attr_id)
-    stat = 0
-
-  end subroutine write_attr_int64
-
-
-  subroutine write_attr_real32(ctx, obj_id, name, value, stat, errmsg)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: obj_id
-    character(*), intent(in) :: name
-    real(real32), intent(in) :: value(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-
-    integer(hid_t) :: type_id, attr_id
-    integer :: ierr
-
-    !TODO: broadcast value from rank 0 to ensure consistency across ranks
-
-    type_id = H5T_NATIVE_FLOAT
-
-    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
-    if (stat /= 0) return
-
-    select rank (value)
-    rank (0)
-      ierr = H5Awrite(attr_id, type_id, [value])
-    rank (1)
-      ierr = H5Awrite(attr_id, type_id, value)
-    rank (2)
-      ierr = H5Awrite(attr_id, type_id, value)
-    rank default
-      INSIST(.false.)
-    end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing attribute "' // name // '"'
-    end if
-
-    ierr = H5Aclose(attr_id)
-    stat = 0
-
-  end subroutine write_attr_real32
-
-
-  subroutine write_attr_real64(ctx, obj_id, name, value, stat, errmsg)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: obj_id
-    character(*), intent(in) :: name
-    real(real64), intent(in) :: value(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-
-    integer(hid_t) :: type_id, attr_id
-    integer :: ierr
-
-    !TODO: broadcast value from rank 0 to ensure consistency across ranks
-
-    type_id = H5T_NATIVE_DOUBLE
-
-    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
-    if (stat /= 0) return
-
-    select rank (value)
-    rank (0)
-      ierr = H5Awrite(attr_id, type_id, [value])
-    rank (1)
-      ierr = H5Awrite(attr_id, type_id, value)
-    rank (2)
-      ierr = H5Awrite(attr_id, type_id, value)
-    rank default
-      INSIST(.false.)
-    end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing attribute "' // name // '"'
-    end if
-
-    ierr = H5Aclose(attr_id)
-    stat = 0
-
-  end subroutine write_attr_real64
-
+#:endfor
 
   subroutine write_attr_string(ctx, obj_id, name, value, stat, errmsg)
 
@@ -385,13 +235,14 @@ contains
   !! however the previous constraints on the rank and extents continues to
   !! apply. Moreover this must still be called collectively as creation of the
   !! dataset itself is a collective operation.
+#:for s in num_specs
 
-  subroutine write_dataset_int8(ctx, loc_id, name, array, stat, errmsg, root)
+  subroutine write_dataset_${s["suffix"]}$(ctx, loc_id, name, array, stat, errmsg, root)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
-    integer(int8), intent(in) :: array(..)
+    ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -399,7 +250,7 @@ contains
     integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
     integer :: ierr
 
-    type_id = H5T_NATIVE_UINT8
+    type_id = ${s["h5type"]}$
 
     call write_dataset_aux(ctx, loc_id, name, type_id, shape(array,hsize_t), &
         dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
@@ -427,183 +278,9 @@ contains
     ierr = H5Sclose(data_space_id)
     ierr = H5Dclose(dset_id)
 
-  end subroutine write_dataset_int8
+  end subroutine write_dataset_${s["suffix"]}$
 
-
-  subroutine write_dataset_int32(ctx, loc_id, name, array, stat, errmsg, root)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: name
-    integer(int32), intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    integer, intent(in), optional :: root
-
-    integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
-    integer :: ierr
-
-    type_id = H5T_NATIVE_INT32
-
-    call write_dataset_aux(ctx, loc_id, name, type_id, shape(array,hsize_t), &
-        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
-    if (stat /= 0) return
-
-    select rank (array)
-    rank (0)
-      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
-    rank (1)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank (2)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank default
-      INSIST(.false.)
-    end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing to dataset "' // name // '"'
-    end if
-
-    !! Cleanup
-    ierr = H5Pclose(dxpl)
-    ierr = H5Sclose(mem_space_id)
-    ierr = H5Sclose(data_space_id)
-    ierr = H5Dclose(dset_id)
-
-  end subroutine write_dataset_int32
-
-
-  subroutine write_dataset_int64(ctx, loc_id, name, array, stat, errmsg, root)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: name
-    integer(int64), intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    integer, intent(in), optional :: root
-
-    integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
-    integer :: ierr
-
-    type_id = H5T_NATIVE_INT64
-
-    call write_dataset_aux(ctx, loc_id, name, type_id, shape(array,hsize_t), &
-        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
-    if (stat /= 0) return
-
-    select rank (array)
-    rank (0)
-      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
-    rank (1)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank (2)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank default
-      INSIST(.false.)
-    end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing to dataset "' // name // '"'
-    end if
-
-    !! Cleanup
-    ierr = H5Pclose(dxpl)
-    ierr = H5Sclose(mem_space_id)
-    ierr = H5Sclose(data_space_id)
-    ierr = H5Dclose(dset_id)
-
-  end subroutine write_dataset_int64
-
-
-  subroutine write_dataset_real32(ctx, loc_id, name, array, stat, errmsg, root)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: name
-    real(real32), intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    integer, intent(in), optional :: root
-
-    integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
-    integer :: ierr
-
-    type_id = H5T_NATIVE_FLOAT
-
-    call write_dataset_aux(ctx, loc_id, name, type_id, shape(array,hsize_t), &
-        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
-    if (stat /= 0) return
-
-    select rank (array)
-    rank (0)
-      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
-    rank (1)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank (2)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank default
-      INSIST(.false.)
-    end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing to dataset "' // name // '"'
-    end if
-
-    !! Cleanup
-    ierr = H5Pclose(dxpl)
-    ierr = H5Sclose(mem_space_id)
-    ierr = H5Sclose(data_space_id)
-    ierr = H5Dclose(dset_id)
-
-  end subroutine write_dataset_real32
-
-
-  subroutine write_dataset_real64(ctx, loc_id, name, array, stat, errmsg, root)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: name
-    real(real64), intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    integer, intent(in), optional :: root
-
-    integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
-    integer :: ierr
-
-    type_id = H5T_NATIVE_DOUBLE
-
-    call write_dataset_aux(ctx, loc_id, name, type_id, shape(array,hsize_t), &
-        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
-    if (stat /= 0) return
-
-    select rank (array)
-    rank (0)
-      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
-    rank (1)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank (2)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank default
-      INSIST(.false.)
-    end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing to dataset "' // name // '"'
-    end if
-
-    !! Cleanup
-    ierr = H5Pclose(dxpl)
-    ierr = H5Sclose(mem_space_id)
-    ierr = H5Sclose(data_space_id)
-    ierr = H5Dclose(dset_id)
-
-  end subroutine write_dataset_real64
+#:endfor
 
   !! This auxiliary procedure extracts the part of WRITE_DATASET common to
   !! all types and ranks of the data array. It does not depend on the array
@@ -725,54 +402,20 @@ contains
   !! processes, and specifies the chunk size in terms of the number of elements
   !! in the extendible dimension. No data is written to the dataset, and its
   !! extent in the extendible dimension starts at 0.
+#:for s in num_specs_no_int8
 
-  subroutine create_unlimited_dataset_int32(ctx, loc_id, name, mold, chunk_size, stat, errmsg)
+  subroutine create_unlimited_dataset_${s["suffix"]}$(ctx, loc_id, name, mold, chunk_size, stat, errmsg)
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
-    integer(int32), intent(in) :: mold(..)
+    ${s["decl"]}$, intent(in) :: mold(..)
     integer, intent(in) :: chunk_size
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(ctx, loc_id, name, H5T_NATIVE_INT32, &
+    call create_unlimited_dataset_aux(ctx, loc_id, name, ${s["h5type"]}$, &
         shape(mold,hsize_t), chunk_size, stat, errmsg)
   end subroutine
-
-  subroutine create_unlimited_dataset_int64(ctx, loc_id, name, mold, chunk_size, stat, errmsg)
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: name
-    integer(int64), intent(in) :: mold(..)
-    integer, intent(in) :: chunk_size
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(ctx, loc_id, name, H5T_NATIVE_INT64, &
-        shape(mold,hsize_t), chunk_size, stat, errmsg)
-  end subroutine
-
-  subroutine create_unlimited_dataset_real32(ctx, loc_id, name, mold, chunk_size, stat, errmsg)
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: name
-    real(real32), intent(in) :: mold(..)
-    integer, intent(in) :: chunk_size
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(ctx, loc_id, name, H5T_NATIVE_FLOAT, &
-        shape(mold,hsize_t), chunk_size, stat, errmsg)
-  end subroutine
-
-  subroutine create_unlimited_dataset_real64(ctx, loc_id, name, mold, chunk_size, stat, errmsg)
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: name
-    real(real64), intent(in) :: mold(..)
-    integer, intent(in) :: chunk_size
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(ctx, loc_id, name, H5T_NATIVE_DOUBLE, &
-        shape(mold,hsize_t), chunk_size, stat, errmsg)
-  end subroutine
+#:endfor
 
 
   subroutine create_unlimited_dataset_aux(ctx, loc_id, name, type_id, dims, &
@@ -852,13 +495,14 @@ contains
   !! is different. In this case ROOT specifies the MPI rank of the only rank
   !! that writes its data, and the written dataset consists of that data alone,
   !! but these procedures must still be called collectively.
+#:for s in num_specs_no_int8
 
-  subroutine append_to_dataset_int32(ctx, loc_id, name, array, stat, errmsg, root)
+  subroutine append_to_dataset_${s["suffix"]}$(ctx, loc_id, name, array, stat, errmsg, root)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
-    integer(int32), intent(in) :: array(..)
+    ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -866,7 +510,7 @@ contains
     integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
     integer :: ierr
 
-    type_id = H5T_NATIVE_INT32
+    type_id = ${s["h5type"]}$
 
     call append_to_dataset_aux(ctx, loc_id, name, type_id, shape(array, hsize_t), &
         dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
@@ -893,136 +537,9 @@ contains
     ierr = h5sclose(data_space_id)
     ierr = h5dclose(dset_id)
 
-  end subroutine append_to_dataset_int32
+  end subroutine append_to_dataset_${s["suffix"]}$
 
-  subroutine append_to_dataset_int64(ctx, loc_id, name, array, stat, errmsg, root)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: name
-    integer(int64), intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    integer, intent(in), optional :: root
-
-    integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
-    integer :: ierr
-
-    type_id = H5T_NATIVE_INT64
-
-    call append_to_dataset_aux(ctx, loc_id, name, type_id, shape(array, hsize_t), &
-        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
-    if (stat /= 0) return
-
-    select rank (array)
-    rank (0)
-      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
-    rank (1)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank (2)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank default
-      INSIST(.false.)
-    end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing to dataset "' // name // '"'
-    end if
-
-    ierr = H5Pclose(dxpl)
-    ierr = h5sclose(mem_space_id)
-    ierr = h5sclose(data_space_id)
-    ierr = h5dclose(dset_id)
-
-  end subroutine append_to_dataset_int64
-
-
-  subroutine append_to_dataset_real32(ctx, loc_id, name, array, stat, errmsg, root)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: name
-    real(real32), intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    integer, intent(in), optional :: root
-
-    integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
-    integer :: ierr
-
-    type_id = H5T_NATIVE_FLOAT
-
-    call append_to_dataset_aux(ctx, loc_id, name, type_id, shape(array, hsize_t), &
-        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
-    if (stat /= 0) return
-
-    select rank (array)
-    rank (0)
-      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
-    rank (1)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank (2)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank default
-      INSIST(.false.)
-    end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing to dataset "' // name // '"'
-    end if
-
-    ierr = H5Pclose(dxpl)
-    ierr = h5sclose(mem_space_id)
-    ierr = h5sclose(data_space_id)
-    ierr = h5dclose(dset_id)
-
-  end subroutine append_to_dataset_real32
-
-
-  subroutine append_to_dataset_real64(ctx, loc_id, name, array, stat, errmsg, root)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: name
-    real(real64), intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    integer, intent(in), optional :: root
-
-    integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
-    integer :: ierr
-
-    type_id = H5T_NATIVE_DOUBLE
-
-    call append_to_dataset_aux(ctx, loc_id, name, type_id, shape(array, hsize_t), &
-        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
-    if (stat /= 0) return
-
-    select rank (array)
-    rank (0)
-      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
-    rank (1)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank (2)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
-    rank default
-      INSIST(.false.)
-    end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing to dataset "' // name // '"'
-    end if
-
-    ierr = H5Pclose(dxpl)
-    ierr = h5sclose(mem_space_id)
-    ierr = h5sclose(data_space_id)
-    ierr = h5dclose(dset_id)
-
-  end subroutine append_to_dataset_real64
-
+#:endfor
   !! This auxiliary procedure extracts the part of APPEND_TO_DATASET common to
   !! all types and ranks of the data array. It does not depend on the array
   !! directly, but only on its shape (DIMS) and its HDF5 type (TYPE_ID). It
