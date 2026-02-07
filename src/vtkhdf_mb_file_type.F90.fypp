@@ -1,5 +1,5 @@
 !!
-!! VTKHDF_FILE_TYPE
+!! VTKHDF_MB_FILE_TYPE
 !!
 !! This module defines a derived type for exporting mesh-based solution data
 !! to a VTKHDF format file that can be read by the ParaView visualizaton tool.
@@ -13,7 +13,7 @@
 !! NOTES
 !!
 !! The up-to-date specification for VTKHDF is at
-!! https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html
+!! https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_mb_file_format/index.html
 !!
 !! This module was written for version 2.5 of the format.
 !!
@@ -25,7 +25,7 @@
 
 #include "f90_assert.fpp"
 
-module vtkhdf_file_type
+module vtkhdf_mb_file_type
 
   use,intrinsic :: iso_fortran_env
   use vtkhdf_h5_c_binding
@@ -40,7 +40,7 @@ module vtkhdf_file_type
                   & {"suffix":"real32", "decl":"real(real32)"}, &
                   & {"suffix":"real64", "decl":"real(real64)"} ]
 #:set locations = ["cell", "point"]
-  type, public :: vtkhdf_file
+  type, public :: vtkhdf_mb_file
     private
     type(vtkhdf_ctx) :: ctx
     integer(hid_t) :: file_id=H5I_INVALID_HID, vtk_id=H5I_INVALID_HID, ass_id=H5I_INVALID_HID
@@ -63,7 +63,7 @@ module vtkhdf_file_type
 #:endfor
 #:endfor
     procedure, private :: get_block_ptr
-    final :: vtkhdf_file_delete
+    final :: vtkhdf_mb_file_delete
   end type
 
   type :: pdc_block
@@ -84,16 +84,16 @@ module vtkhdf_file_type
 
 contains
 
-  !! Finalizer for VTKHDF_FILE objects. We free heap memory we own but avoid
+  !! Finalizer for vtkhdf_mb_file objects. We free heap memory we own but avoid
   !! doing things that may require syncronization with other ranks (MPI/PHDF5)
   !! because where implicit finalization occurs it is not guaranteed to be
   !! collective or ordered with respect to other ranks. This can leak HDF5
   !! IDs and the MPI communicator, but that is unavoidable. Users should
   !! always use CLOSE to do a proper collective cleanup and close of the file.
 
-  subroutine vtkhdf_file_delete(this)
+  subroutine vtkhdf_mb_file_delete(this)
     use mpi, only: MPI_COMM_NULL
-    type(vtkhdf_file), intent(inout) :: this
+    type(vtkhdf_mb_file), intent(inout) :: this
     if (associated(this%blocks)) deallocate(this%blocks)
     this%ass_id  = H5I_INVALID_HID
     this%vtk_id  = H5I_INVALID_HID
@@ -110,7 +110,7 @@ contains
   !! Cleanly closes H5 identifiers and the file, and default initializes.
   subroutine close(this)
     use mpi, only: MPI_COMM_NULL, MPI_Comm_free
-    class(vtkhdf_file), intent(inout) :: this
+    class(vtkhdf_mb_file), intent(inout) :: this
     integer :: ierr
     type(pdc_block), pointer :: p
     p => this%blocks
@@ -125,7 +125,7 @@ contains
     call finalize(this) ! free local memory
   contains
     subroutine finalize(this)
-      class(vtkhdf_file), intent(out) :: this
+      class(vtkhdf_mb_file), intent(out) :: this
     end subroutine
   end subroutine
 
@@ -133,7 +133,7 @@ contains
 
     use,intrinsic :: iso_c_binding, only: c_bool
 
-    class(vtkhdf_file), intent(out) :: this
+    class(vtkhdf_mb_file), intent(out) :: this
     character(*), intent(in) :: filename
     integer, intent(in) :: comm
     integer, intent(out) :: stat
@@ -198,7 +198,7 @@ contains
 
   subroutine add_block(this, name, stat, errmsg, temporal)
 
-    class(vtkhdf_file), intent(inout) :: this
+    class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: name
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
@@ -278,7 +278,7 @@ contains
 
   subroutine write_block_mesh(this, block_name, x, cnode, xcnode, types, stat, errmsg)
 
-    class(vtkhdf_file), intent(inout) :: this
+    class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name
     real(real64), intent(in) :: x(:,:)
     integer, intent(in) :: cnode(:), xcnode(:)
@@ -301,7 +301,7 @@ contains
 #:for s in num_specs
 
   subroutine write_cell_data_${s["suffix"]}$(this, block_name, name, array, stat, errmsg)
-    class(vtkhdf_file), intent(in) :: this
+    class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(out) :: stat
@@ -320,7 +320,7 @@ contains
 #:for s in num_specs
 
   subroutine write_point_data_${s["suffix"]}$(this, block_name, name, array, stat, errmsg)
-    class(vtkhdf_file), intent(in) :: this
+    class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(out) :: stat
@@ -342,7 +342,7 @@ contains
 #:for s in num_specs
 
   subroutine register_temporal_cell_data_${s["suffix"]}$(this, block_name, name, mold, stat, errmsg)
-    class(vtkhdf_file), intent(inout) :: this
+    class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: mold(..)
     integer, intent(out) :: stat
@@ -364,7 +364,7 @@ contains
 #:for s in num_specs
 
   subroutine register_temporal_point_data_${s["suffix"]}$(this, block_name, name, mold, stat, errmsg)
-    class(vtkhdf_file), intent(inout) :: this
+    class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: mold(..)
     integer, intent(out) :: stat
@@ -380,7 +380,7 @@ contains
   !! of time-dependent datasets will be associated with this time step.
 
   subroutine write_time_step(this, time)
-    class(vtkhdf_file), intent(inout) :: this
+    class(vtkhdf_mb_file), intent(inout) :: this
     real(real64), intent(in) :: time
     type(pdc_block), pointer :: b
     b => this%blocks
@@ -396,7 +396,7 @@ contains
 #:for s in num_specs
 
   subroutine write_temporal_cell_data_${s["suffix"]}$(this, block_name, name, array, stat, errmsg)
-    class(vtkhdf_file), intent(in) :: this
+    class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(out) :: stat
@@ -414,7 +414,7 @@ contains
 #:for s in num_specs
 
   subroutine write_temporal_point_data_${s["suffix"]}$(this, block_name, name, array, stat, errmsg)
-    class(vtkhdf_file), intent(in) :: this
+    class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(out) :: stat
@@ -433,7 +433,7 @@ contains
 
   subroutine get_block_ptr(this, name, bptr, stat, errmsg)
 
-    class(vtkhdf_file), intent(in) :: this
+    class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: name
     type(vtkhdf_ug), pointer, intent(out) :: bptr
     integer, intent(out) :: stat
@@ -457,4 +457,4 @@ contains
 
   end subroutine get_block_ptr
 
-end module vtkhdf_file_type
+end module vtkhdf_mb_file_type

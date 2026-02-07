@@ -1,11 +1,11 @@
 program vtkhdf_demo
 
   use,intrinsic :: iso_fortran_env, only: r8 => real64, int8
-  use vtkhdf_file_type
+  use vtkhdf_mb_file_type
   use mpi
   implicit none
 
-  type(vtkhdf_file) :: vizfile
+  type(vtkhdf_mb_file) :: vizfile
   integer :: istat, nproc, rank, stat, j
   character(:), allocatable :: errmsg
   character(7), allocatable :: name(:)

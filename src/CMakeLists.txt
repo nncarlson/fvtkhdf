@@ -1,7 +1,8 @@
 set(FYPP_SRC
   vtkhdf_h5.F90.fypp
   vtkhdf_ug_type.F90.fypp
-  vtkhdf_file_type.F90.fypp
+  vtkhdf_mb_file_type.F90.fypp
+  vtkhdf_ug_file_type.F90.fypp
 )
 
 add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC} FLAGS --line-numbering)
