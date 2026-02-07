@@ -1,12 +1,13 @@
 set(SRC
   f90_assert.F90
   vtkhdf_h5_c_binding.F90
+  vtkhdf_ctx_type.F90
   vtkhdf_h5.F90
-  vtkhdf_file_type.F90
   vtkhdf_ug_type.F90
+  vtkhdf_file_type.F90
 )
 
-set(MPI_USERS vtkhdf_h5.F90)
+set(MPI_USERS vtkhdf_ctx_type.F90)
 set_property(SOURCE ${MPI_USERS} APPEND PROPERTY COMPILE_OPTIONS
   "$<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-fallow-argument-mismatch;-w>"
   "$<$<COMPILE_LANG_AND_ID:Fortran,NAG>:-mismatch;-w>")

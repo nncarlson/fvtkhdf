@@ -28,16 +28,16 @@
 module vtkhdf_file_type
 
   use,intrinsic :: iso_fortran_env
-  use mpi
   use vtkhdf_h5_c_binding
   use vtkhdf_h5
   use vtkhdf_ug_type
+  use vtkhdf_ctx_type
   implicit none
   private
 
   type, public :: vtkhdf_file
     private
-    integer :: comm = MPI_COMM_NULL
+    type(vtkhdf_ctx) :: ctx
     integer(hid_t) :: file_id=H5I_INVALID_HID, vtk_id=H5I_INVALID_HID, ass_id=H5I_INVALID_HID
     integer :: next_bid = 0
     type(pdc_block), pointer :: blocks => null()
@@ -106,12 +106,13 @@ contains
   !! always use CLOSE to do a proper collective cleanup and close of the file.
 
   subroutine vtkhdf_file_delete(this)
+    use mpi, only: MPI_COMM_NULL
     type(vtkhdf_file), intent(inout) :: this
     if (associated(this%blocks)) deallocate(this%blocks)
     this%ass_id  = H5I_INVALID_HID
     this%vtk_id  = H5I_INVALID_HID
     this%file_id = H5I_INVALID_HID
-    this%comm = MPI_COMM_NULL
+    this%ctx%comm = MPI_COMM_NULL
     this%next_bid = 0
   end subroutine
 
@@ -122,6 +123,7 @@ contains
 
   !! Cleanly closes H5 identifiers and the file, and default initializes.
   subroutine close(this)
+    use mpi, only: MPI_COMM_NULL, MPI_Comm_free
     class(vtkhdf_file), intent(inout) :: this
     integer :: ierr
     type(pdc_block), pointer :: p
@@ -133,7 +135,7 @@ contains
     if (H5Iis_valid(this%ass_id) > 0) ierr = H5Gclose(this%ass_id)
     if (H5Iis_valid(this%vtk_id) > 0) ierr = H5Gclose(this%vtk_id)
     if (H5Iis_valid(this%file_id) > 0) ierr = H5Fclose(this%file_id)
-    if (this%comm /= MPI_COMM_NULL) call MPI_Comm_free(this%comm, ierr)
+    if (this%ctx%comm /= MPI_COMM_NULL) call MPI_Comm_free(this%ctx%comm, ierr)
     call finalize(this) ! free local memory
   contains
     subroutine finalize(this)
@@ -155,19 +157,18 @@ contains
     integer(c_int) :: flag
     integer :: ierr
 
-    call MPI_Comm_dup(comm, this%comm, ierr) ! may abort on invalid comm
-    INSIST(ierr == MPI_SUCCESS)
+    call this%ctx%init(comm)
 
     call init_hdf5
 
     !! Open the file (read/write), overwrite any existing file
     fapl = H5Pcreate(H5P_FILE_ACCESS)
-    stat = H5Pset_fapl_mpio(fapl, this%comm)
+    stat = H5Pset_fapl_mpio(fapl, this%ctx%comm)
     stat = H5Pset_all_coll_metadata_ops(fapl, is_collective=.true._c_bool)
     stat = H5Pset_coll_metadata_write(fapl, is_collective=.true._c_bool)
     this%file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl)
     ierr = H5Pclose(fapl)
-    if (global_any(this%file_id < 0, this%comm)) then
+    if (this%ctx%global_any(this%file_id < 0)) then
       stat = 1
       errmsg = 'failed to open file'
       return
@@ -182,25 +183,25 @@ contains
 
     !! Create the root VTKHDF group and write its attributes
     this%vtk_id = H5Gcreate(this%file_id, 'VTKHDF', gcpl_id=gcpl)
-    if (global_any(this%vtk_id < 0, this%comm)) then
+    if (this%ctx%global_any(this%vtk_id < 0)) then
       stat = 1
       errmsg = 'failed to create "VTKHDF" group'
       return
     end if
 
-    call h5_write_attr(this%vtk_id, 'Version', vtkhdf_version, this%comm, stat, errmsg)
+    call h5_write_attr(this%ctx, this%vtk_id, 'Version', vtkhdf_version, stat, errmsg)
     if (stat /= 0) return
 
     !NB: We stick with the older MB type due to an issue with the modern PDC
     !type; see https://gitlab.kitware.com/vtk/vtk/-/issues/19902
-    !call h5_write_attr(this%vtk_id, 'Type', 'PartitionedDataSetCollection', this%comm, stat, errmsg)
-    call h5_write_attr(this%vtk_id, 'Type', 'MultiBlockDataSet', this%comm, stat, errmsg)
+    !call h5_write_attr(this%ctx, this%vtk_id, 'Type', 'PartitionedDataSetCollection', stat, errmsg)
+    call h5_write_attr(this%ctx, this%vtk_id, 'Type', 'MultiBlockDataSet', stat, errmsg)
     if (stat /= 0) return
 
     !! Create the Assembly group
     this%ass_id = H5Gcreate(this%vtk_id, 'Assembly', gcpl_id=gcpl)
     ierr = H5Pclose(gcpl)
-    if (global_any(this%ass_id < 0, this%comm)) then
+    if (this%ctx%global_any(this%ass_id < 0)) then
       stat = 1
       errmsg = 'failed to create "Assembly" group'
       return
@@ -256,14 +257,14 @@ contains
     new%next => this%blocks
     this%blocks => new
 
-    call new%b%init(this%vtk_id, name, this%comm, stat, errmsg, temporal)
+    call new%b%init(this%vtk_id, name, this%ctx, stat, errmsg, temporal)
     if (stat /= 0) then
       errmsg = 'error adding UnstructuredGrid block "' // name // '": ' // errmsg
       return
     end if
 
     !NB: Unused for MultiBlockDataSet, but required for PartitionedDataSetCollection.
-    call h5_write_attr(new%b%root_id, 'Index', this%next_bid, this%comm, stat, errmsg)
+    call h5_write_attr(this%ctx, new%b%root_id, 'Index', this%next_bid, stat, errmsg)
     if (stat /= 0) then
       errmsg = 'error adding UnstructuredGrid block "' // name // '": ' // errmsg
       return
@@ -272,7 +273,7 @@ contains
 
     !! Create a softlink in Assembly group to the block group.
     ierr = H5Lcreate_soft('/VTKHDF/'//name, this%ass_id, name)
-    if (global_any(ierr < 0, this%comm)) then
+    if (this%ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'unable to create "Assembly" group link to block "' // name // '"'
       return

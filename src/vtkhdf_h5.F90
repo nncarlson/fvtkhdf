@@ -14,13 +14,11 @@
 !!
 !! It is assumed that the HDF5 file on which these procedures operate has been
 !! opened with a file access property list that enables MPI and collective
-!! metadata operations and writes. Moreover the MPI communicator passed to the
-!! COMM argument of these procedures must be congruent to the communicator of
-!! the file.
+!! metadata operations and writes.
 !!
 !! All public procedures are collective, and theier stat and errmsg arguments
 !! are collective outputs:
-!! * stat is identical on all rank
+!! * stat is identical on all ranks
 !! * if stat /= 0, errmsg is identical on all ranks
 !!
 
@@ -29,13 +27,12 @@
 module vtkhdf_h5
 
   use,intrinsic :: iso_fortran_env
+  use vtkhdf_ctx_type
   use vtkhdf_h5_c_binding
-  use mpi
   implicit none
   private
 
   public :: h5_write_attr, h5_create_unlimited_dataset, h5_write_dataset, h5_append_to_dataset
-  public :: global_any, global_all ! collective return status helpers
 
   interface h5_write_attr
     procedure write_attr_int8, write_attr_int32, write_attr_int64
@@ -60,12 +57,12 @@ module vtkhdf_h5
 
 contains
 
-  subroutine write_attr_int8(obj_id, name, value, comm, stat, errmsg)
+  subroutine write_attr_int8(ctx, obj_id, name, value, stat, errmsg)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     integer(int8), intent(in) :: value(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
@@ -76,7 +73,7 @@ contains
 
     !TODO: broadcast value from rank 0 to ensure consistency across ranks
 
-    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), comm, attr_id, stat, errmsg)
+    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
     if (stat /= 0) return
 
     select rank (value)
@@ -90,7 +87,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing attribute "' // name // '"'
     end if
@@ -101,12 +98,12 @@ contains
   end subroutine write_attr_int8
 
 
-  subroutine write_attr_int32(obj_id, name, value, comm, stat, errmsg)
+  subroutine write_attr_int32(ctx, obj_id, name, value, stat, errmsg)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     integer(int32), intent(in) :: value(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
@@ -117,7 +114,7 @@ contains
 
     type_id = H5T_NATIVE_INT32
 
-    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), comm, attr_id, stat, errmsg)
+    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
     if (stat /= 0) return
 
     select rank (value)
@@ -131,7 +128,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing attribute "' // name // '"'
     end if
@@ -142,12 +139,12 @@ contains
   end subroutine write_attr_int32
 
 
-  subroutine write_attr_int64(obj_id, name, value, comm, stat, errmsg)
+  subroutine write_attr_int64(ctx, obj_id, name, value, stat, errmsg)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     integer(int64), intent(in) :: value(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
@@ -158,7 +155,7 @@ contains
 
     type_id = H5T_NATIVE_INT64
 
-    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), comm, attr_id, stat, errmsg)
+    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
     if (stat /= 0) return
 
     select rank (value)
@@ -172,7 +169,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing attribute "' // name // '"'
     end if
@@ -183,12 +180,12 @@ contains
   end subroutine write_attr_int64
 
 
-  subroutine write_attr_real32(obj_id, name, value, comm, stat, errmsg)
+  subroutine write_attr_real32(ctx, obj_id, name, value, stat, errmsg)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     real(real32), intent(in) :: value(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
@@ -199,7 +196,7 @@ contains
 
     type_id = H5T_NATIVE_FLOAT
 
-    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), comm, attr_id, stat, errmsg)
+    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
     if (stat /= 0) return
 
     select rank (value)
@@ -213,7 +210,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing attribute "' // name // '"'
     end if
@@ -224,12 +221,12 @@ contains
   end subroutine write_attr_real32
 
 
-  subroutine write_attr_real64(obj_id, name, value, comm, stat, errmsg)
+  subroutine write_attr_real64(ctx, obj_id, name, value, stat, errmsg)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     real(real64), intent(in) :: value(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
@@ -240,7 +237,7 @@ contains
 
     type_id = H5T_NATIVE_DOUBLE
 
-    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), comm, attr_id, stat, errmsg)
+    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
     if (stat /= 0) return
 
     select rank (value)
@@ -254,7 +251,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing attribute "' // name // '"'
     end if
@@ -265,8 +262,9 @@ contains
   end subroutine write_attr_real64
 
 
-  subroutine write_attr_string(obj_id, name, value, comm, stat, errmsg)
+  subroutine write_attr_string(ctx, obj_id, name, value, stat, errmsg)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
 #ifdef INTEL_BUG20240327
@@ -274,7 +272,6 @@ contains
 #else
     character(*), intent(in) :: value(..)
 #endif
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
@@ -288,7 +285,7 @@ contains
     ierr = H5Tset_size(type_id, len(value, kind=c_size_t))
     INSIST(ierr >= 0)
 
-    call get_attr_id(obj_id, name, type_id, shape(value, hsize_t), comm, attr_id, stat, errmsg)
+    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
     if (stat /= 0) return
 
 #ifdef INTEL_BUG20240327
@@ -306,7 +303,7 @@ contains
     end select
 #endif
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing attribute "' // name // '"'
     end if
@@ -318,13 +315,13 @@ contains
   end subroutine write_attr_string
 
 
-  subroutine get_attr_id(obj_id, name, type_id, dims, comm, attr_id, stat, errmsg)
+  subroutine get_attr_id(ctx, obj_id, name, type_id, dims, attr_id, stat, errmsg)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     integer(hid_t), intent(in) :: type_id
     integer(hsize_t), intent(in) :: dims(:) ! the Fortran shape
-    integer, intent(in) :: comm
     integer(hid_t), intent(out) :: attr_id
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
@@ -335,8 +332,8 @@ contains
     !! Try to open on all ranks
     attr_id = H5Aopen(obj_id, name)
 
-    if (global_any(attr_id >= 0, comm)) then ! some opened successfully
-      if (global_any(attr_id < 0, comm)) then ! and some failed to open
+    if (ctx%global_any(attr_id >= 0)) then ! some opened successfully
+      if (ctx%global_any(attr_id < 0)) then ! and some failed to open
         stat = 1
         errmsg = 'inconsistent result opening attribute "' // name // '" across ranks'
         if (attr_id >= 0) ierr = H5Aclose(attr_id)
@@ -364,7 +361,7 @@ contains
     INSIST(space_id > 0)
 
     attr_id = H5Acreate(obj_id, name, type_id, space_id)
-    if (global_any(attr_id < 0, comm)) then
+    if (ctx%global_any(attr_id < 0)) then
       stat = 1
       errmsg = 'unable to create attribute "' // name // '"'
       if (attr_id >= 0) ierr = H5Aclose(attr_id)
@@ -389,12 +386,12 @@ contains
   !! apply. Moreover this must still be called collectively as creation of the
   !! dataset itself is a collective operation.
 
-  subroutine write_dataset_int8(loc_id, name, array, comm, stat, errmsg, root)
+  subroutine write_dataset_int8(ctx, loc_id, name, array, stat, errmsg, root)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     integer(int8), intent(in) :: array(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -404,7 +401,7 @@ contains
 
     type_id = H5T_NATIVE_UINT8
 
-    call write_dataset_aux(loc_id, name, type_id, shape(array,hsize_t), comm, &
+    call write_dataset_aux(ctx, loc_id, name, type_id, shape(array,hsize_t), &
         dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
@@ -419,7 +416,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -433,12 +430,12 @@ contains
   end subroutine write_dataset_int8
 
 
-  subroutine write_dataset_int32(loc_id, name, array, comm, stat, errmsg, root)
+  subroutine write_dataset_int32(ctx, loc_id, name, array, stat, errmsg, root)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     integer(int32), intent(in) :: array(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -448,7 +445,7 @@ contains
 
     type_id = H5T_NATIVE_INT32
 
-    call write_dataset_aux(loc_id, name, type_id, shape(array,hsize_t), comm, &
+    call write_dataset_aux(ctx, loc_id, name, type_id, shape(array,hsize_t), &
         dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
@@ -463,7 +460,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -477,12 +474,12 @@ contains
   end subroutine write_dataset_int32
 
 
-  subroutine write_dataset_int64(loc_id, name, array, comm, stat, errmsg, root)
+  subroutine write_dataset_int64(ctx, loc_id, name, array, stat, errmsg, root)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     integer(int64), intent(in) :: array(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -492,7 +489,7 @@ contains
 
     type_id = H5T_NATIVE_INT64
 
-    call write_dataset_aux(loc_id, name, type_id, shape(array,hsize_t), comm, &
+    call write_dataset_aux(ctx, loc_id, name, type_id, shape(array,hsize_t), &
         dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
@@ -507,7 +504,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -521,12 +518,12 @@ contains
   end subroutine write_dataset_int64
 
 
-  subroutine write_dataset_real32(loc_id, name, array, comm, stat, errmsg, root)
+  subroutine write_dataset_real32(ctx, loc_id, name, array, stat, errmsg, root)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     real(real32), intent(in) :: array(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -536,7 +533,7 @@ contains
 
     type_id = H5T_NATIVE_FLOAT
 
-    call write_dataset_aux(loc_id, name, type_id, shape(array,hsize_t), comm, &
+    call write_dataset_aux(ctx, loc_id, name, type_id, shape(array,hsize_t), &
         dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
@@ -551,7 +548,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -565,12 +562,12 @@ contains
   end subroutine write_dataset_real32
 
 
-  subroutine write_dataset_real64(loc_id, name, array, comm, stat, errmsg, root)
+  subroutine write_dataset_real64(ctx, loc_id, name, array, stat, errmsg, root)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     real(real64), intent(in) :: array(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -580,7 +577,7 @@ contains
 
     type_id = H5T_NATIVE_DOUBLE
 
-    call write_dataset_aux(loc_id, name, type_id, shape(array,hsize_t), comm, &
+    call write_dataset_aux(ctx, loc_id, name, type_id, shape(array,hsize_t), &
         dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
@@ -595,7 +592,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -616,13 +613,13 @@ contains
   !! only that MPI rank will write, but all ranks must still participate
   !! in the subsequent collective H5Dwrite call.
 
-  subroutine write_dataset_aux(loc_id, name, type_id, dims, comm, &
+  subroutine write_dataset_aux(ctx, loc_id, name, type_id, dims, &
       dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id, type_id
     character(*), intent(in) :: name
     integer(hsize_t), intent(in) :: dims(:)
-    integer, intent(in) :: comm
     integer(hid_t), intent(out) :: dset_id, mem_space_id, data_space_id, dxpl
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
@@ -646,14 +643,12 @@ contains
     !! and consequently it is generally safe to assume that the data array
     !! type, rank, and shape will be consistent across all ranks, so we
     !! limit the checks to debug mode.
-    ASSERT(c_dims_is_valid(comm, mem_dims))
-    ASSERT(type_id_is_valid(comm, type_id))
-    ASSERT(root_is_valid(comm, root))
+    ASSERT(c_dims_is_valid(ctx, mem_dims))
+    ASSERT(type_id_is_valid(ctx, type_id))
+    ASSERT(root_is_valid(ctx, root))
 
     if (present(root)) then
-      call MPI_Comm_rank(comm, rank, ierr)
-      INSIST(ierr == MPI_SUCCESS)
-      rank_writes = (rank == root)
+      rank_writes = (root == ctx%rank)
     else
       rank_writes = .true.
     end if
@@ -661,8 +656,7 @@ contains
     if (.not.rank_writes) mem_dims(1) = 0 ! ignore their data
 
     !! Create the dataset
-    call MPI_Allreduce(mem_dims(1), n, 1, MPI_INT64_T, MPI_SUM, comm, ierr)
-    INSIST(ierr == MPI_SUCCESS)
+    call ctx%global_sum(mem_dims(1), n)
     if (n == 0) then
       stat = 1
       errmsg = 'writing empty dataset "' // name // '" is not supported'
@@ -673,7 +667,7 @@ contains
     data_space_id = H5Screate(data_dims)
     INSIST(data_space_id > 0)
     dset_id = H5Dcreate(loc_id, name, type_id, data_space_id)
-    if (global_any(dset_id < 0, comm)) then
+    if (ctx%global_any(dset_id < 0)) then
       stat = 1
       errmsg = 'error creating dataset "' // name // '"'
       ierr = H5Sclose(data_space_id)
@@ -683,8 +677,7 @@ contains
     !! Starting index for the dataset hyperslab for this rank
     allocate(start, mold=mem_dims)
     start = 0
-    call MPI_Scan(mem_dims(1), n, 1, MPI_INT64_T, MPI_SUM, comm, ierr)
-    INSIST(ierr == MPI_SUCCESS)
+    call ctx%scan_sum(mem_dims(1), n)
     start(1) = n - mem_dims(1)
 
     if (mem_dims(1) > 0) then
@@ -701,7 +694,7 @@ contains
     else ! rank contributes nothing
       ierr = H5Sselect_none(data_space_id)
     end if
-    if (global_any(ierr < 0,comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error creating hyperslab of dataset "' // name // '"'
       ierr = H5Sclose(data_space_id)
@@ -733,64 +726,64 @@ contains
   !! in the extendible dimension. No data is written to the dataset, and its
   !! extent in the extendible dimension starts at 0.
 
-  subroutine create_unlimited_dataset_int32(loc_id, name, mold, chunk_size, comm, stat, errmsg)
+  subroutine create_unlimited_dataset_int32(ctx, loc_id, name, mold, chunk_size, stat, errmsg)
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     integer(int32), intent(in) :: mold(..)
     integer, intent(in) :: chunk_size
     integer, intent(out) :: stat
-    integer, intent(in) :: comm
     character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(loc_id, name, H5T_NATIVE_INT32, &
-        shape(mold,hsize_t), chunk_size, comm, stat, errmsg)
+    call create_unlimited_dataset_aux(ctx, loc_id, name, H5T_NATIVE_INT32, &
+        shape(mold,hsize_t), chunk_size, stat, errmsg)
   end subroutine
 
-  subroutine create_unlimited_dataset_int64(loc_id, name, mold, chunk_size, comm, stat, errmsg)
+  subroutine create_unlimited_dataset_int64(ctx, loc_id, name, mold, chunk_size, stat, errmsg)
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     integer(int64), intent(in) :: mold(..)
     integer, intent(in) :: chunk_size
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(loc_id, name, H5T_NATIVE_INT64, &
-        shape(mold,hsize_t), chunk_size, comm, stat, errmsg)
+    call create_unlimited_dataset_aux(ctx, loc_id, name, H5T_NATIVE_INT64, &
+        shape(mold,hsize_t), chunk_size, stat, errmsg)
   end subroutine
 
-  subroutine create_unlimited_dataset_real32(loc_id, name, mold, chunk_size, comm, stat, errmsg)
+  subroutine create_unlimited_dataset_real32(ctx, loc_id, name, mold, chunk_size, stat, errmsg)
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     real(real32), intent(in) :: mold(..)
     integer, intent(in) :: chunk_size
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(loc_id, name, H5T_NATIVE_FLOAT, &
-        shape(mold,hsize_t), chunk_size, comm, stat, errmsg)
+    call create_unlimited_dataset_aux(ctx, loc_id, name, H5T_NATIVE_FLOAT, &
+        shape(mold,hsize_t), chunk_size, stat, errmsg)
   end subroutine
 
-  subroutine create_unlimited_dataset_real64(loc_id, name, mold, chunk_size, comm, stat, errmsg)
+  subroutine create_unlimited_dataset_real64(ctx, loc_id, name, mold, chunk_size, stat, errmsg)
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     real(real64), intent(in) :: mold(..)
     integer, intent(in) :: chunk_size
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(loc_id, name, H5T_NATIVE_DOUBLE, &
-        shape(mold,hsize_t), chunk_size, comm, stat, errmsg)
+    call create_unlimited_dataset_aux(ctx, loc_id, name, H5T_NATIVE_DOUBLE, &
+        shape(mold,hsize_t), chunk_size, stat, errmsg)
   end subroutine
 
 
-  subroutine create_unlimited_dataset_aux(loc_id, name, type_id, dims, &
-      chunk_size, comm, stat, errmsg)
+  subroutine create_unlimited_dataset_aux(ctx, loc_id, name, type_id, dims, &
+      chunk_size, stat, errmsg)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     integer(hid_t), intent(in) :: type_id
     integer(hsize_t), intent(in) :: dims(:)
     integer, intent(in) :: chunk_size
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
@@ -806,9 +799,9 @@ contains
     !! line of code, and consequently it is generally safe to assume that
     !! the data array type, rank, and shape (DIMS) will be consistent across
     !! all ranks, so we limit the checks to debug mode.
-    ASSERT(c_dims_is_valid(comm, c_dims))
-    ASSERT(type_id_is_valid(comm, type_id))
-    ASSERT(chunk_is_valid(comm, chunk_size))
+    ASSERT(c_dims_is_valid(ctx, c_dims))
+    ASSERT(type_id_is_valid(ctx, type_id))
+    ASSERT(chunk_is_valid(ctx, chunk_size))
 
     if (size(c_dims) == 0) then
       stat = 1
@@ -832,7 +825,7 @@ contains
     INSIST(ierr >= 0)
 
     dset_id = H5Dcreate(loc_id, name, type_id, space_id, dcpl_id=dcpl_id)
-    if (global_any(dset_id < 0, comm)) then
+    if (ctx%global_any(dset_id < 0)) then
       stat = 1
       errmsg = 'error creating unlimited dataset "' // name // '"'
       ierr = H5Pclose(dcpl_id)
@@ -860,12 +853,12 @@ contains
   !! that writes its data, and the written dataset consists of that data alone,
   !! but these procedures must still be called collectively.
 
-  subroutine append_to_dataset_int32(loc_id, name, array, comm, stat, errmsg, root)
+  subroutine append_to_dataset_int32(ctx, loc_id, name, array, stat, errmsg, root)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     integer(int32), intent(in) :: array(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -875,7 +868,7 @@ contains
 
     type_id = H5T_NATIVE_INT32
 
-    call append_to_dataset_aux(loc_id, name, type_id, shape(array, hsize_t), comm, &
+    call append_to_dataset_aux(ctx, loc_id, name, type_id, shape(array, hsize_t), &
         dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
@@ -890,7 +883,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -902,12 +895,12 @@ contains
 
   end subroutine append_to_dataset_int32
 
-  subroutine append_to_dataset_int64(loc_id, name, array, comm, stat, errmsg, root)
+  subroutine append_to_dataset_int64(ctx, loc_id, name, array, stat, errmsg, root)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     integer(int64), intent(in) :: array(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -917,7 +910,7 @@ contains
 
     type_id = H5T_NATIVE_INT64
 
-    call append_to_dataset_aux(loc_id, name, type_id, shape(array, hsize_t), comm, &
+    call append_to_dataset_aux(ctx, loc_id, name, type_id, shape(array, hsize_t), &
         dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
@@ -932,7 +925,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -945,12 +938,12 @@ contains
   end subroutine append_to_dataset_int64
 
 
-  subroutine append_to_dataset_real32(loc_id, name, array, comm, stat, errmsg, root)
+  subroutine append_to_dataset_real32(ctx, loc_id, name, array, stat, errmsg, root)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     real(real32), intent(in) :: array(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -960,7 +953,7 @@ contains
 
     type_id = H5T_NATIVE_FLOAT
 
-    call append_to_dataset_aux(loc_id, name, type_id, shape(array, hsize_t), comm, &
+    call append_to_dataset_aux(ctx, loc_id, name, type_id, shape(array, hsize_t), &
         dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
@@ -975,7 +968,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -988,12 +981,12 @@ contains
   end subroutine append_to_dataset_real32
 
 
-  subroutine append_to_dataset_real64(loc_id, name, array, comm, stat, errmsg, root)
+  subroutine append_to_dataset_real64(ctx, loc_id, name, array, stat, errmsg, root)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     real(real64), intent(in) :: array(..)
-    integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -1003,7 +996,7 @@ contains
 
     type_id = H5T_NATIVE_DOUBLE
 
-    call append_to_dataset_aux(loc_id, name, type_id, shape(array, hsize_t), comm, &
+    call append_to_dataset_aux(ctx, loc_id, name, type_id, shape(array, hsize_t), &
         dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
     if (stat /= 0) return
 
@@ -1018,7 +1011,7 @@ contains
       INSIST(.false.)
     end select
 
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error writing to dataset "' // name // '"'
     end if
@@ -1039,13 +1032,13 @@ contains
   !! all ranks must still participate in the subsequent collective H5Dwrite
   !! call.
 
-  subroutine append_to_dataset_aux(loc_id, name, type_id, dims, comm, &
+  subroutine append_to_dataset_aux(ctx, loc_id, name, type_id, dims, &
       dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
 
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id, type_id
     character(*), intent(in) :: name
     integer(hsize_t), intent(in) :: dims(:)
-    integer, intent(in) :: comm
     integer(hid_t), intent(out) :: dset_id, data_space_id, mem_space_id, dxpl
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
@@ -1067,7 +1060,7 @@ contains
 
     !! Open the dataset and get its current shape (DATA_DIMS)
     dset_id = H5Dopen(loc_id, name)
-    if (global_any(dset_id < 0, comm)) then
+    if (ctx%global_any(dset_id < 0)) then
       stat = 1
       errmsg = 'unable to open dataset "' // name // '"'
       return
@@ -1081,12 +1074,12 @@ contains
     INSIST(ndims > 0)
     ierr = H5Sclose(data_space_id)
 
-    ASSERT(c_dims_is_valid(comm, mem_dims))
-    ASSERT(type_id_is_valid(comm, type_id))
-    ASSERT(root_is_valid(comm, root))
+    ASSERT(c_dims_is_valid(ctx, mem_dims))
+    ASSERT(type_id_is_valid(ctx, type_id))
+    ASSERT(root_is_valid(ctx, root))
 
     !! Validate data rank compatibility
-    if (global_any(size(mem_dims) /= size(data_dims), comm)) then
+    if (ctx%global_any(size(mem_dims) /= size(data_dims))) then
       stat = 1
       errmsg = 'rank of appended data is incompatible with dataset "' // name // '"'
       ierr = H5Dclose(dset_id)
@@ -1095,7 +1088,7 @@ contains
 
     !! Validate fixed extents
     if (size(data_dims) > 1) then
-      if (global_any(any(mem_dims(2:) /= data_dims(2:)), comm)) then
+      if (ctx%global_any(any(mem_dims(2:) /= data_dims(2:)))) then
         stat = 1
         errmsg = 'shape of appended data is incompatible with dataset "' // name // '"'
         return
@@ -1105,7 +1098,7 @@ contains
     !! Validate data type compatibility
     dset_type_id = H5Dget_type(dset_id)
     INSIST(dset_type_id > 0)
-    if (global_any(H5Tequal(dset_type_id, type_id) <= 0, comm)) then
+    if (ctx%global_any(H5Tequal(dset_type_id, type_id) <= 0)) then
       errmsg = 'type of appended data is incompatible with dataset "' // name // '"'
       stat = 1
       ierr = H5Tclose(dset_type_id)
@@ -1115,9 +1108,7 @@ contains
     ierr = H5Tclose(dset_type_id)
 
     if (present(root)) then
-      call MPI_Comm_rank(comm, rank, ierr)
-      INSIST(ierr == MPI_SUCCESS)
-      rank_writes = (rank == root)
+      rank_writes = (root == ctx%rank)
     else
       rank_writes = .true.
     end if
@@ -1127,16 +1118,14 @@ contains
     !! Starting index for the dataset hyperslab for this rank
     allocate(start, mold=mem_dims)
     start = 0
-    call MPI_Scan(mem_dims(1), n, 1, MPI_INT64_T, MPI_SUM, comm, ierr)
-    INSIST(ierr == MPI_SUCCESS)
+    call ctx%scan_sum(mem_dims(1), n)
     start(1) = data_dims(1) + n - mem_dims(1)
 
     !! Resize the dataset to accommodate the data to be appended
-    call MPI_Allreduce(mem_dims(1), n, 1, MPI_INT64_T, MPI_SUM, comm, ierr)
-    INSIST(ierr == MPI_SUCCESS)
+    call ctx%global_sum(mem_dims(1), n)
     data_dims(1) = data_dims(1) + n
     ierr = H5Dset_extent(dset_id, data_dims)
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error resizing dataset "' // name // '"'
       ierr = H5Dclose(dset_id)
@@ -1158,7 +1147,7 @@ contains
     else ! rank contributes nothing
       ierr = H5Sselect_none(data_space_id)
     end if
-    if (global_any(ierr < 0, comm)) then
+    if (ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'error creating hyperslab of dataset "' // name // '"'
       ierr = H5Sclose(data_space_id)
@@ -1176,58 +1165,28 @@ contains
 
   end subroutine append_to_dataset_aux
 
-  !! Returns true if MASK is true on at least one rank; otherwise returns false.
-  logical function global_any(mask, comm)
-    logical, intent(in) :: mask
-    integer, intent(in) :: comm
-    integer :: local, global, ierr
-    local = merge(1, 0, mask) ! 1 is T, 0 is F
-    call MPI_Allreduce(local, global, 1, MPI_INTEGER, MPI_MAX, comm, ierr)
-    INSIST(ierr == MPI_SUCCESS)
-    global_any = (global == 1)
-  end function
-
-  !! Returns true if MASK is true on all ranks; otherwise returns false.
-  logical function global_all(mask, comm)
-    logical, intent(in) :: mask
-    integer, intent(in) :: comm
-    integer :: local, global, ierr
-    local = merge(1, 0, mask) ! 1 is T, 0 is F
-    call MPI_Allreduce(local, global, 1, MPI_INTEGER, MPI_MIN, comm, ierr)
-    INSIST(ierr == MPI_SUCCESS)
-    global_all = (global == 1)
-  end function
-
   !! Check the parallel consistency of TYPE_ID (DEBUGGING)
-  logical function type_id_is_valid(comm, type_id)
-
-    integer, intent(in) :: comm
+  logical function type_id_is_valid(ctx, type_id)
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: type_id
-
-    integer :: ierr
     integer(int64) :: p_local(2), p_global(2)
-
     p_local = [type_id, -type_id] ! conversion to a known MPI type
-    call MPI_Allreduce(p_local, p_global, 2, MPI_INT64_T, MPI_MIN, comm, ierr)
-    INSIST(ierr == MPI_SUCCESS)
+    call ctx%global_min(p_local, p_global)
     type_id_is_valid = (p_global(1) == -p_global(2))
-
-  end function type_id_is_valid
+  end function
 
   !! Check the parallel consistency and correctness of C_DIMS (DEBUGGING)
-  logical function c_dims_is_valid(comm, c_dims)
+  logical function c_dims_is_valid(ctx, c_dims)
 
-    integer, intent(in) :: comm
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer(hsize_t), intent(in) :: c_dims(:)
 
-    integer :: istat
     integer :: p_local(2), p_global(2)
     integer(int64), allocatable :: q_local(:), q_global(:)
 
     !! Check that C_DIMS has the same size on all ranks
     p_local = [size(c_dims), -size(c_dims)]
-    call MPI_Allreduce(p_local, p_global, 2, MPI_INTEGER, MPI_MIN, comm, istat)
-    INSIST(istat == MPI_SUCCESS)
+    call ctx%global_min(p_local, p_global)
     c_dims_is_valid = (p_global(1) == -p_global(2)) ! equal min and max values
 
     if (c_dims_is_valid .and. size(c_dims) > 1) then
@@ -1235,8 +1194,7 @@ contains
       q_local = c_dims(2:) ! conversion to a known MPI type
       q_local = [q_local, -q_local(size(q_local):1:-1)]
       allocate(q_global, mold=q_local)
-      call MPI_Allreduce(q_local, q_global, size(q_local), MPI_INT64_T, MPI_MIN, comm, istat)
-      INSIST(istat == MPI_SUCCESS)
+      call ctx%global_min(q_local, q_global)
       c_dims_is_valid = all(q_global + q_global(size(q_global):1:-1) == 0) ! equal min and max values in each dimension
       if (c_dims_is_valid) c_dims_is_valid = all(c_dims(2:) > 0)
     end if
@@ -1244,26 +1202,20 @@ contains
   end function c_dims_is_valid
 
   !! Check the parallel consistency of CHUNK_SIZE (DEBUGGING)
-  logical function chunk_is_valid(comm, chunk_size)
-
-    integer, intent(in) :: comm
+  logical function chunk_is_valid(ctx, chunk_size)
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer, intent(in) :: chunk_size
-
-    integer :: ierr
     integer :: p_local(2), p_global(2)
-
     p_local = [chunk_size, -chunk_size]
-    call MPI_Allreduce(p_local, p_global, 2, MPI_INTEGER, MPI_MIN, comm, ierr)
-    INSIST(ierr == MPI_SUCCESS)
+    call ctx%global_min(p_local, p_global)
     chunk_is_valid = (p_global(1) == -p_global(2))
     if (chunk_is_valid) chunk_is_valid = (chunk_size > 0)
-
-  end function chunk_is_valid
+  end function
 
   !! Check the parallel consistency of ROOT (DEBUGGING)
-  logical function root_is_valid(comm, root)
+  logical function root_is_valid(ctx, root)
 
-    integer, intent(in) :: comm
+    type(vtkhdf_ctx), intent(in) :: ctx
     integer, intent(in), optional :: root
 
     integer :: n, p_local(2), p_global(2), ierr, nproc
@@ -1271,21 +1223,15 @@ contains
     !! Check that all ranks specified root or that none did.
     n = merge(1, 0, present(root))
     p_local = [n, -n]
-    call MPI_Allreduce(p_local, p_global, 2, MPI_INTEGER, MPI_MIN, comm, ierr)
-    INSIST(ierr == MPI_SUCCESS)
+    call ctx%global_min(p_local, p_global)
     root_is_valid = (p_global(1) == -p_global(2))
 
     if (root_is_valid .and. present(root)) then
       !! Check that all ranks specified the same valid value.
       p_local = [root, -root]
-      call MPI_Allreduce(p_local, p_global, 2, MPI_INTEGER, MPI_MIN, comm, ierr)
-      INSIST(ierr == MPI_SUCCESS)
+      call ctx%global_min(p_local, p_global)
       root_is_valid = (p_global(1) == -p_global(2))
-      if (root_is_valid) then! Check that the value of root is valid
-        call MPI_Comm_size(comm, nproc, ierr)
-        INSIST(ierr == MPI_SUCCESS)
-        root_is_valid = (root >= 0) .and. (root < nproc)
-      end if
+      if (root_is_valid) root_is_valid = (root >= 0) .and. (root < ctx%size)
     end if
 
   end function root_is_valid
