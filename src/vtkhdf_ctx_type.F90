@@ -1,8 +1,12 @@
 !!
 !! VTKHDF_CTX_TYPE
 !!
-!! Provides a private abstraction layer that encapsulates all the collective
-!! operations used by the VTKHDF modules. This is the MPI parallel version.
+!! An internal abstraction layer that encapsulates the collective operations
+!! used by the VTKHDF modules. The public interface is identical in serial and
+!! MPI-parallel builds; this file provides the MPI-parallel implementation.
+!!
+!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
+!! SPDX-License-Identifier: BSD-2-Clause
 !!
 
 #include "f90_assert.fpp"

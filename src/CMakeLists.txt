@@ -11,6 +11,7 @@ set(SRC
   f90_assert.F90
   vtkhdf_h5_c_binding.F90
   vtkhdf_ctx_type.F90
+  vtkhdf_version_param.F90
 )
 
 set(MPI_USERS vtkhdf_ctx_type.F90)

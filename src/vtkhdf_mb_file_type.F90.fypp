@@ -2,25 +2,22 @@
 !! VTKHDF_MB_FILE_TYPE
 !!
 !! This module defines a derived type for exporting mesh-based solution data
-!! to a VTKHDF format file that can be read by the ParaView visualizaton tool.
-!! The format uses HDF5 for on-disk storage.
+!! to a VTKHDF file readable by the ParaView visualization tool. The type
+!! produces a MultiBlockDataSet (MB) dataset, and supports static and
+!! time-dependent cell and point data, assuming a single static mesh.
 !!
-!! Neil Carlson <neil.n.carlson@gmail.com>
-!! January 2026
+!! The output is limited to a flat collection of UnstructuredGrid blocks;
+!! hierarchical nesting of MultiBlockDataSets is not supported.
+!!
+!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
+!! SPDX-License-Identifier: BSD-2-Clause
 !!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!
 !! NOTES
 !!
-!! The up-to-date specification for VTKHDF is at
-!! https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_mb_file_format/index.html
-!!
-!! This module was written for version 2.5 of the format.
-!!
-!! This module uses the "MultiBlockDataSet" type of format. It supports static
-!! and time dependent data (point and cell), but assumes a single static mesh.
-!! The "Assembly" dataset hierarchy is limited to a flat collection
-!! of UnstructuredGrid blocks.
+!! The latest specification for the VTKHDF file format is available at:
+!! https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html#
 !!
 
 #include "f90_assert.fpp"
@@ -32,8 +29,11 @@ module vtkhdf_mb_file_type
   use vtkhdf_h5
   use vtkhdf_ug_type
   use vtkhdf_ctx_type
+  use vtkhdf_version_param
   implicit none
   private
+
+  public :: vtkhdf_version
 
 #:set num_specs = [ {"suffix":"int32",  "decl":"integer(int32)"}, &
                   & {"suffix":"int64",  "decl":"integer(int64)"}, &
@@ -79,8 +79,6 @@ module vtkhdf_mb_file_type
   integer(int8), parameter, public :: VTK_HEXAHEDRON = 12
   integer(int8), parameter, public :: VTK_WEDGE = 13
   integer(int8), parameter, public :: VTK_PYRAMID = 14
-
-  integer, parameter :: vtkhdf_version(*) = [2,5]
 
 contains
 
@@ -132,6 +130,7 @@ contains
   subroutine create(this, filename, comm, stat, errmsg)
 
     use,intrinsic :: iso_c_binding, only: c_bool
+    use vtkhdf_version
 
     class(vtkhdf_mb_file), intent(out) :: this
     character(*), intent(in) :: filename
@@ -175,7 +174,7 @@ contains
       return
     end if
 
-    call h5_write_attr(this%ctx, this%vtk_id, 'Version', vtkhdf_version, stat, errmsg)
+    call h5_write_attr(this%ctx, this%vtk_id, 'Version', version, stat, errmsg)
     if (stat /= 0) return
 
     !NB: We stick with the older MB type due to an issue with the modern PDC

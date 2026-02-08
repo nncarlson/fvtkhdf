@@ -1,25 +1,24 @@
 !!
 !! VTKHDF_H5
 !!
-!! An application-specific layer over parallel HDF5 that provides single-call
-!! procedures for writing attributes and datasets, creating and appending to
-!! extendable datasets, and other utilities for private use by VTKHDF modules.
+!! An application-specific abstraction over parallel HDF5 that provides
+!! single-call procedures for writing attributes and datasets, creating and
+!! appending extendable datasets, and other utilities for private use by
+!! VTKHDF modules.
 !!
-!! Neil Carlson <neil.n.carlson@gmail.com>
-!! January 2026
+!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
+!! SPDX-License-Identifier: BSD-2-Clause
 !!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!
 !! NOTES
 !!
-!! It is assumed that the HDF5 file on which these procedures operate has been
-!! opened with a file access property list that enables MPI and collective
-!! metadata operations and writes.
+!! When compiled with parallel enabled (via the VTKHDF_CTX_TYPE module, whose
+!! implementation hides all MPI details), all public procedures are collective
+!! operations. The STAT and ERRMSG arguments are collective outputs:
 !!
-!! All public procedures are collective, and theier stat and errmsg arguments
-!! are collective outputs:
-!! * stat is identical on all ranks
-!! * if stat /= 0, errmsg is identical on all ranks
+!! * STAT has the same value on all ranks
+!! * If STAT /= 0, ERRMSG has the same value on all ranks
 !!
 
 #include "f90_assert.fpp"

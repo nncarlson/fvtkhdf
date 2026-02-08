@@ -4,23 +4,27 @@
 !! Private bindings to a relatively small subset of HDF5 C functions that
 !! are used by the VTKHDF modules.
 !!
-!! Neil Carlson <neil.n.carlson@gmail.com>
-!! March 2024
+!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
+!! SPDX-License-Identifier: BSD-2-Clause
 !!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!
 !! NOTES
 !!
-!! Ideally this will be replaced eventually by HDF5's Fortran API, but there
-!! are obstacles currently (1.14.3) to building it with the NAG compiler. So
-!! this is hopefully a temporary workaround.
+!! This module provides temporary C bindings to a subset of the HDF5 API.
+!! Ideally it will be replaced by the HDF5 Fortran interface once current
+!! build issues with the NAG compiler (HDF5 1.14.3) are resolved.
 !!
-!! In the HDF5 Fortran interface the types and flags (of various integer kinds)
-!! are initialized by an initial explicit call to h5open_f (H5_ff.F90). The types
-!! are copies (H5Tcopy) of types on the C side. Note that in the C interface no
-!! h5open call is required, as it is automatically called when the first HDF5
-!! function is called. So a side effect of h5open_f is to ensure the C side is
-!! initialized.
+!! The HDF5_INIT subroutine must be called before any other procedure in this
+!! module. It initializes several read-only module variables (type and property
+!! identifiers) whose values can only be determined at runtime as copies of
+!! corresponding identifiers in the HDF5 C library.
+!!
+!! Creating these copies has the side effect of initializing the HDF5 C library.
+!! Unlike the Fortran interface, which performs this initialization explicitly
+!! via h5open_f, the C library initializes itself on the first HDF5 call.
+!! HDF5_INIT ensures that this initialization occurs before any other bindings
+!! are used.
 !!
 
 module vtkhdf_h5_c_binding
