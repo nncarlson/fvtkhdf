@@ -13,8 +13,8 @@
 !!
 !! NOTES
 !!
-!! The up-to-date specification for VTKHDF is at
-!! https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html
+!! The latest specification for the VTKHDF file format is available at:
+!! https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html#
 !!
 
 #include "f90_assert.fpp"
@@ -32,10 +32,11 @@ module vtkhdf_ug_file_type
 
   public :: vtkhdf_version
 
-#:set num_specs = [ {"suffix":"int32",  "decl":"integer(int32)"}, &
-                  & {"suffix":"int64",  "decl":"integer(int64)"}, &
-                  & {"suffix":"real32", "decl":"real(real32)"}, &
-                  & {"suffix":"real64", "decl":"real(real64)"} ]
+#:set int_specs  = [ {"kind":"int32",  "decl":"integer(int32)"}, &
+                   & {"kind":"int64",  "decl":"integer(int64)"} ]
+#:set real_specs = [ {"kind":"real32", "decl":"real(real32)"}, &
+                   & {"kind":"real64", "decl":"real(real64)"} ]
+#:set num_specs = int_specs + real_specs
 #:set locations = ["cell", "point"]
   type, public :: vtkhdf_ug_file
     private
@@ -45,16 +46,21 @@ module vtkhdf_ug_file_type
   contains
     procedure :: create
     procedure :: close
-    procedure :: write_mesh
+#:for r in real_specs
+#:for i in int_specs
+    generic :: write_mesh => write_mesh_${r["kind"]}$_${i["kind"]}$
+    procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
+#:endfor
+#:endfor
     procedure :: write_time_step
 #:for s in num_specs
 #:for loc in locations
-    generic :: write_${loc}$_data => write_${loc}$_data_${s["suffix"]}$
-    procedure, private :: write_${loc}$_data_${s["suffix"]}$
-    generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${s["suffix"]}$
-    procedure, private :: register_temporal_${loc}$_data_${s["suffix"]}$
-    generic :: write_temporal_${loc}$_data => write_temporal_${loc}$_data_${s["suffix"]}$
-    procedure, private :: write_temporal_${loc}$_data_${s["suffix"]}$
+    generic :: write_${loc}$_data => write_${loc}$_data_${s["kind"]}$
+    procedure, private :: write_${loc}$_data_${s["kind"]}$
+    generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${s["kind"]}$
+    procedure, private :: register_temporal_${loc}$_data_${s["kind"]}$
+    generic :: write_temporal_${loc}$_data => write_temporal_${loc}$_data_${s["kind"]}$
+    procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$
 #:endfor
 #:endfor
     final :: vtkhdf_ug_file_delete
@@ -76,20 +82,17 @@ contains
   !! always use CLOSE to do a proper collective cleanup and close of the file.
 
   subroutine vtkhdf_ug_file_delete(this)
-    use mpi, only: MPI_COMM_NULL
     type(vtkhdf_ug_file), intent(inout) :: this
     this%file_id = H5I_INVALID_HID
-    this%ctx%comm = MPI_COMM_NULL
   end subroutine
 
   !! Cleanly closes H5 identifiers and the file, and default initializes.
   subroutine close(this)
-    use mpi, only: MPI_COMM_NULL, MPI_Comm_free
     class(vtkhdf_ug_file), intent(inout) :: this
     integer :: ierr
     call this%ug%close
     if (H5Iis_valid(this%file_id) > 0) ierr = H5Fclose(this%file_id)
-    if (this%ctx%comm /= MPI_COMM_NULL) call MPI_Comm_free(this%ctx%comm, ierr)
+    call this%ctx%close ! frees duplicated comm in MPI build
     call finalize(this) ! free local memory
   contains
     subroutine finalize(this)
@@ -98,8 +101,6 @@ contains
   end subroutine
 
   subroutine create(this, filename, comm, stat, errmsg, temporal)
-
-    use,intrinsic :: iso_c_binding, only: c_bool
 
     class(vtkhdf_ug_file), intent(out) :: this
     character(*), intent(in) :: filename
@@ -111,15 +112,14 @@ contains
     integer(hid_t) :: fapl
     integer :: ierr
 
+    ! MPI build: duplicates comm, caches rank/size
+    ! Serial build: ignores comm, sets rank=0, size=1
     call this%ctx%init(comm)
 
     call init_hdf5
 
     !! Open the file (read/write), overwrite any existing file
-    fapl = H5Pcreate(H5P_FILE_ACCESS)
-    stat = H5Pset_fapl_mpio(fapl, this%ctx%comm)
-    stat = H5Pset_all_coll_metadata_ops(fapl, is_collective=.true._c_bool)
-    stat = H5Pset_coll_metadata_write(fapl, is_collective=.true._c_bool)
+    call this%ctx%get_fapl(fapl) ! configures for parallel I/O in MPI build
     this%file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl)
     ierr = H5Pclose(fapl)
     if (this%ctx%global_any(this%file_id < 0)) then
@@ -139,16 +139,20 @@ contains
   !! Write the UnstructuredGrid data. The unstructured mesh is described in
   !! the conventional manner by the X, CNODE, TYPE, and XCNODE arrays. This
   !! procedure must be called before any of the following procedures.
+#:for r in real_specs
+#:for i in int_specs
 
-  subroutine write_mesh(this, x, cnode, xcnode, types, stat, errmsg)
+  subroutine write_mesh_${r["kind"]}$_${i["kind"]}$(this, x, cnode, xcnode, types, stat, errmsg)
     class(vtkhdf_ug_file), intent(inout) :: this
-    real(real64), intent(in) :: x(:,:)
-    integer, intent(in) :: cnode(:), xcnode(:)
+    ${r["decl"]}$, intent(in) :: x(:,:)
+    ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     call this%ug%write_mesh(x, cnode, xcnode, types, stat, errmsg)
   end subroutine
+#:endfor
+#:endfor
 
   !! Writes the cell-based data ARRAY to a new named cell dataset. Scalar,
   !! vector, and tensor data are supported. For temporal files, this dataset
@@ -156,13 +160,13 @@ contains
 #:for s in num_specs
 #:for loc in locations
 
-  subroutine write_${loc}$_data_${s["suffix"]}$(this, name, array, stat, errmsg)
+  subroutine write_${loc}$_data_${s["kind"]}$(this, name, array, stat, errmsg)
     class(vtkhdf_ug_file), intent(in) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    call this%ug%write_${loc}$_data_${s["suffix"]}$(name, array, stat, errmsg)
+    call this%ug%write_${loc}$_data_${s["kind"]}$(name, array, stat, errmsg)
   end subroutine
 #:endfor
 #:endfor
@@ -177,13 +181,13 @@ contains
 #:for s in num_specs
 #:for loc in locations
 
-  subroutine register_temporal_${loc}$_data_${s["suffix"]}$(this, name, mold, stat, errmsg)
+  subroutine register_temporal_${loc}$_data_${s["kind"]}$(this, name, mold, stat, errmsg)
     class(vtkhdf_ug_file), intent(inout) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: mold(..)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    call this%ug%register_temporal_${loc}$_data_${s["suffix"]}$(name, mold, stat, errmsg)
+    call this%ug%register_temporal_${loc}$_data_${s["kind"]}$(name, mold, stat, errmsg)
   end subroutine
 #:endfor
 #:endfor
@@ -202,13 +206,13 @@ contains
 #:for s in num_specs
 #:for loc in locations
 
-  subroutine write_temporal_${loc}$_data_${s["suffix"]}$(this, name, array, stat, errmsg)
+  subroutine write_temporal_${loc}$_data_${s["kind"]}$(this, name, array, stat, errmsg)
     class(vtkhdf_ug_file), intent(in) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(out) :: stat
     character(:), allocatable :: errmsg
-    call this%ug%write_temporal_${loc}$_data_${s["suffix"]}$(name, array, stat, errmsg)
+    call this%ug%write_temporal_${loc}$_data_${s["kind"]}$(name, array, stat, errmsg)
   end subroutine
 #:endfor
 #:endfor

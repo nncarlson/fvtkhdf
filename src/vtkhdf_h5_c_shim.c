@@ -1,7 +1,6 @@
 /* H5 interface functions that must be done from the C side */
 
 #include "hdf5.h"
-#include "mpi.h"
 
 /* Functions to return object IDs that are created at run time */
 hid_t H5P_DATASET_CREATE_value() { return H5P_DATASET_CREATE; }
@@ -22,6 +21,9 @@ hid_t H5T_NATIVE_CHARACTER_value() {
   return type_id;
 }
 
+#ifdef USE_MPI
+#include "mpi.h"
+
 /* Wrapper function that translates the input Fortran comm handle
    to a C handle, and hardwires MPI_INFO_NULL for info */
 herr_t
@@ -40,3 +42,4 @@ H5Pget_fapl_mpio_Fcomm(hid_t fapl, MPI_Fint *Fcomm) {
   *Fcomm = MPI_Comm_c2f(comm);
   return herr;
 }
+#endif

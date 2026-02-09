@@ -30,10 +30,11 @@ module vtkhdf_ug_type
   implicit none
   private
 
-#:set num_specs = [ {"suffix":"int32",  "decl":"integer(int32)"}, &
-                  & {"suffix":"int64",  "decl":"integer(int64)"}, &
-                  & {"suffix":"real32", "decl":"real(real32)"}, &
-                  & {"suffix":"real64", "decl":"real(real64)"} ]
+#:set int_specs  = [ {"kind":"int32",  "decl":"integer(int32)"}, &
+                   & {"kind":"int64",  "decl":"integer(int64)"} ]
+#:set real_specs = [ {"kind":"real32", "decl":"real(real32)"}, &
+                   & {"kind":"real64", "decl":"real(real64)"} ]
+#:set num_specs = int_specs + real_specs
   type, public :: vtkhdf_ug
     type(vtkhdf_ctx) :: ctx ! unowned copy
     integer(hid_t) :: root_id=H5I_INVALID_HID
@@ -48,15 +49,20 @@ module vtkhdf_ug_type
   contains
     procedure :: init
     procedure :: close
-    procedure :: write_mesh
+#:for r in real_specs
+#:for i in int_specs
+    generic :: write_mesh => write_mesh_${r["kind"]}$_${i["kind"]}$
+    procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
+#:endfor
+#:endfor
     procedure :: write_time_step
 #:for s in num_specs
-    procedure :: write_cell_data_${s["suffix"]}$
-    procedure :: write_point_data_${s["suffix"]}$
-    procedure :: register_temporal_cell_data_${s["suffix"]}$
-    procedure :: register_temporal_point_data_${s["suffix"]}$
-    procedure :: write_temporal_cell_data_${s["suffix"]}$
-    procedure :: write_temporal_point_data_${s["suffix"]}$
+    procedure :: write_cell_data_${s["kind"]}$
+    procedure :: write_point_data_${s["kind"]}$
+    procedure :: register_temporal_cell_data_${s["kind"]}$
+    procedure :: register_temporal_point_data_${s["kind"]}$
+    procedure :: write_temporal_cell_data_${s["kind"]}$
+    procedure :: write_temporal_point_data_${s["kind"]}$
 #:endfor
     final :: vtkhdf_ug_delete
   end type
@@ -186,9 +192,20 @@ contains
       call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps, stat, errmsg)
       if (stat /= 0) return
 
-      associate (imold => [1], rmold => [1.0_real64], chunk_size => 100)
+      associate (rmold => [1.0_real64], chunk_size => 100)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'Values', rmold, chunk_size, stat, errmsg)
         if (stat /= 0) return
+      end associate
+
+      ! NB: Only static meshes are supported. ParaView 6.1 uses this attribute
+      ! setting to signal it should use mesh caching -- read once and reuse.
+      call h5_write_attr(this%ctx, this%steps_id, 'StaticMesh', 1, stat, errmsg)
+      if (stat /= 0) return
+
+      ! NB: These are no longer needed in ParaView 6.1 when StaticMesh=1, but
+      ! we retain them for compatibility with earlier versions. They will be
+      ! filled with 0 offsets and the constant number of parts.
+      associate (imold => [1], chunk_size => 100)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'PointOffsets', imold, chunk_size, stat, errmsg)
         if (stat /= 0) return
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'CellOffsets', imold, chunk_size, stat, errmsg)
@@ -219,12 +236,14 @@ contains
   !! at all to the NumberOf* and Offsets datasets instead of the 0 we
   !! normally would. Other datasets like Connectivity already contribute
   !! nothing for empty parts.
+#:for r in real_specs
+#:for i in int_specs
 
-  subroutine write_mesh(this, x, cnode, xcnode, types, stat, errmsg)
+  subroutine write_mesh_${r["kind"]}$_${i["kind"]}$(this, x, cnode, xcnode, types, stat, errmsg)
 
     class(vtkhdf_ug), intent(inout) :: this
-    real(real64), intent(in) :: x(:,:)
-    integer, intent(in) :: cnode(:), xcnode(:)
+    ${r["decl"]}$, intent(in) :: x(:,:)
+    ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
@@ -269,14 +288,14 @@ contains
     if (this%ncell > 0) then
       call h5_write_dataset(this%ctx, this%root_id, 'Offsets', xcnode-1, stat, errmsg) ! offsets instead of starting indices
     else ! see NB above
-      call h5_write_dataset(this%ctx, this%root_id, 'Offsets', idum, stat, errmsg)
+      call h5_write_dataset(this%ctx, this%root_id, 'Offsets', [${i["decl"]}$::], stat, errmsg)
     end if
     if (stat /= 0) return
 
     if (this%ncell > 0) then
       call h5_write_dataset(this%ctx, this%root_id, 'Connectivity', cnode-1, stat, errmsg)  ! 0-based indexing
     else ! workaround for gfortran bug https://gcc.gnu.org/bugzilla/show_bug.cgi?id=123899
-      call h5_write_dataset(this%ctx, this%root_id, 'Connectivity', idum, stat, errmsg)
+      call h5_write_dataset(this%ctx, this%root_id, 'Connectivity', [${i["decl"]}$::], stat, errmsg)
     endif
     if (stat /= 0) return
 
@@ -288,13 +307,15 @@ contains
 
   end subroutine
 
+#:endfor
+#:endfor
   !! Writes the cell DATA to a new CellData group dataset NAME. Scalar,
   !! vector, and tensor cell-based data are supported. In the case of a
   !! temporal file supporting time-dependent datasets, this dataset is
   !! static and not associated with any time step.
 #:for s in num_specs
 
-  subroutine write_cell_data_${s["suffix"]}$(this, name, data, stat, errmsg)
+  subroutine write_cell_data_${s["kind"]}$(this, name, data, stat, errmsg)
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: data(..)
@@ -314,7 +335,7 @@ contains
   !! static and not associated with any time step.
 #:for s in num_specs
 
-  subroutine write_point_data_${s["suffix"]}$(this, name, data, stat, errmsg)
+  subroutine write_point_data_${s["kind"]}$(this, name, data, stat, errmsg)
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: data(..)
@@ -336,7 +357,7 @@ contains
   !! tensor-valued cell data are supported (rank-1, 2, and 3 MOLD).
 #:for s in num_specs
 
-  subroutine register_temporal_cell_data_${s["suffix"]}$(this, name, mold, stat, errmsg)
+  subroutine register_temporal_cell_data_${s["kind"]}$(this, name, mold, stat, errmsg)
 
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
@@ -366,7 +387,7 @@ contains
     new%next => this%temporal_cell_data
     this%temporal_cell_data => new
 
-  end subroutine register_temporal_cell_data_${s["suffix"]}$
+  end subroutine register_temporal_cell_data_${s["kind"]}$
 #:endfor
 
   !! Register the specified NAME as a time-dependent PointData group dataset.
@@ -377,7 +398,7 @@ contains
   !! tensor-valued point data are supported (rank-1, 2, and 3 MOLD).
 #:for s in num_specs
 
-  subroutine register_temporal_point_data_${s["suffix"]}$(this, name, mold, stat, errmsg)
+  subroutine register_temporal_point_data_${s["kind"]}$(this, name, mold, stat, errmsg)
 
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
@@ -407,7 +428,7 @@ contains
     new%next => this%temporal_point_data
     this%temporal_point_data => new
 
-  end subroutine register_temporal_point_data_${s["suffix"]}$
+  end subroutine register_temporal_point_data_${s["kind"]}$
 #:endfor
 
   !! Mark the start of a new time step with time value TIME. Subsequent output
@@ -469,7 +490,7 @@ contains
   !! of REGISTER_TEMPORAL_CELL_DATA that created this dataset.
 #:for s in num_specs
 
-  subroutine write_temporal_cell_data_${s["suffix"]}$(this, name, data, stat, errmsg)
+  subroutine write_temporal_cell_data_${s["kind"]}$(this, name, data, stat, errmsg)
 
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
@@ -509,7 +530,7 @@ contains
       return
     end if
 
-  end subroutine write_temporal_cell_data_${s["suffix"]}$
+  end subroutine write_temporal_cell_data_${s["kind"]}$
 #:endfor
 
   !! Write the point DATA to the time-dependent PointData group dataset NAME.
@@ -518,7 +539,7 @@ contains
   !! of REGISTER_TEMPORAL_POINT_DATA that created this dataset.
 #:for s in num_specs
 
-  subroutine write_temporal_point_data_${s["suffix"]}$(this, name, data, stat, errmsg)
+  subroutine write_temporal_point_data_${s["kind"]}$(this, name, data, stat, errmsg)
 
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
@@ -558,7 +579,7 @@ contains
       return
     end if
 
-  end subroutine write_temporal_point_data_${s["suffix"]}$
+  end subroutine write_temporal_point_data_${s["kind"]}$
 #:endfor
 
 end module vtkhdf_ug_type

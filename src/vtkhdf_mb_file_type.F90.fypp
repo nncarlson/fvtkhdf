@@ -4,7 +4,7 @@
 !! This module defines a derived type for exporting mesh-based solution data
 !! to a VTKHDF file readable by the ParaView visualization tool. The type
 !! produces a MultiBlockDataSet (MB) dataset, and supports static and
-!! time-dependent cell and point data, assuming a single static mesh.
+!! time-dependent cell and point data, assuming a static mesh for each block.
 !!
 !! The output is limited to a flat collection of UnstructuredGrid blocks;
 !! hierarchical nesting of MultiBlockDataSets is not supported.
@@ -35,10 +35,11 @@ module vtkhdf_mb_file_type
 
   public :: vtkhdf_version
 
-#:set num_specs = [ {"suffix":"int32",  "decl":"integer(int32)"}, &
-                  & {"suffix":"int64",  "decl":"integer(int64)"}, &
-                  & {"suffix":"real32", "decl":"real(real32)"}, &
-                  & {"suffix":"real64", "decl":"real(real64)"} ]
+#:set int_specs  = [ {"kind":"int32",  "decl":"integer(int32)"}, &
+                   & {"kind":"int64",  "decl":"integer(int64)"} ]
+#:set real_specs = [ {"kind":"real32", "decl":"real(real32)"}, &
+                   & {"kind":"real64", "decl":"real(real64)"} ]
+#:set num_specs = int_specs + real_specs
 #:set locations = ["cell", "point"]
   type, public :: vtkhdf_mb_file
     private
@@ -50,16 +51,21 @@ module vtkhdf_mb_file_type
     procedure :: create
     procedure :: close
     procedure :: add_block
-    procedure :: write_block_mesh
+#:for r in real_specs
+#:for i in int_specs
+    generic :: write_block_mesh => write_block_mesh_${r["kind"]}$_${i["kind"]}$
+    procedure, private :: write_block_mesh_${r["kind"]}$_${i["kind"]}$
+#:endfor
+#:endfor
     procedure :: write_time_step
 #:for s in num_specs
 #:for loc in locations
-    generic :: write_${loc}$_data => write_${loc}$_data_${s["suffix"]}$
-    procedure, private :: write_${loc}$_data_${s["suffix"]}$
-    generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${s["suffix"]}$
-    procedure, private :: register_temporal_${loc}$_data_${s["suffix"]}$
-    generic :: write_temporal_${loc}$_data => write_temporal_${loc}$_data_${s["suffix"]}$
-    procedure, private :: write_temporal_${loc}$_data_${s["suffix"]}$
+    generic :: write_${loc}$_data => write_${loc}$_data_${s["kind"]}$
+    procedure, private :: write_${loc}$_data_${s["kind"]}$
+    generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${s["kind"]}$
+    procedure, private :: register_temporal_${loc}$_data_${s["kind"]}$
+    generic :: write_temporal_${loc}$_data => write_temporal_${loc}$_data_${s["kind"]}$
+    procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$
 #:endfor
 #:endfor
     procedure, private :: get_block_ptr
@@ -90,13 +96,11 @@ contains
   !! always use CLOSE to do a proper collective cleanup and close of the file.
 
   subroutine vtkhdf_mb_file_delete(this)
-    use mpi, only: MPI_COMM_NULL
     type(vtkhdf_mb_file), intent(inout) :: this
     if (associated(this%blocks)) deallocate(this%blocks)
     this%ass_id  = H5I_INVALID_HID
     this%vtk_id  = H5I_INVALID_HID
     this%file_id = H5I_INVALID_HID
-    this%ctx%comm = MPI_COMM_NULL
     this%next_bid = 0
   end subroutine
 
@@ -107,7 +111,6 @@ contains
 
   !! Cleanly closes H5 identifiers and the file, and default initializes.
   subroutine close(this)
-    use mpi, only: MPI_COMM_NULL, MPI_Comm_free
     class(vtkhdf_mb_file), intent(inout) :: this
     integer :: ierr
     type(pdc_block), pointer :: p
@@ -119,7 +122,7 @@ contains
     if (H5Iis_valid(this%ass_id) > 0) ierr = H5Gclose(this%ass_id)
     if (H5Iis_valid(this%vtk_id) > 0) ierr = H5Gclose(this%vtk_id)
     if (H5Iis_valid(this%file_id) > 0) ierr = H5Fclose(this%file_id)
-    if (this%ctx%comm /= MPI_COMM_NULL) call MPI_Comm_free(this%ctx%comm, ierr)
+    call this%ctx%close ! frees duplicated comm in MPI build
     call finalize(this) ! free local memory
   contains
     subroutine finalize(this)
@@ -128,9 +131,6 @@ contains
   end subroutine
 
   subroutine create(this, filename, comm, stat, errmsg)
-
-    use,intrinsic :: iso_c_binding, only: c_bool
-    use vtkhdf_version
 
     class(vtkhdf_mb_file), intent(out) :: this
     character(*), intent(in) :: filename
@@ -142,15 +142,14 @@ contains
     integer(c_int) :: flag
     integer :: ierr
 
+    ! MPI build: duplicates comm, caches rank/size
+    ! Serial build: ignores comm, sets rank=0, size=1
     call this%ctx%init(comm)
 
     call init_hdf5
 
     !! Open the file (read/write), overwrite any existing file
-    fapl = H5Pcreate(H5P_FILE_ACCESS)
-    stat = H5Pset_fapl_mpio(fapl, this%ctx%comm)
-    stat = H5Pset_all_coll_metadata_ops(fapl, is_collective=.true._c_bool)
-    stat = H5Pset_coll_metadata_write(fapl, is_collective=.true._c_bool)
+    call this%ctx%get_fapl(fapl) ! configures for parallel I/O in MPI build
     this%file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl)
     ierr = H5Pclose(fapl)
     if (this%ctx%global_any(this%file_id < 0)) then
@@ -159,7 +158,7 @@ contains
       return
     end if
 
-    !! Group creation properties for PDC datasets (no harm to others)
+    !! Group creation properties for PDC datasets (no harm to MB)
     !! Applies to VTKHDF and Assembly groups
     flag = ior(H5P_CRT_ORDER_TRACKED, H5P_CRT_ORDER_INDEXED)
     gcpl = H5Pcreate(H5P_GROUP_CREATE)
@@ -174,7 +173,7 @@ contains
       return
     end if
 
-    call h5_write_attr(this%ctx, this%vtk_id, 'Version', version, stat, errmsg)
+    call h5_write_attr(this%ctx, this%vtk_id, 'Version', vtkhdf_version, stat, errmsg)
     if (stat /= 0) return
 
     !NB: We stick with the older MB type due to an issue with the modern PDC
@@ -274,13 +273,15 @@ contains
   !! of the cell types that one might otherwise infer from the XCNODE array.
   !! This procedure must be called for each of the blocks before any of the
   !! following procedures.
+#:for r in real_specs
+#:for i in int_specs
 
-  subroutine write_block_mesh(this, block_name, x, cnode, xcnode, types, stat, errmsg)
+  subroutine write_block_mesh_${r["kind"]}$_${i["kind"]}$(this, block_name, x, cnode, xcnode, types, stat, errmsg)
 
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name
-    real(real64), intent(in) :: x(:,:)
-    integer, intent(in) :: cnode(:), xcnode(:)
+    ${r["decl"]}$, intent(in) :: x(:,:)
+    ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
@@ -291,15 +292,17 @@ contains
     if (stat /= 0) return
     call bptr%write_mesh(x, cnode, xcnode, types, stat, errmsg)
 
-  end subroutine write_block_mesh
+  end subroutine write_block_mesh_${r["kind"]}$_${i["kind"]}$
 
+#:endfor
+#:endfor
   !! Writes the cell-based data ARRAY to a new named cell dataset for the
   !! specified mesh block. Scalar, vector, and tensor cell-based data are
   !! supported. In the case of a temporal block supporting time-dependent
   !! datasets, this dataset is static and not associated with any time step.
 #:for s in num_specs
 
-  subroutine write_cell_data_${s["suffix"]}$(this, block_name, name, array, stat, errmsg)
+  subroutine write_cell_data_${s["kind"]}$(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array(..)
@@ -308,7 +311,7 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%write_cell_data_${s["suffix"]}$(name, array, stat, errmsg)
+    call bptr%write_cell_data_${s["kind"]}$(name, array, stat, errmsg)
   end subroutine
 #:endfor
 
@@ -318,7 +321,7 @@ contains
   !! datasets, this dataset is static and not associated with any time step.
 #:for s in num_specs
 
-  subroutine write_point_data_${s["suffix"]}$(this, block_name, name, array, stat, errmsg)
+  subroutine write_point_data_${s["kind"]}$(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array(..)
@@ -327,7 +330,7 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%write_point_data_${s["suffix"]}$(name, array, stat, errmsg)
+    call bptr%write_point_data_${s["kind"]}$(name, array, stat, errmsg)
   end subroutine
 #:endfor
 
@@ -340,7 +343,7 @@ contains
   !! data are supported (rank-1, 2, and 3 MOLD).
 #:for s in num_specs
 
-  subroutine register_temporal_cell_data_${s["suffix"]}$(this, block_name, name, mold, stat, errmsg)
+  subroutine register_temporal_cell_data_${s["kind"]}$(this, block_name, name, mold, stat, errmsg)
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: mold(..)
@@ -349,7 +352,7 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%register_temporal_cell_data_${s["suffix"]}$(name, mold, stat, errmsg)
+    call bptr%register_temporal_cell_data_${s["kind"]}$(name, mold, stat, errmsg)
   end subroutine
 #:endfor
 
@@ -362,7 +365,7 @@ contains
   !! data are supported (rank-1, 2, and 3 MOLD).
 #:for s in num_specs
 
-  subroutine register_temporal_point_data_${s["suffix"]}$(this, block_name, name, mold, stat, errmsg)
+  subroutine register_temporal_point_data_${s["kind"]}$(this, block_name, name, mold, stat, errmsg)
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: mold(..)
@@ -371,7 +374,7 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%register_temporal_point_data_${s["suffix"]}$(name, mold, stat, errmsg)
+    call bptr%register_temporal_point_data_${s["kind"]}$(name, mold, stat, errmsg)
   end subroutine
 #:endfor
 
@@ -394,7 +397,7 @@ contains
   !! time step.
 #:for s in num_specs
 
-  subroutine write_temporal_cell_data_${s["suffix"]}$(this, block_name, name, array, stat, errmsg)
+  subroutine write_temporal_cell_data_${s["kind"]}$(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array(..)
@@ -403,7 +406,7 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%write_temporal_cell_data_${s["suffix"]}$(name, array, stat, errmsg)
+    call bptr%write_temporal_cell_data_${s["kind"]}$(name, array, stat, errmsg)
   end subroutine
 #:endfor
 
@@ -412,7 +415,7 @@ contains
   !! time step.
 #:for s in num_specs
 
-  subroutine write_temporal_point_data_${s["suffix"]}$(this, block_name, name, array, stat, errmsg)
+  subroutine write_temporal_point_data_${s["kind"]}$(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array(..)
@@ -421,7 +424,7 @@ contains
     type(vtkhdf_ug), pointer :: bptr
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%write_temporal_point_data_${s["suffix"]}$(name, array, stat, errmsg)
+    call bptr%write_temporal_point_data_${s["kind"]}$(name, array, stat, errmsg)
   end subroutine
 #:endfor
 

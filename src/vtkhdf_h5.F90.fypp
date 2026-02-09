@@ -246,22 +246,24 @@ contains
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
 
-    integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
+    integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl_id
     integer :: ierr
 
     type_id = ${s["h5type"]}$
 
     call write_dataset_aux(ctx, loc_id, name, type_id, shape(array,hsize_t), &
-        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
+        dset_id, mem_space_id, data_space_id, stat, errmsg, root)
     if (stat /= 0) return
+
+    call ctx%get_dxpl(dxpl_id) ! collective data transfer in MPI build
 
     select rank (array)
     rank (0)
-      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl_id)
     rank (1)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl_id)
     rank (2)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl_id)
     rank default
       INSIST(.false.)
     end select
@@ -272,7 +274,7 @@ contains
     end if
 
     !! Cleanup
-    ierr = H5Pclose(dxpl)
+    ierr = H5Pclose(dxpl_id)
     ierr = H5Sclose(mem_space_id)
     ierr = H5Sclose(data_space_id)
     ierr = H5Dclose(dset_id)
@@ -290,13 +292,13 @@ contains
   !! in the subsequent collective H5Dwrite call.
 
   subroutine write_dataset_aux(ctx, loc_id, name, type_id, dims, &
-      dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
+      dset_id, mem_space_id, data_space_id, stat, errmsg, root)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id, type_id
     character(*), intent(in) :: name
     integer(hsize_t), intent(in) :: dims(:)
-    integer(hid_t), intent(out) :: dset_id, mem_space_id, data_space_id, dxpl
+    integer(hid_t), intent(out) :: dset_id, mem_space_id, data_space_id
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -378,12 +380,6 @@ contains
       ierr = H5Dclose(dset_id)
       return
     end if
-
-    !! Parallel data transfer property for H5DWrite
-    dxpl = H5Pcreate(H5P_DATASET_XFER)
-    INSIST(dxpl > 0)
-    ierr = H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE)
-    INSIST(ierr == 0)
 
     stat = 0
 
@@ -506,22 +502,24 @@ contains
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
 
-    integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl
+    integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl_id
     integer :: ierr
 
     type_id = ${s["h5type"]}$
 
     call append_to_dataset_aux(ctx, loc_id, name, type_id, shape(array, hsize_t), &
-        dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
+        dset_id, mem_space_id, data_space_id, stat, errmsg, root)
     if (stat /= 0) return
+
+    call ctx%get_dxpl(dxpl_id) ! collective data transfer in MPI build
 
     select rank (array)
     rank (0)
-      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl_id)
     rank (1)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl_id)
     rank (2)
-      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl)
+      ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl_id)
     rank default
       INSIST(.false.)
     end select
@@ -531,7 +529,7 @@ contains
       errmsg = 'error writing to dataset "' // name // '"'
     end if
 
-    ierr = H5Pclose(dxpl)
+    ierr = H5Pclose(dxpl_id)
     ierr = h5sclose(mem_space_id)
     ierr = h5sclose(data_space_id)
     ierr = h5dclose(dset_id)
@@ -549,13 +547,13 @@ contains
   !! call.
 
   subroutine append_to_dataset_aux(ctx, loc_id, name, type_id, dims, &
-      dset_id, mem_space_id, data_space_id, dxpl, stat, errmsg, root)
+      dset_id, mem_space_id, data_space_id, stat, errmsg, root)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id, type_id
     character(*), intent(in) :: name
     integer(hsize_t), intent(in) :: dims(:)
-    integer(hid_t), intent(out) :: dset_id, data_space_id, mem_space_id, dxpl
+    integer(hid_t), intent(out) :: dset_id, data_space_id, mem_space_id
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
@@ -671,11 +669,6 @@ contains
       ierr = H5Dclose(dset_id)
       return
     end if
-
-    dxpl = H5Pcreate(H5P_DATASET_XFER)
-    INSIST(dxpl > 0)
-    ierr = H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE)
-    INSIST(ierr == 0)
 
     stat = 0
 

@@ -15,5 +15,5 @@ a more scalable alternative to older VTK ASCII or XML formats.
 ### Testing
 
 ### License
-This project is distributed under the terms of the MIT license.
+fVTKHDF distributed under the 2-clause BSD license.
 See [LICENSE.md](./LICENSE.md) for details.
