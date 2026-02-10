@@ -53,6 +53,9 @@ module vtkhdf_h5_c_binding
   !! Header file constants from H5Ppublic.h
   integer(hid_t), parameter :: H5P_DEFAULT = 0
 
+  !! Header file constants from H5Epublic.h
+  integer(hid_t), parameter :: H5E_DEFAULT = 0
+
   !! Object IDs that are run-time *copies* of objects on the C side.
   !! These need to be initialized by a call to init_hdf5.
   integer(hid_t), protected :: H5T_NATIVE_UINT8
@@ -369,6 +372,43 @@ module vtkhdf_h5_c_binding
   !!!! H5L functions
 
   public :: H5Lexists, H5Lcreate_soft, H5Lcreate_hard ! module procedures
+
+  !!!! H5E functions
+
+  interface
+    function H5Eset_auto2(estack_id, func, client_data) &
+        result(hdferr) bind(c,name='H5Eset_auto2')
+      import :: hid_t, c_int, c_ptr, c_funptr
+      integer(hid_t), value :: estack_id
+      type(c_funptr), value :: func
+      type(c_ptr), value :: client_data
+      integer(c_int) :: hdferr
+    end function
+
+    function H5Eget_auto2(estack_id, func, client_data) &
+        result(hdferr) bind(c,name='H5Eget_auto2')
+      import :: hid_t, c_int, c_ptr, c_funptr
+      integer(hid_t), value :: estack_id
+      type(c_funptr) :: func           ! Received by reference
+      type(c_ptr)    :: client_data    ! Received by reference
+      integer(c_int) :: hdferr
+    end function
+
+    function H5Eclear2(estack_id) result(hdferr) bind(c,name='H5Eclear2')
+      import :: hid_t, c_int
+      integer(hid_t), value :: estack_id
+      integer(c_int) :: hdferr
+    end function
+
+    function H5Eprint2(estack_id, stream) result(hdferr) bind(c, name="H5Eprint2")
+      import :: hid_t, c_int, c_ptr
+      integer(hid_t), value :: estack_id
+      type(c_ptr), value :: stream
+      integer(c_int) :: hdferr
+    end function
+  end interface
+
+  public :: H5Eset_auto2, H5Eget_auto2, H5Eclear2, H5Eprint2
 
 contains
 

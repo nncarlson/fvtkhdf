@@ -1,5 +1,25 @@
-add_executable(vtkhdf_demo vtkhdf_demo.F90)
-target_link_libraries(vtkhdf_demo PRIVATE fvtkhdf)
+if(ENABLE_MPI)
+  add_executable(vtkhdf_mb_test vtkhdf_mb_test.F90)
+  target_link_libraries(vtkhdf_mb_test PRIVATE fvtkhdf)
 
-add_test(vtkhdf_file_type ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4 ./vtkhdf_demo ${MPIEXEC_POSTFLAGS})
-set_tests_properties(vtkhdf_file_type PROPERTIES PROCESSORS 4)
+  add_test(vtkhdf_mb_file_type ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4 ./vtkhdf_mb_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_mb_file_type PROPERTIES PROCESSORS 4)
+
+  add_executable(vtkhdf_ug_test vtkhdf_ug_test.F90)
+  target_link_libraries(vtkhdf_ug_test PRIVATE fvtkhdf)
+
+  add_test(vtkhdf_ug_file_type ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4 ./vtkhdf_ug_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_ug_file_type PROPERTIES PROCESSORS 4)
+else()
+  add_executable(vtkhdf_ug_test vtkhdf_ug_test-serial.F90)
+  target_link_libraries(vtkhdf_ug_test PRIVATE fvtkhdf)
+
+  add_test(vtkhdf_ug_file_type ./vtkhdf_ug_test)
+  set_tests_properties(vtkhdf_ug_file_type PROPERTIES PROCESSORS 1)
+
+  add_executable(vtkhdf_mb_test vtkhdf_mb_test-serial.F90)
+  target_link_libraries(vtkhdf_mb_test PRIVATE fvtkhdf)
+
+  add_test(vtkhdf_mb_file_type ./vtkhdf_mb_test)
+  set_tests_properties(vtkhdf_mb_file_type PROPERTIES PROCESSORS 1)
+endif()

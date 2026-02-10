@@ -11,6 +11,7 @@ set(SRC
   f90_assert.F90
   vtkhdf_h5_c_binding.F90
   vtkhdf_version_param.F90
+  vtkhdf_h5e_context_type.F90
 )
 
 if(ENABLE_MPI)

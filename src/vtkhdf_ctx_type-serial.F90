@@ -51,7 +51,6 @@ contains
 
   subroutine close(this)
     class(vtkhdf_ctx), intent(inout) :: this
-    this%comm = MPI_COMM_NULL
     this%rank = 0
     this%size = 1
   end subroutine

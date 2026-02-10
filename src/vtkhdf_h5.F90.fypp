@@ -105,7 +105,6 @@ contains
     end if
 
     ierr = H5Aclose(attr_id)
-    stat = 0
 
   end subroutine write_attr_${s["suffix"]}$
 
@@ -159,7 +158,6 @@ contains
 
     ierr = H5Aclose(attr_id)
     ierr = H5Tclose(type_id)
-    stat = 0
 
   end subroutine write_attr_string
 
@@ -176,25 +174,22 @@ contains
     character(:), allocatable, intent(out) :: errmsg
 
     integer(hid_t) :: space_id
-    integer :: ierr
+    integer :: htri, ierr
 
-    !! Try to open on all ranks
-    attr_id = H5Aopen(obj_id, name)
-
-    if (ctx%global_any(attr_id >= 0)) then ! some opened successfully
-      if (ctx%global_any(attr_id < 0)) then ! and some failed to open
-        stat = 1
-        errmsg = 'inconsistent result opening attribute "' // name // '" across ranks'
-        if (attr_id >= 0) ierr = H5Aclose(attr_id)
-        return
-      end if
-      !! All opened successfully
+    htri = H5Aexists(obj_id, name)
+    if (ctx%global_all(htri > 0)) then
+      attr_id = H5Aopen(obj_id, name)
+      INSIST(attr_id > 0)
+      !TODO? Validate its type and shape against the inputs
       stat = 0
-      !TODO: Validate its type and shape against the inputs
+      return
+    else if (ctx%global_any(htri /= 0)) then
+      stat = 1
+      errmsg = 'inconsistent existence of attribute "' // name // '" across ranks'
       return
     end if
 
-    !! Nobody opened, so create it
+    !! It doesn't exist, so create it
     select case (size(dims))
     case (0)
       space_id = H5Screate(H5S_SCALAR)
@@ -213,7 +208,7 @@ contains
     if (ctx%global_any(attr_id < 0)) then
       stat = 1
       errmsg = 'unable to create attribute "' // name // '"'
-      if (attr_id >= 0) ierr = H5Aclose(attr_id)
+      if (attr_id > 0) ierr = H5Aclose(attr_id)
       ierr = H5Sclose(space_id)
       return
     end if

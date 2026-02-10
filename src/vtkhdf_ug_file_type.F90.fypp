@@ -26,6 +26,7 @@ module vtkhdf_ug_file_type
   use vtkhdf_h5
   use vtkhdf_ug_type
   use vtkhdf_ctx_type
+  use vtkhdf_h5e_context_type
   use vtkhdf_version_param
   implicit none
   private
@@ -90,8 +91,11 @@ contains
   subroutine close(this)
     class(vtkhdf_ug_file), intent(inout) :: this
     integer :: ierr
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
     call this%ug%close
     if (H5Iis_valid(this%file_id) > 0) ierr = H5Fclose(this%file_id)
+    call err_ctx%restore(0)
     call this%ctx%close ! frees duplicated comm in MPI build
     call finalize(this) ! free local memory
   contains
@@ -111,12 +115,14 @@ contains
 
     integer(hid_t) :: fapl
     integer :: ierr
+    type(vtkhdf_h5e_context) :: err_ctx
 
     ! MPI build: duplicates comm, caches rank/size
     ! Serial build: ignores comm, sets rank=0, size=1
     call this%ctx%init(comm)
 
     call init_hdf5
+    call err_ctx%capture
 
     !! Open the file (read/write), overwrite any existing file
     call this%ctx%get_fapl(fapl) ! configures for parallel I/O in MPI build
@@ -125,14 +131,18 @@ contains
     if (this%ctx%global_any(this%file_id < 0)) then
       stat = 1
       errmsg = 'failed to open file'
+      call err_ctx%restore(stat)
       return
     end if
 
     call this%ug%init(this%file_id, 'VTKHDF', this%ctx, stat, errmsg, temporal)
     if (stat /= 0) then
       errmsg = 'error creating root VTKHDF group: ' // errmsg
+      call err_ctx%restore(stat)
       return
     end if
+
+    call err_ctx%restore(stat)
 
   end subroutine create
 
@@ -149,7 +159,10 @@ contains
     integer(int8), intent(in) :: types(:)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
     call this%ug%write_mesh(x, cnode, xcnode, types, stat, errmsg)
+    call err_ctx%restore(stat)
   end subroutine
 #:endfor
 #:endfor
@@ -157,8 +170,8 @@ contains
   !! Writes the cell-based data ARRAY to a new named cell dataset. Scalar,
   !! vector, and tensor data are supported. For temporal files, this dataset
   !! is static and not associated with any time step.
-#:for s in num_specs
 #:for loc in locations
+#:for s in num_specs
 
   subroutine write_${loc}$_data_${s["kind"]}$(this, name, array, stat, errmsg)
     class(vtkhdf_ug_file), intent(in) :: this
@@ -166,20 +179,23 @@ contains
     ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
     call this%ug%write_${loc}$_data_${s["kind"]}$(name, array, stat, errmsg)
+    call err_ctx%restore(stat)
   end subroutine
 #:endfor
 #:endfor
 
-  !! Register the specified NAME as a time-dependent cell dataset. This
+  !! Register the specified NAME as a time-dependent cell/point dataset. This
   !! writes no data, but only configures some necessary internal metadata.
   !! The MOLD array argument shall have the same type, kind, and rank as
   !! the actual dataset, and the same extent in all but the last dimension,
   !! whose extent is ignored, but the array values themselves are not
   !! accessed. Scalar, vector, and tensor-valued mesh data are supported
   !! (rank-1, 2, and 3 MOLD).
-#:for s in num_specs
 #:for loc in locations
+#:for s in num_specs
 
   subroutine register_temporal_${loc}$_data_${s["kind"]}$(this, name, mold, stat, errmsg)
     class(vtkhdf_ug_file), intent(inout) :: this
@@ -187,7 +203,10 @@ contains
     ${s["decl"]}$, intent(in) :: mold(..)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
     call this%ug%register_temporal_${loc}$_data_${s["kind"]}$(name, mold, stat, errmsg)
+    call err_ctx%restore(stat)
   end subroutine
 #:endfor
 #:endfor
@@ -198,13 +217,16 @@ contains
   subroutine write_time_step(this, time)
     class(vtkhdf_ug_file), intent(inout) :: this
     real(real64), intent(in) :: time
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
     call this%ug%write_time_step(time)
+    call err_ctx%restore(0)
   end subroutine
 
-  !! Write the cell-based data ARRAY to the named time-dependent cell dataset.
+  !! Write the cell/point-based data ARRAY to the named time-dependent dataset.
   !! The data is associated with the current time step.
-#:for s in num_specs
 #:for loc in locations
+#:for s in num_specs
 
   subroutine write_temporal_${loc}$_data_${s["kind"]}$(this, name, array, stat, errmsg)
     class(vtkhdf_ug_file), intent(in) :: this
@@ -212,7 +234,10 @@ contains
     ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(out) :: stat
     character(:), allocatable :: errmsg
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
     call this%ug%write_temporal_${loc}$_data_${s["kind"]}$(name, array, stat, errmsg)
+    call err_ctx%restore(stat)
   end subroutine
 #:endfor
 #:endfor

@@ -29,6 +29,7 @@ module vtkhdf_mb_file_type
   use vtkhdf_h5
   use vtkhdf_ug_type
   use vtkhdf_ctx_type
+  use vtkhdf_h5e_context_type
   use vtkhdf_version_param
   implicit none
   private
@@ -114,6 +115,8 @@ contains
     class(vtkhdf_mb_file), intent(inout) :: this
     integer :: ierr
     type(pdc_block), pointer :: p
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
     p => this%blocks
     do while (associated(p))
       call p%b%close
@@ -122,6 +125,7 @@ contains
     if (H5Iis_valid(this%ass_id) > 0) ierr = H5Gclose(this%ass_id)
     if (H5Iis_valid(this%vtk_id) > 0) ierr = H5Gclose(this%vtk_id)
     if (H5Iis_valid(this%file_id) > 0) ierr = H5Fclose(this%file_id)
+    call err_ctx%restore(0)
     call this%ctx%close ! frees duplicated comm in MPI build
     call finalize(this) ! free local memory
   contains
@@ -141,12 +145,14 @@ contains
     integer(hid_t) :: fapl, gcpl
     integer(c_int) :: flag
     integer :: ierr
+    type(vtkhdf_h5e_context) :: err_ctx
 
     ! MPI build: duplicates comm, caches rank/size
     ! Serial build: ignores comm, sets rank=0, size=1
     call this%ctx%init(comm)
 
     call init_hdf5
+    call err_ctx%capture
 
     !! Open the file (read/write), overwrite any existing file
     call this%ctx%get_fapl(fapl) ! configures for parallel I/O in MPI build
@@ -155,6 +161,7 @@ contains
     if (this%ctx%global_any(this%file_id < 0)) then
       stat = 1
       errmsg = 'failed to open file'
+      call err_ctx%restore(stat)
       return
     end if
 
@@ -170,17 +177,24 @@ contains
     if (this%ctx%global_any(this%vtk_id < 0)) then
       stat = 1
       errmsg = 'failed to create "VTKHDF" group'
+      call err_ctx%restore(stat)
       return
     end if
 
     call h5_write_attr(this%ctx, this%vtk_id, 'Version', vtkhdf_version, stat, errmsg)
-    if (stat /= 0) return
+    if (stat /= 0) then
+      call err_ctx%restore(stat)
+      return
+    end if
 
     !NB: We stick with the older MB type due to an issue with the modern PDC
     !type; see https://gitlab.kitware.com/vtk/vtk/-/issues/19902
     !call h5_write_attr(this%ctx, this%vtk_id, 'Type', 'PartitionedDataSetCollection', stat, errmsg)
     call h5_write_attr(this%ctx, this%vtk_id, 'Type', 'MultiBlockDataSet', stat, errmsg)
-    if (stat /= 0) return
+    if (stat /= 0) then
+      call err_ctx%restore(stat)
+      return
+    end if
 
     !! Create the Assembly group
     this%ass_id = H5Gcreate(this%vtk_id, 'Assembly', gcpl_id=gcpl)
@@ -188,8 +202,11 @@ contains
     if (this%ctx%global_any(this%ass_id < 0)) then
       stat = 1
       errmsg = 'failed to create "Assembly" group'
+      call err_ctx%restore(stat)
       return
     end if
+
+    call err_ctx%restore(0)
 
   end subroutine create
 
@@ -204,6 +221,7 @@ contains
 
     integer :: n, ierr
     type(pdc_block), pointer :: b, new
+    type(vtkhdf_h5e_context) :: err_ctx
 
     !! Ensure the specified NAME is valid
     if (name == '') then
@@ -241,9 +259,12 @@ contains
     new%next => this%blocks
     this%blocks => new
 
+    call err_ctx%capture ! begin HDF5 calls
+
     call new%b%init(this%vtk_id, name, this%ctx, stat, errmsg, temporal)
     if (stat /= 0) then
       errmsg = 'error adding UnstructuredGrid block "' // name // '": ' // errmsg
+      call err_ctx%restore(stat)
       return
     end if
 
@@ -251,6 +272,7 @@ contains
     call h5_write_attr(this%ctx, new%b%root_id, 'Index', this%next_bid, stat, errmsg)
     if (stat /= 0) then
       errmsg = 'error adding UnstructuredGrid block "' // name // '": ' // errmsg
+      call err_ctx%restore(stat)
       return
     end if
     this%next_bid = this%next_bid + 1
@@ -260,19 +282,20 @@ contains
     if (this%ctx%global_any(ierr < 0)) then
       stat = 1
       errmsg = 'unable to create "Assembly" group link to block "' // name // '"'
+      call err_ctx%restore(stat)
       return
     end if
 
     stat = 0
+    call err_ctx%restore(stat)
 
   end subroutine add_block
 
   !! Write the UnstructuredGrid data for the specified block. The unstructured
   !! mesh is described in the conventional manner by the X, CNODE, and XCNODE
-  !! arrays. The additional array TYPES provides an unambiguous specification
-  !! of the cell types that one might otherwise infer from the XCNODE array.
-  !! This procedure must be called for each of the blocks before any of the
-  !! following procedures.
+  !! arrays. The additional array TYPES provides the VTK specification the cell
+  !! type. This procedure must be called for each of the blocks before any of
+  !! the following procedures.
 #:for r in real_specs
 #:for i in int_specs
 
@@ -287,95 +310,67 @@ contains
     character(:), allocatable, intent(out) :: errmsg
 
     type(vtkhdf_ug), pointer :: bptr
+    type(vtkhdf_h5e_context) :: err_ctx
 
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
+    call err_ctx%capture
     call bptr%write_mesh(x, cnode, xcnode, types, stat, errmsg)
+    call err_ctx%restore(stat)
 
   end subroutine write_block_mesh_${r["kind"]}$_${i["kind"]}$
 
 #:endfor
 #:endfor
-  !! Writes the cell-based data ARRAY to a new named cell dataset for the
-  !! specified mesh block. Scalar, vector, and tensor cell-based data are
+  !! Writes the cell/point-based data ARRAY to a new named cell/point dataset
+  !! for the specified mesh block. Scalar, vector, and tensor data are
   !! supported. In the case of a temporal block supporting time-dependent
   !! datasets, this dataset is static and not associated with any time step.
+#:for loc in locations
 #:for s in num_specs
 
-  subroutine write_cell_data_${s["kind"]}$(this, block_name, name, array, stat, errmsg)
+  subroutine write_${loc}$_data_${s["kind"]}$(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     type(vtkhdf_ug), pointer :: bptr
+    type(vtkhdf_h5e_context) :: err_ctx
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%write_cell_data_${s["kind"]}$(name, array, stat, errmsg)
+    call err_ctx%capture
+    call bptr%write_${loc}$_data_${s["kind"]}$(name, array, stat, errmsg)
+    call err_ctx%restore(stat)
   end subroutine
 #:endfor
-
-  !! Writes the point-based data ARRAY to a new named cell dataset for the
-  !! specified mesh block. Scalar, vector, and tensor cell-based data are
-  !! supported. In the case of a temporal block supporting time-dependent
-  !! datasets, this dataset is static and not associated with any time step.
-#:for s in num_specs
-
-  subroutine write_point_data_${s["kind"]}$(this, block_name, name, array, stat, errmsg)
-    class(vtkhdf_mb_file), intent(in) :: this
-    character(*), intent(in) :: block_name, name
-    ${s["decl"]}$, intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    type(vtkhdf_ug), pointer :: bptr
-    call this%get_block_ptr(block_name, bptr, stat, errmsg)
-    if (stat /= 0) return
-    call bptr%write_point_data_${s["kind"]}$(name, array, stat, errmsg)
-  end subroutine
 #:endfor
 
-  !! Register the specified NAME as a time-dependent cell dataset for the
-  !! specified mesh block. This writes no data, but only configures some
+  !! Register the specified NAME as a time-dependent cell/point dataset for
+  !! the specified mesh block. This writes no data, but only configures some
   !! necessary internal metadata. The MOLD array argument shall have the same
   !! type, kind, and rank as the actual dataset, and the same extent in all
   !! but the last dimension, whose extent is ignored, but the array values
   !! themselves are not accessed. Scalar, vector, and tensor-valued mesh
   !! data are supported (rank-1, 2, and 3 MOLD).
+#:for loc in locations
 #:for s in num_specs
 
-  subroutine register_temporal_cell_data_${s["kind"]}$(this, block_name, name, mold, stat, errmsg)
+  subroutine register_temporal_${loc}$_data_${s["kind"]}$(this, block_name, name, mold, stat, errmsg)
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: mold(..)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     type(vtkhdf_ug), pointer :: bptr
+    type(vtkhdf_h5e_context) :: err_ctx
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%register_temporal_cell_data_${s["kind"]}$(name, mold, stat, errmsg)
+    call err_ctx%capture
+    call bptr%register_temporal_${loc}$_data_${s["kind"]}$(name, mold, stat, errmsg)
+    call err_ctx%restore(stat)
   end subroutine
 #:endfor
-
-  !! Register the specified NAME as a time-dependent point dataset for the
-  !! specified mesh block. This writes no data, but only configures some
-  !! necessary internal metadata. The MOLD array argument shall have the same
-  !! type, kind, and rank as the actual dataset, and the same extent in all
-  !! but the last dimension, whose extent is ignored, but the array values
-  !! themselves are not accessed. Scalar, vector, and tensor-valued mesh
-  !! data are supported (rank-1, 2, and 3 MOLD).
-#:for s in num_specs
-
-  subroutine register_temporal_point_data_${s["kind"]}$(this, block_name, name, mold, stat, errmsg)
-    class(vtkhdf_mb_file), intent(inout) :: this
-    character(*), intent(in) :: block_name, name
-    ${s["decl"]}$, intent(in) :: mold(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    type(vtkhdf_ug), pointer :: bptr
-    call this%get_block_ptr(block_name, bptr, stat, errmsg)
-    if (stat /= 0) return
-    call bptr%register_temporal_point_data_${s["kind"]}$(name, mold, stat, errmsg)
-  end subroutine
 #:endfor
 
   !! Mark the start of a new time step with time value TIME. Subsequent output
@@ -385,50 +380,40 @@ contains
     class(vtkhdf_mb_file), intent(inout) :: this
     real(real64), intent(in) :: time
     type(pdc_block), pointer :: b
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
     b => this%blocks
     do while (associated(b))
       if (b%b%nsteps >= 0) call b%b%write_time_step(time)
       b => b%next
     end do
+    call err_ctx%restore(0)
   end subroutine
 
-  !! Write the cell-based data ARRAY to the named time-dependent cell dataset
-  !! for the specified mesh block. The data is associated with the current
-  !! time step.
+  !! Writes the cell/point-based data ARRAY to the named time-dependent
+  !! dataset for the specified mesh block. The data is associated with the
+  !! current time step.
+#:for loc in locations
 #:for s in num_specs
 
-  subroutine write_temporal_cell_data_${s["kind"]}$(this, block_name, name, array, stat, errmsg)
+  subroutine write_temporal_${loc}$_data_${s["kind"]}$(this, block_name, name, array, stat, errmsg)
     class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(out) :: stat
     character(:), allocatable :: errmsg
     type(vtkhdf_ug), pointer :: bptr
+    type(vtkhdf_h5e_context) :: err_ctx
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
-    call bptr%write_temporal_cell_data_${s["kind"]}$(name, array, stat, errmsg)
+    call err_ctx%capture
+    call bptr%write_temporal_${loc}$_data_${s["kind"]}$(name, array, stat, errmsg)
+    call err_ctx%restore(stat)
   end subroutine
 #:endfor
-
-  !! Write the point-based data ARRAY to the named time-dependent cell dataset
-  !! for the specified mesh block. The data is associated with the current
-  !! time step.
-#:for s in num_specs
-
-  subroutine write_temporal_point_data_${s["kind"]}$(this, block_name, name, array, stat, errmsg)
-    class(vtkhdf_mb_file), intent(in) :: this
-    character(*), intent(in) :: block_name, name
-    ${s["decl"]}$, intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable :: errmsg
-    type(vtkhdf_ug), pointer :: bptr
-    call this%get_block_ptr(block_name, bptr, stat, errmsg)
-    if (stat /= 0) return
-    call bptr%write_temporal_point_data_${s["kind"]}$(name, array, stat, errmsg)
-  end subroutine
 #:endfor
 
-  !! This auxiliary procedure returns a pointer to the named block, or a null
+  !! This internal procedure returns a pointer to the named block, or a null
   !! pointer if the block does not exist. If successful (block exists) STAT
   !! returns 0; otherwise it returns a non-zero value and ERRMSG returns an
   !! informative error message.

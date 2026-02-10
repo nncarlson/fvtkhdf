@@ -26,6 +26,7 @@ module vtkhdf_ug_type
   use vtkhdf_h5_c_binding
   use vtkhdf_h5
   use vtkhdf_ctx_type
+  use vtkhdf_h5e_context_type
   use mpi
   implicit none
   private
@@ -305,7 +306,7 @@ contains
     call h5_write_dataset(this%ctx, this%root_id, 'Points', x, stat, errmsg)
     if (stat /= 0) return
 
-  end subroutine
+  end subroutine write_mesh_${r["kind"]}$_${i["kind"]}$
 
 #:endfor
 #:endfor
@@ -367,7 +368,17 @@ contains
 
     type(temporal_data), pointer :: new
 
-    INSIST(this%nsteps == 0)
+    if (this%ctx%global_any(this%nsteps < 0)) then
+      stat = 1
+      errmsg = 'UnstructuredGrid dataset not configured for temporal data'
+      return
+    end if
+
+    if (this%ctx%global_any(this%nsteps > 0)) then
+      stat = 1
+      errmsg = 'not allowed after first time step'
+      return
+    end if
 
     !! Dataset for the cell data
     associate (chunk_size => this%ncell_tot)
