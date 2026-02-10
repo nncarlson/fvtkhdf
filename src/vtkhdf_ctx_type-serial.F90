@@ -44,9 +44,8 @@ module vtkhdf_ctx_type
 
 contains
 
-  subroutine init(this, comm)
+  subroutine init(this)
     class(vtkhdf_ctx), intent(out) :: this
-    integer, intent(in) :: comm ! ignored in serial
   end subroutine
 
   subroutine close(this)

@@ -13,7 +13,7 @@ program vtkhdf_mb_test
 
   type(vtkhdf_mb_file) :: vizfile
 
-  call vizfile%create('mb_test.vtkhdf', 0, stat, errmsg)
+  call vizfile%create('mb_test.vtkhdf', stat, errmsg)
   if (stat /= 0) error stop errmsg
 
   !! The unstructured mesh data for a basic mesh unit. The full mesh will

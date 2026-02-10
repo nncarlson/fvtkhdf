@@ -134,11 +134,17 @@ contains
     end subroutine
   end subroutine
 
+#ifdef USE_MPI
   subroutine create(this, filename, comm, stat, errmsg)
+#else
+  subroutine create(this, filename, stat, errmsg)
+#endif
 
     class(vtkhdf_mb_file), intent(out) :: this
     character(*), intent(in) :: filename
+#ifdef USE_MPI
     integer, intent(in) :: comm
+#endif
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
 
@@ -148,8 +154,12 @@ contains
     type(vtkhdf_h5e_context) :: err_ctx
 
     ! MPI build: duplicates comm, caches rank/size
-    ! Serial build: ignores comm, sets rank=0, size=1
+    ! Serial build: no comm, sets rank=0, size=1
+#ifdef USE_MPI
     call this%ctx%init(comm)
+#else
+    call this%ctx%init()
+#endif
 
     call init_hdf5
     call err_ctx%capture

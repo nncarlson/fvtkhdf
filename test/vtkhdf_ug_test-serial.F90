@@ -13,7 +13,7 @@ program vtkhdf_ug_test
 
   type(vtkhdf_ug_file) :: vizfile
 
-  call vizfile%create('ug_test.vtkhdf', 0, stat, errmsg, temporal=.true.)
+  call vizfile%create('ug_test.vtkhdf', stat, errmsg, temporal=.true.)
   if (stat /= 0) error stop errmsg
 
   call get_mesh_data(x, cnode, xcnode, types)
