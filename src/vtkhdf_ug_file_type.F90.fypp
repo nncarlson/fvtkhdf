@@ -207,15 +207,15 @@ contains
 #:for loc in locations
 #:for s in num_specs
 
-  subroutine register_temporal_${loc}$_data_${s["kind"]}$(this, name, mold, stat, errmsg)
+  subroutine register_temporal_${loc}$_data_${s["kind"]}$(this, name, value_mold, stat, errmsg)
     class(vtkhdf_ug_file), intent(inout) :: this
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: mold(..)
+    ${s["decl"]}$, intent(in) :: value_mold(..)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    call this%ug%register_temporal_${loc}$_data_${s["kind"]}$(name, mold, stat, errmsg)
+    call this%ug%register_temporal_${loc}$_data_${s["kind"]}$(name, value_mold, stat, errmsg)
     call err_ctx%restore(stat)
   end subroutine
 #:endfor

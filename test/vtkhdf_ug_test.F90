@@ -12,7 +12,6 @@ program vtkhdf_ug_test
   integer,  allocatable :: cnode(:), xcnode(:)
   integer(int8), allocatable :: types(:)
   real(r8), allocatable :: s(:), v(:,:) ! scalar and vector data arrays
-  real(r8) :: s0(0), v0(3,0) ! molds for scalar and vector arrays
 
   call MPI_Init(istat)
   call MPI_Comm_size(MPI_COMM_WORLD, nproc, istat)
@@ -32,17 +31,19 @@ program vtkhdf_ug_test
 
   !!!! Register the data arrays that evolve with time.
 
-  call vizfile%register_temporal_cell_data('cell-scalar', s0, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
+    call vizfile%register_temporal_cell_data('cell-scalar', scalar_mold, stat, errmsg)
+    if (stat /= 0) error stop errmsg
 
-  call vizfile%register_temporal_cell_data('cell-vector', v0, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+    call vizfile%register_temporal_cell_data('cell-vector', vector_mold, stat, errmsg)
+    if (stat /= 0) error stop errmsg
 
-  call vizfile%register_temporal_point_data('point-scalar', s0, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+    call vizfile%register_temporal_point_data('point-scalar', scalar_mold, stat, errmsg)
+    if (stat /= 0) error stop errmsg
 
-  call vizfile%register_temporal_point_data('point-vector', v0, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+    call vizfile%register_temporal_point_data('point-vector', vector_mold, stat, errmsg)
+    if (stat /= 0) error stop errmsg
+  end associate
 
   !!!! Write the datasets for the first time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 

@@ -394,16 +394,16 @@ contains
   !! extent in the extendible dimension starts at 0.
 #:for s in num_specs_no_int8
 
-  subroutine create_unlimited_dataset_${s["suffix"]}$(ctx, loc_id, name, mold, chunk_size, stat, errmsg)
+  subroutine create_unlimited_dataset_${s["suffix"]}$(ctx, loc_id, name, value_mold, chunk_size, stat, errmsg)
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: mold(..)
+    ${s["decl"]}$, intent(in) :: value_mold(..)
     integer, intent(in) :: chunk_size
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     call create_unlimited_dataset_aux(ctx, loc_id, name, ${s["h5type"]}$, &
-        shape(mold,hsize_t), chunk_size, stat, errmsg)
+        shape(value_mold,hsize_t), chunk_size, stat, errmsg)
   end subroutine
 #:endfor
 
@@ -424,29 +424,22 @@ contains
     integer(hid_t) :: space_id, dcpl_id, dset_id
     integer(hsize_t), allocatable :: c_dims(:), maxdims(:), chunk_dims(:)
 
-    c_dims = dims
-    if (size(dims) > 1) c_dims = dims(size(dims):1:-1)
+    c_dims = [0_hsize_t, dims]
+    if (size(dims) > 1) c_dims(2:) = dims(size(dims):1:-1)
 
     !! Some parallel consistency checks on the input arguments. It is most
     !! likely that each rank calls CREATE_UNLIMITED_DATASET from the same
     !! line of code, and consequently it is generally safe to assume that
-    !! the data array type, rank, and shape (DIMS) will be consistent across
+    !! the data array type, rank, and shape will be compatible across
     !! all ranks, so we limit the checks to debug mode.
     ASSERT(c_dims_is_valid(ctx, c_dims))
     ASSERT(type_id_is_valid(ctx, type_id))
     ASSERT(chunk_is_valid(ctx, chunk_size))
 
-    if (size(c_dims) == 0) then
-      stat = 1
-      errmsg = 'invalid rank for unlimited dataset'
-      return
-    end if
-
     maxdims = c_dims
     maxdims(1) = H5S_UNLIMITED
     chunk_dims = c_dims
     chunk_dims(1) = chunk_size
-    c_dims(1) = 0
 
     space_id = H5Screate(c_dims, maxdims)
     INSIST(space_id > 0)

@@ -20,26 +20,29 @@ program vtkhdf_ug_test
   call vizfile%write_mesh(x, cnode, xcnode, types, stat, errmsg)
   if (stat /= 0) error stop errmsg
 
+  !! Register the datasets that evolve with time. At this stage the data arrays
+  !! are only used to glean their types and shapes.
+
+  associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
+    call vizfile%register_temporal_cell_data('cell-radius', scalar_mold, stat, errmsg)
+    if (stat /= 0) error stop errmsg
+
+    call vizfile%register_temporal_cell_data('cell-velocity', vector_mold, stat, errmsg)
+    if (stat /= 0) error stop errmsg
+
+    call vizfile%register_temporal_point_data('point-radius', scalar_mold, stat, errmsg)
+    if (stat /= 0) error stop errmsg
+
+    call vizfile%register_temporal_point_data('point-velocity', vector_mold, stat, errmsg)
+    if (stat /= 0) error stop errmsg
+  end associate
+
+  !! Generate some cell and point data for output
   call get_scalar_cell_data(x, cnode, xcnode, scalar_cell_data)
   call get_vector_cell_data(x, cnode, xcnode, vector_cell_data)
 
   call get_scalar_point_data(x, scalar_point_data)
   call get_vector_point_data(x, vector_point_data)
-
-  !! Register the datasets that evolve with time. At this stage the data arrays
-  !! are only used to glean their types and shapes.
-
-  call vizfile%register_temporal_cell_data('cell-radius', scalar_cell_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%register_temporal_cell_data('cell-velocity', vector_cell_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%register_temporal_point_data('point-radius', scalar_point_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%register_temporal_point_data('point-velocity', vector_point_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
 
   !!!! Write the data for the first time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 

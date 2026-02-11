@@ -366,10 +366,10 @@ contains
 #:for loc in locations
 #:for s in num_specs
 
-  subroutine register_temporal_${loc}$_data_${s["kind"]}$(this, block_name, name, mold, stat, errmsg)
+  subroutine register_temporal_${loc}$_data_${s["kind"]}$(this, block_name, name, value_mold, stat, errmsg)
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
-    ${s["decl"]}$, intent(in) :: mold(..)
+    ${s["decl"]}$, intent(in) :: value_mold(..)
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     type(vtkhdf_ug), pointer :: bptr
@@ -377,7 +377,7 @@ contains
     call this%get_block_ptr(block_name, bptr, stat, errmsg)
     if (stat /= 0) return
     call err_ctx%capture
-    call bptr%register_temporal_${loc}$_data_${s["kind"]}$(name, mold, stat, errmsg)
+    call bptr%register_temporal_${loc}$_data_${s["kind"]}$(name, value_mold, stat, errmsg)
     call err_ctx%restore(stat)
   end subroutine
 #:endfor

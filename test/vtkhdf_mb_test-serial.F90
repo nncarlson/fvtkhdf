@@ -35,26 +35,28 @@ program vtkhdf_mb_test
   !! Register the datasets that evolve with time. At this stage the data arrays
   !! are only used to glean their types and shapes.
 
+  associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
   ! Block-A has time-dependent cell data
+    call vizfile%register_temporal_cell_data('Block-A', 'cell-radius', scalar_mold, stat, errmsg)
+    if (stat /= 0) error stop errmsg
 
+    call vizfile%register_temporal_cell_data('Block-A', 'cell-velocity', vector_mold, stat, errmsg)
+    if (stat /= 0) error stop errmsg
+
+    ! Block-B has time-dependent point data
+    call vizfile%register_temporal_point_data('Block-B', 'point-radius', scalar_mold, stat, errmsg)
+    if (stat /= 0) error stop errmsg
+
+    call vizfile%register_temporal_point_data('Block-B', 'point-velocity', vector_mold, stat, errmsg)
+    if (stat /= 0) error stop errmsg
+  end associate
+
+  !! Generate some cell and point data to use for output
   call get_scalar_cell_data(x, cnode, xcnode, scalar_cell_data)
   call get_vector_cell_data(x, cnode, xcnode, vector_cell_data)
 
-  call vizfile%register_temporal_cell_data('Block-A', 'cell-radius', scalar_cell_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%register_temporal_cell_data('Block-A', 'cell-velocity', vector_cell_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  ! Block-B has time-dependent point data
   call get_scalar_point_data(x+1, scalar_point_data)
   call get_vector_point_data(x+1, vector_point_data)
-
-  call vizfile%register_temporal_point_data('Block-B', 'point-radius', scalar_point_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%register_temporal_point_data('Block-B', 'point-velocity', vector_point_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
 
   !!!! Write the data for the first time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 

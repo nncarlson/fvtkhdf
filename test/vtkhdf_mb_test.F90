@@ -60,16 +60,18 @@ program vtkhdf_mb_test
 
   !!!! Register the data arrays that evolve with time.
 
-  do j = 0, nproc-1
-    call vizfile%register_temporal_cell_data(name(j), 'cell-scalar', s0, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-    call vizfile%register_temporal_cell_data(name(j), 'cell-vector', v0, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-    call vizfile%register_temporal_point_data(name(j), 'point-scalar', s0, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-    call vizfile%register_temporal_point_data(name(j), 'point-vector', v0, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-  end do
+  associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
+    do j = 0, nproc-1
+      call vizfile%register_temporal_cell_data(name(j), 'cell-scalar', scalar_mold, stat, errmsg)
+      if (stat /= 0) error stop errmsg
+      call vizfile%register_temporal_cell_data(name(j), 'cell-vector', vector_mold, stat, errmsg)
+      if (stat /= 0) error stop errmsg
+      call vizfile%register_temporal_point_data(name(j), 'point-scalar', scalar_mold, stat, errmsg)
+      if (stat /= 0) error stop errmsg
+      call vizfile%register_temporal_point_data(name(j), 'point-vector', vector_mold, stat, errmsg)
+      if (stat /= 0) error stop errmsg
+    end do
+  end associate
 
   !!!! Write the datasets for the first time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
