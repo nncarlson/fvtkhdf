@@ -79,6 +79,12 @@ target_link_libraries(fvtkhdf PRIVATE cshim)
 
 # --- Installation & Export ---
 
+set_target_properties(fvtkhdf PROPERTIES
+    INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}"
+    SKIP_BUILD_RPATH FALSE
+    BUILD_WITH_INSTALL_RPATH FALSE
+)
+
 # 1. Install Targets (Library & Shim)
 install(TARGETS fvtkhdf
     EXPORT fVTKHDFTargets
