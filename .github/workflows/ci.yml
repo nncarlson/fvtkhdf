@@ -31,10 +31,14 @@ jobs:
       run: pip3 install fypp
 
     - name: Configure CMake
-      run: >
-        cmake -B build 
-        -DCMAKE_BUILD_TYPE=Debug 
-        -DENABLE_MPI=${{ matrix.mpi }}
+      run: |
+        if [ "${{ matrix.mpi }}" == "ON" ]; then
+          export CC=mpicc
+          export FC=mpif90
+        fi
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DENABLE_MPI=${{ matrix.mpi }}
 
     - name: Build
       run: cmake --build build --parallel 2
