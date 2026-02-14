@@ -17,7 +17,7 @@
 !! preserve the same semantics as the MPI implementation.
 !!
 
-#include "f90_assert.fpp"
+#include "vtkhdf_assert.inc"
 
 module vtkhdf_ctx_type
 
@@ -30,7 +30,7 @@ module vtkhdf_ctx_type
     integer :: size = 1
   contains
     procedure :: init
-    procedure :: close
+    procedure :: free
     procedure :: global_any, global_all
     generic :: global_sum => global_sum_int32_0, global_sum_int64_0
     generic :: global_min => global_min_int32_1, global_min_int64_1
@@ -48,7 +48,7 @@ contains
     class(vtkhdf_ctx), intent(out) :: this
   end subroutine
 
-  subroutine close(this)
+  subroutine free(this)
     class(vtkhdf_ctx), intent(inout) :: this
     this%rank = 0
     this%size = 1

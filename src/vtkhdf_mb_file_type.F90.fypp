@@ -20,7 +20,15 @@
 !! https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html#
 !!
 
-#include "f90_assert.fpp"
+#include "vtkhdf_assert.inc"
+
+#:set int_specs  = [ {"kind":"int32",  "decl":"integer(int32)"}, &
+                   & {"kind":"int64",  "decl":"integer(int64)"} ]
+#:set real_specs = [ {"kind":"real32", "decl":"real(real32)"}, &
+                   & {"kind":"real64", "decl":"real(real64)"} ]
+#:set num_specs = int_specs + real_specs
+#:set locations = ["cell", "point"]
+#:set data_specs = [ {"suffix":"scalar", "mold":"", "array":"(:)"}, {"suffix":"vector", "mold":"(:)", "array":"(:,:)"} ]
 
 module vtkhdf_mb_file_type
 
@@ -36,18 +44,13 @@ module vtkhdf_mb_file_type
 
   public :: vtkhdf_version
 
-#:set int_specs  = [ {"kind":"int32",  "decl":"integer(int32)"}, &
-                   & {"kind":"int64",  "decl":"integer(int64)"} ]
-#:set real_specs = [ {"kind":"real32", "decl":"real(real32)"}, &
-                   & {"kind":"real64", "decl":"real(real64)"} ]
-#:set num_specs = int_specs + real_specs
-#:set locations = ["cell", "point"]
   type, public :: vtkhdf_mb_file
     private
     type(vtkhdf_ctx) :: ctx
     integer(hid_t) :: file_id=H5I_INVALID_HID, vtk_id=H5I_INVALID_HID, ass_id=H5I_INVALID_HID
     integer :: next_bid = 0
     type(pdc_block), pointer :: blocks => null()
+    logical :: is_temporal = .false., write_time_step_called = .false.
   contains
     procedure :: create
     procedure :: close
@@ -61,12 +64,14 @@ module vtkhdf_mb_file_type
     procedure :: write_time_step
 #:for s in num_specs
 #:for loc in locations
-    generic :: write_${loc}$_data => write_${loc}$_data_${s["kind"]}$
-    procedure, private :: write_${loc}$_data_${s["kind"]}$
-    generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${s["kind"]}$
-    procedure, private :: register_temporal_${loc}$_data_${s["kind"]}$
-    generic :: write_temporal_${loc}$_data => write_temporal_${loc}$_data_${s["kind"]}$
-    procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$
+#:for d in data_specs
+    generic :: write_${loc}$_data => write_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
+    procedure, private :: write_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
+    generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
+    procedure, private :: register_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
+    generic :: write_temporal_${loc}$_data => write_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
+    procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
+#:endfor
 #:endfor
 #:endfor
     procedure, private :: get_block_ptr
@@ -126,7 +131,7 @@ contains
     if (H5Iis_valid(this%vtk_id) > 0) ierr = H5Gclose(this%vtk_id)
     if (H5Iis_valid(this%file_id) > 0) ierr = H5Fclose(this%file_id)
     call err_ctx%restore(0)
-    call this%ctx%close ! frees duplicated comm in MPI build
+    call this%ctx%free  ! frees duplicated comm in MPI build
     call finalize(this) ! free local memory
   contains
     subroutine finalize(this)
@@ -170,7 +175,10 @@ contains
     ierr = H5Pclose(fapl)
     if (this%ctx%global_any(this%file_id < 0)) then
       stat = 1
-      errmsg = 'failed to open file'
+      errmsg = 'failed to open file "' // filename // '"'
+      if (this%file_id > 0) ierr = H5Fclose(this%file_id)
+      this%file_id = H5I_INVALID_HID
+      call this%ctx%free
       call err_ctx%restore(stat)
       return
     end if
@@ -184,54 +192,40 @@ contains
 
     !! Create the root VTKHDF group and write its attributes
     this%vtk_id = H5Gcreate(this%file_id, 'VTKHDF', gcpl_id=gcpl)
-    if (this%ctx%global_any(this%vtk_id < 0)) then
-      stat = 1
-      errmsg = 'failed to create "VTKHDF" group'
-      call err_ctx%restore(stat)
-      return
-    end if
+    INSIST(this%ctx%global_all(this%vtk_id >= 0))
 
-    call h5_write_attr(this%ctx, this%vtk_id, 'Version', vtkhdf_version, stat, errmsg)
-    if (stat /= 0) then
-      call err_ctx%restore(stat)
-      return
-    end if
+    call h5_write_attr(this%ctx, this%vtk_id, 'Version', vtkhdf_version)
 
     !NB: We stick with the older MB type due to an issue with the modern PDC
     !type; see https://gitlab.kitware.com/vtk/vtk/-/issues/19902
     !call h5_write_attr(this%ctx, this%vtk_id, 'Type', 'PartitionedDataSetCollection', stat, errmsg)
-    call h5_write_attr(this%ctx, this%vtk_id, 'Type', 'MultiBlockDataSet', stat, errmsg)
-    if (stat /= 0) then
-      call err_ctx%restore(stat)
-      return
-    end if
+    call h5_write_attr(this%ctx, this%vtk_id, 'Type', 'MultiBlockDataSet')
 
     !! Create the Assembly group
     this%ass_id = H5Gcreate(this%vtk_id, 'Assembly', gcpl_id=gcpl)
     ierr = H5Pclose(gcpl)
-    if (this%ctx%global_any(this%ass_id < 0)) then
-      stat = 1
-      errmsg = 'failed to create "Assembly" group'
-      call err_ctx%restore(stat)
-      return
-    end if
+    INSIST(this%ctx%global_all(this%ass_id >= 0))
 
-    call err_ctx%restore(0)
+    stat = 0
+    call err_ctx%restore(stat)
 
   end subroutine create
 
 
-  subroutine add_block(this, name, stat, errmsg, temporal)
+  subroutine add_block(this, name, stat, errmsg, is_temporal)
 
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: name
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    logical, intent(in), optional :: temporal
+    logical, intent(in), optional :: is_temporal
 
     integer :: n, ierr
     type(pdc_block), pointer :: b, new
     type(vtkhdf_h5e_context) :: err_ctx
+    logical :: temporal_flag
+
+    INSIST(this%file_id >= 0)
 
     !! Ensure the specified NAME is valid
     if (name == '') then
@@ -263,6 +257,15 @@ contains
       b => b%next
     end do
 
+    ! If a block is temporal, it must be added before the
+    ! timeline starts to ensure step-count consistency.
+    temporal_flag = .false.
+    if (present(is_temporal)) temporal_flag = is_temporal
+    if (temporal_flag) then
+      INSIST(.not.this%write_time_step_called)
+      this%is_temporal = .true.
+    end if
+
     !! Create the UG block group and its HDF5 hierarchy
     allocate(new)
     new%name = name
@@ -271,30 +274,15 @@ contains
 
     call err_ctx%capture ! begin HDF5 calls
 
-    call new%b%init(this%vtk_id, name, this%ctx, stat, errmsg, temporal)
-    if (stat /= 0) then
-      errmsg = 'error adding UnstructuredGrid block "' // name // '": ' // errmsg
-      call err_ctx%restore(stat)
-      return
-    end if
+    call new%b%init(this%vtk_id, name, this%ctx, is_temporal)
 
     !NB: Unused for MultiBlockDataSet, but required for PartitionedDataSetCollection.
-    call h5_write_attr(this%ctx, new%b%root_id, 'Index', this%next_bid, stat, errmsg)
-    if (stat /= 0) then
-      errmsg = 'error adding UnstructuredGrid block "' // name // '": ' // errmsg
-      call err_ctx%restore(stat)
-      return
-    end if
+    call h5_write_attr(this%ctx, new%b%root_id, 'Index', this%next_bid)
     this%next_bid = this%next_bid + 1
 
     !! Create a softlink in Assembly group to the block group.
     ierr = H5Lcreate_soft('/VTKHDF/'//name, this%ass_id, name)
-    if (this%ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'unable to create "Assembly" group link to block "' // name // '"'
-      call err_ctx%restore(stat)
-      return
-    end if
+    INSIST(this%ctx%global_all(ierr >= 0))
 
     stat = 0
     call err_ctx%restore(stat)
@@ -303,30 +291,27 @@ contains
 
   !! Write the UnstructuredGrid data for the specified block. The unstructured
   !! mesh is described in the conventional manner by the X, CNODE, and XCNODE
-  !! arrays. The additional array TYPES provides the VTK specification the cell
-  !! type. This procedure must be called for each of the blocks before any of
-  !! the following procedures.
+  !! arrays. The additional array TYPES specifies the VTK cell types. This
+  !! procedure must be called for each of the blocks before any of the
+  !! following procedures.
 #:for r in real_specs
 #:for i in int_specs
 
-  subroutine write_block_mesh_${r["kind"]}$_${i["kind"]}$(this, block_name, x, cnode, xcnode, types, stat, errmsg)
+  subroutine write_block_mesh_${r["kind"]}$_${i["kind"]}$(this, block_name, x, cnode, xcnode, types)
 
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name
     ${r["decl"]}$, intent(in) :: x(:,:)
     ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
 
     type(vtkhdf_ug), pointer :: bptr
     type(vtkhdf_h5e_context) :: err_ctx
 
-    call this%get_block_ptr(block_name, bptr, stat, errmsg)
-    if (stat /= 0) return
     call err_ctx%capture
-    call bptr%write_mesh(x, cnode, xcnode, types, stat, errmsg)
-    call err_ctx%restore(stat)
+    call this%get_block_ptr(block_name, bptr)
+    call bptr%write_mesh(x, cnode, xcnode, types)
+    call err_ctx%restore(0)
 
   end subroutine write_block_mesh_${r["kind"]}$_${i["kind"]}$
 
@@ -338,21 +323,20 @@ contains
   !! datasets, this dataset is static and not associated with any time step.
 #:for loc in locations
 #:for s in num_specs
+#:for d in data_specs
 
-  subroutine write_${loc}$_data_${s["kind"]}$(this, block_name, name, array, stat, errmsg)
+  subroutine write_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, block_name, name, array)
     class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
-    ${s["decl"]}$, intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
+    ${s["decl"]}$, intent(in) :: array${d["array"]}$
     type(vtkhdf_ug), pointer :: bptr
     type(vtkhdf_h5e_context) :: err_ctx
-    call this%get_block_ptr(block_name, bptr, stat, errmsg)
-    if (stat /= 0) return
     call err_ctx%capture
-    call bptr%write_${loc}$_data_${s["kind"]}$(name, array, stat, errmsg)
-    call err_ctx%restore(stat)
+    call this%get_block_ptr(block_name, bptr)
+    call bptr%write_${loc}$_data(name, array)
+    call err_ctx%restore(0)
   end subroutine
+#:endfor
 #:endfor
 #:endfor
 
@@ -365,21 +349,20 @@ contains
   !! data are supported (rank-1, 2, and 3 MOLD).
 #:for loc in locations
 #:for s in num_specs
+#:for d in data_specs
 
-  subroutine register_temporal_${loc}$_data_${s["kind"]}$(this, block_name, name, value_mold, stat, errmsg)
+  subroutine register_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, block_name, name, mold)
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
-    ${s["decl"]}$, intent(in) :: value_mold(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
+    ${s["decl"]}$, intent(in) :: mold${d["mold"]}$
     type(vtkhdf_ug), pointer :: bptr
     type(vtkhdf_h5e_context) :: err_ctx
-    call this%get_block_ptr(block_name, bptr, stat, errmsg)
-    if (stat /= 0) return
     call err_ctx%capture
-    call bptr%register_temporal_${loc}$_data_${s["kind"]}$(name, value_mold, stat, errmsg)
-    call err_ctx%restore(stat)
+    call this%get_block_ptr(block_name, bptr)
+    call bptr%register_temporal_${loc}$_data(name, mold)
+    call err_ctx%restore(0)
   end subroutine
+#:endfor
 #:endfor
 #:endfor
 
@@ -392,6 +375,8 @@ contains
     type(pdc_block), pointer :: b
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
+    INSIST(this%is_temporal)
+    this%write_time_step_called = .true.
     b => this%blocks
     do while (associated(b))
       if (b%b%nsteps >= 0) call b%b%write_time_step(time)
@@ -405,36 +390,29 @@ contains
   !! current time step.
 #:for loc in locations
 #:for s in num_specs
+#:for d in data_specs
 
-  subroutine write_temporal_${loc}$_data_${s["kind"]}$(this, block_name, name, array, stat, errmsg)
+  subroutine write_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, block_name, name, array)
     class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: block_name, name
-    ${s["decl"]}$, intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable :: errmsg
+    ${s["decl"]}$, intent(in) :: array${d["array"]}$
     type(vtkhdf_ug), pointer :: bptr
     type(vtkhdf_h5e_context) :: err_ctx
-    call this%get_block_ptr(block_name, bptr, stat, errmsg)
-    if (stat /= 0) return
     call err_ctx%capture
-    call bptr%write_temporal_${loc}$_data_${s["kind"]}$(name, array, stat, errmsg)
-    call err_ctx%restore(stat)
+    call this%get_block_ptr(block_name, bptr)
+    call bptr%write_temporal_${loc}$_data(name, array)
+    call err_ctx%restore(0)
   end subroutine
 #:endfor
 #:endfor
+#:endfor
 
-  !! This internal procedure returns a pointer to the named block, or a null
-  !! pointer if the block does not exist. If successful (block exists) STAT
-  !! returns 0; otherwise it returns a non-zero value and ERRMSG returns an
-  !! informative error message.
-
-  subroutine get_block_ptr(this, name, bptr, stat, errmsg)
+  !! This private procedure returns a pointer to the named block.
+  subroutine get_block_ptr(this, name, bptr)
 
     class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: name
     type(vtkhdf_ug), pointer, intent(out) :: bptr
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
 
     type(pdc_block), pointer :: b
 
@@ -444,13 +422,8 @@ contains
       b => b%next
     end do
 
-    stat = merge(0, -1, associated(b))
-    if (stat == 0) then
-      bptr => b%b
-    else
-      bptr => null()
-      errmsg = 'no such block "' // name // '"'
-    end if
+    INSIST(this%ctx%global_all(associated(b)))
+    bptr => b%b
 
   end subroutine get_block_ptr
 

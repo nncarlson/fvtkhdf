@@ -6,9 +6,10 @@ set(FYPP_SRC
 )
 
 add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC} FLAGS --line-numbering)
+#add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC})
 
 set(SRC
-  f90_assert.F90
+  vtkhdf_assert.F90
   vtkhdf_h5_c_binding.F90
   vtkhdf_version_param.F90
   vtkhdf_h5e_context_type.F90

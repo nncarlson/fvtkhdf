@@ -45,10 +45,10 @@ module vtkhdf_h5_c_binding
   integer(hsize_t), parameter :: H5S_UNLIMITED = -1 ! UINT64_MAX
 
   !! Header file constants from H5Fpublic.h
-  integer(c_int), parameter :: H5F_ACC_RDONLY = Z'0000'
-  integer(c_int), parameter :: H5F_ACC_RDWR   = Z'0001'
-  integer(c_int), parameter :: H5F_ACC_TRUNC  = Z'0002'
-  integer(c_int), parameter :: H5F_ACC_EXCL   = Z'0004'
+  integer(c_int), parameter :: H5F_ACC_RDONLY = int(Z'0000', c_int)
+  integer(c_int), parameter :: H5F_ACC_RDWR   = int(Z'0001', c_int)
+  integer(c_int), parameter :: H5F_ACC_TRUNC  = int(Z'0002', c_int)
+  integer(c_int), parameter :: H5F_ACC_EXCL   = int(Z'0004', c_int)
 
   !! Header file constants from H5Ppublic.h
   integer(hid_t), parameter :: H5P_DEFAULT = 0
@@ -153,9 +153,21 @@ module vtkhdf_h5_c_binding
       type(*), intent(in) :: buf(*)
       integer(c_int) :: h5err
     end function
+
+    function H5Aget_type(attr_id) result(type_id) bind(c,name='H5Aget_type')
+      import :: hid_t
+      integer(hid_t), value :: attr_id
+      integer(hid_t) :: type_id
+    end function
+
+    function H5Aget_space(attr_id) result(space_id) bind(c,name='H5Aget_space')
+      import :: hid_t
+      integer(hid_t), value :: attr_id
+      integer(hid_t) :: space_id
+    end function
   end interface
 
-  public :: H5Aclose, H5Awrite
+  public :: H5Aclose, H5Awrite, H5Aget_type, H5Aget_space
   public :: H5Acreate, H5Aopen, H5Aexists
 
   interface H5Acreate
@@ -740,22 +752,23 @@ contains
     dset_id = H5Dcreate2_c(loc_id, name//c_null_char, type_id, space_id, lcpl_id_, dcpl_id_, dapl_id_)
   end function
 
-  logical function H5Lexists(loc_id, name, lapl_id) result(exists)
+  function H5Lexists(loc_id, name, lapl_id) result(exists)
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     integer(hid_t), intent(in), optional :: lapl_id
+    integer(c_int) :: exists
     interface
-      function H5Lexists_c(loc_id, name, lapl_id) result(res) bind(c,name='H5Lexists')
+      function H5Lexists_c(loc_id, name, lapl_id) result(htri) bind(c,name='H5Lexists')
         import :: hid_t, c_int
         integer(hid_t), value :: loc_id
         character, intent(in) :: name(*)
         integer(hid_t), value :: lapl_id
-        integer(c_int) :: res
+        integer(c_int) :: htri
       end function
     end interface
     integer(hid_t) :: lapl_id_
     lapl_id_ = H5P_DEFAULT; if (present(lapl_id)) lapl_id_ = lapl_id
-    exists = (H5Lexists_c(loc_id, name//c_null_char, lapl_id_) > 0)
+    exists = H5Lexists_c(loc_id, name//c_null_char, lapl_id_)
   end function
 
   function H5Lcreate_soft(link_target, link_loc_id, link_name, lcpl_id, lapl_id) result(h5err)

@@ -9,7 +9,7 @@
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
 
-#include "f90_assert.fpp"
+#include "vtkhdf_assert.inc"
 
 module vtkhdf_ctx_type
 
@@ -24,7 +24,7 @@ module vtkhdf_ctx_type
     integer :: size = 1
   contains
     procedure :: init
-    procedure :: close
+    procedure :: free
     procedure :: global_any, global_all
     generic :: global_sum => global_sum_int32_0, global_sum_int64_0
     generic :: global_min => global_min_int32_1, global_min_int64_1
@@ -48,7 +48,7 @@ contains
     call MPI_Comm_size(this%comm, this%size, ierr)
   end subroutine
 
-  subroutine close(this)
+  subroutine free(this)
     class(vtkhdf_ctx), intent(inout) :: this
     integer :: ierr
     if (this%comm /= MPI_COMM_NULL) call MPI_Comm_free(this%comm, ierr)

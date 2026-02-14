@@ -13,15 +13,22 @@
 !!
 !! NOTES
 !!
-!! When compiled with parallel enabled (via the VTKHDF_CTX_TYPE module, whose
-!! implementation hides all MPI details), all public procedures are collective
-!! operations. The STAT and ERRMSG arguments are collective outputs:
-!!
-!! * STAT has the same value on all ranks
-!! * If STAT /= 0, ERRMSG has the same value on all ranks
+!! All public procedures are collective operations. This module follows a
+!! "fail-fast" philosophy: internal logic errors, schema mismatches, or
+!! unrecoverable HDF5/filesystem failures trigger an immediate global
+!! MPI_Abort (via f90_assert) to prevent deadlocks and ensure file integrity.
 !!
 
-#include "f90_assert.fpp"
+#include "vtkhdf_assert.inc"
+
+#:set num_specs = [ &
+& {"kind":"int8",   "decl":"integer(int8)",  "h5type":"H5T_NATIVE_UINT8"}, &
+& {"kind":"int32",  "decl":"integer(int32)", "h5type":"H5T_NATIVE_INT32"}, &
+& {"kind":"int64",  "decl":"integer(int64)", "h5type":"H5T_NATIVE_INT64"}, &
+& {"kind":"real32", "decl":"real(real32)",   "h5type":"H5T_NATIVE_FLOAT"}, &
+& {"kind":"real64", "decl":"real(real64)",   "h5type":"H5T_NATIVE_DOUBLE"}, &
+&]
+#:set num_specs_no_int8 = [s for s in num_specs if s["kind"] != "int8"]
 
 module vtkhdf_h5
 
@@ -33,60 +40,47 @@ module vtkhdf_h5
 
   public :: h5_write_attr, h5_create_unlimited_dataset, h5_write_dataset, h5_append_to_dataset
 
-#:set num_specs = [ &
-& {"suffix":"int8",   "decl":"integer(int8)",  "h5type":"H5T_NATIVE_UINT8"}, &
-& {"suffix":"int32",  "decl":"integer(int32)", "h5type":"H5T_NATIVE_INT32"}, &
-& {"suffix":"int64",  "decl":"integer(int64)", "h5type":"H5T_NATIVE_INT64"}, &
-& {"suffix":"real32", "decl":"real(real32)",   "h5type":"H5T_NATIVE_FLOAT"}, &
-& {"suffix":"real64", "decl":"real(real64)",   "h5type":"H5T_NATIVE_DOUBLE"}, &
-&]
-#:set num_specs_no_int8 = [s for s in num_specs if s["suffix"] != "int8"]
   interface h5_write_attr
 #:for s in num_specs
-    procedure write_attr_${s["suffix"]}$
+    procedure write_attr_${s["kind"]}$
 #:endfor
     procedure write_attr_string
   end interface
 
   interface h5_write_dataset
 #:for s in num_specs
-    procedure write_dataset_${s["suffix"]}$
+    procedure write_dataset_${s["kind"]}$
 #:endfor
   end interface
 
   interface h5_create_unlimited_dataset
 #:for s in num_specs_no_int8
-    procedure create_unlimited_dataset_${s["suffix"]}$
+    procedure create_unlimited_dataset_${s["kind"]}$
 #:endfor
   end interface
 
   interface h5_append_to_dataset
 #:for s in num_specs_no_int8
-    procedure append_to_dataset_${s["suffix"]}$
+    procedure append_to_dataset_${s["kind"]}$
 #:endfor
   end interface
 
 contains
 #:for s in num_specs
 
-  subroutine write_attr_${s["suffix"]}$(ctx, obj_id, name, value, stat, errmsg)
+  subroutine write_attr_${s["kind"]}$(ctx, obj_id, name, value)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: value(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
 
     integer(hid_t) :: type_id, attr_id
     integer :: ierr
 
     type_id = ${s["h5type"]}$
 
-    !TODO: broadcast value from rank 0 to ensure consistency across ranks
-
-    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
-    if (stat /= 0) return
+    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id)
 
     select rank (value)
     rank (0)
@@ -98,19 +92,15 @@ contains
     rank default
       INSIST(.false.)
     end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing attribute "' // name // '"'
-    end if
+    INSIST(ctx%global_all(ierr >= 0))
 
     ierr = H5Aclose(attr_id)
 
-  end subroutine write_attr_${s["suffix"]}$
+  end subroutine write_attr_${s["kind"]}$
 
 #:endfor
 
-  subroutine write_attr_string(ctx, obj_id, name, value, stat, errmsg)
+  subroutine write_attr_string(ctx, obj_id, name, value)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
@@ -120,21 +110,16 @@ contains
 #else
     character(*), intent(in) :: value(..)
 #endif
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
 
     integer(hid_t) :: type_id, attr_id
     integer :: ierr
-
-    !TODO: broadcast value from rank 0 to ensure consistency across ranks
 
     type_id = H5Tcopy(H5T_NATIVE_CHARACTER)
     INSIST(type_id > 0)
     ierr = H5Tset_size(type_id, len(value, kind=c_size_t))
     INSIST(ierr >= 0)
 
-    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id, stat, errmsg)
-    if (stat /= 0) return
+    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id)
 
 #ifdef INTEL_BUG20240327
     ierr = H5Awrite(attr_id, type_id, [value])
@@ -150,11 +135,7 @@ contains
       INSIST(.false.)
     end select
 #endif
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing attribute "' // name // '"'
-    end if
+    INSIST(ctx%global_all(ierr >= 0))
 
     ierr = H5Aclose(attr_id)
     ierr = H5Tclose(type_id)
@@ -162,7 +143,7 @@ contains
   end subroutine write_attr_string
 
 
-  subroutine get_attr_id(ctx, obj_id, name, type_id, dims, attr_id, stat, errmsg)
+  subroutine get_attr_id(ctx, obj_id, name, type_id, dims, attr_id)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
@@ -170,8 +151,6 @@ contains
     integer(hid_t), intent(in) :: type_id
     integer(hsize_t), intent(in) :: dims(:) ! the Fortran shape
     integer(hid_t), intent(out) :: attr_id
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
 
     integer(hid_t) :: space_id
     integer :: htri, ierr
@@ -180,13 +159,31 @@ contains
     if (ctx%global_all(htri > 0)) then
       attr_id = H5Aopen(obj_id, name)
       INSIST(attr_id > 0)
-      !TODO? Validate its type and shape against the inputs
-      stat = 0
+      block ! Check that the input type matches the file type
+        integer(hid_t) :: file_type_id
+        file_type_id = H5Aget_type(attr_id)
+        INSIST(ctx%global_all(H5Tequal(file_type_id, type_id) > 0))
+        ierr = H5Tclose(file_type_id)
+      end block
+      block ! Check that the input shape matches the file type
+        integer(hid_t) :: file_space_id
+        integer :: file_ndims
+        integer(hsize_t), allocatable :: file_dims(:)
+        file_space_id = H5Aget_space(attr_id)
+        file_ndims = H5Sget_simple_extent_ndims(file_space_id)
+        ! Check rank compatibility (scalar = 0)
+        INSIST(ctx%global_all(file_ndims == size(dims)))
+        if (file_ndims > 0) then ! Check dimensions if not scalar
+          allocate(file_dims(file_ndims))
+          ierr = H5Sget_simple_extent_dims(file_space_id, file_dims)
+          ! Note: file_dims is C-ordered, dims is Fortran-ordered
+          INSIST(ctx%global_all(all(file_dims == dims(size(dims):1:-1))))
+        end if
+        ierr = H5Sclose(file_space_id)
+      end block
       return
     else if (ctx%global_any(htri /= 0)) then
-      stat = 1
-      errmsg = 'inconsistent existence of attribute "' // name // '" across ranks'
-      return
+      INSIST(.false.) ! ranks disagree on existence of the attribute
     end if
 
     !! It doesn't exist, so create it
@@ -202,19 +199,12 @@ contains
         space_id = H5Screate(c_dims)
       end block
     end select
-    INSIST(space_id > 0)
+    INSIST(space_id >= 0)
 
     attr_id = H5Acreate(obj_id, name, type_id, space_id)
-    if (ctx%global_any(attr_id < 0)) then
-      stat = 1
-      errmsg = 'unable to create attribute "' // name // '"'
-      if (attr_id > 0) ierr = H5Aclose(attr_id)
-      ierr = H5Sclose(space_id)
-      return
-    end if
+    INSIST(ctx%global_all(attr_id >= 0))
 
     ierr = H5Sclose(space_id)
-    stat = 0
 
   end subroutine get_attr_id
 
@@ -231,14 +221,12 @@ contains
   !! dataset itself is a collective operation.
 #:for s in num_specs
 
-  subroutine write_dataset_${s["suffix"]}$(ctx, loc_id, name, array, stat, errmsg, root)
+  subroutine write_dataset_${s["kind"]}$(ctx, loc_id, name, array, root)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
 
     integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl_id
@@ -246,9 +234,8 @@ contains
 
     type_id = ${s["h5type"]}$
 
-    call write_dataset_aux(ctx, loc_id, name, type_id, shape(array,hsize_t), &
-        dset_id, mem_space_id, data_space_id, stat, errmsg, root)
-    if (stat /= 0) return
+    call write_dataset_common(ctx, loc_id, name, type_id, shape(array,hsize_t), &
+        dset_id, mem_space_id, data_space_id, root)
 
     call ctx%get_dxpl(dxpl_id) ! collective data transfer in MPI build
 
@@ -262,11 +249,7 @@ contains
     rank default
       INSIST(.false.)
     end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing to dataset "' // name // '"'
-    end if
+    INSIST(ctx%global_any(ierr >= 0))
 
     !! Cleanup
     ierr = H5Pclose(dxpl_id)
@@ -274,28 +257,26 @@ contains
     ierr = H5Sclose(data_space_id)
     ierr = H5Dclose(dset_id)
 
-  end subroutine write_dataset_${s["suffix"]}$
+  end subroutine write_dataset_${s["kind"]}$
 
 #:endfor
 
-  !! This auxiliary procedure extracts the part of WRITE_DATASET common to
+  !! This private procedure extracts the part of WRITE_DATASET common to
   !! all types and ranks of the data array. It does not depend on the array
-  !! directly, but only on its shape (DIMS) and its HDF5 type (TYPE_ID). It
-  !! creates the dataset and the dataspaces for the data array and the part
-  !! of the dataset where the array will be written. If ROOT is present,
+  !! directly, but only on its shape (DIMS) and its HDF5 datatype (TYPE_ID).
+  !! It creates the dataset and the dataspaces for the data array and the
+  !! part of the dataset where the array will be written. If ROOT is present,
   !! only that MPI rank will write, but all ranks must still participate
   !! in the subsequent collective H5Dwrite call.
 
-  subroutine write_dataset_aux(ctx, loc_id, name, type_id, dims, &
-      dset_id, mem_space_id, data_space_id, stat, errmsg, root)
+  subroutine write_dataset_common(ctx, loc_id, name, type_id, dims, &
+      dset_id, mem_space_id, data_space_id, root)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id, type_id
     character(*), intent(in) :: name
     integer(hsize_t), intent(in) :: dims(:)
     integer(hid_t), intent(out) :: dset_id, mem_space_id, data_space_id
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
 
     integer :: ierr, rank
@@ -311,16 +292,10 @@ contains
       if (size(dims) > 1) mem_dims = dims(size(dims):1:-1) ! reverse order for the C shape
     end if
 
-    !! Some parallel consistency checks on the input arguments. It is most
-    !! likely that each rank calls WRITE_DATASET from the same line of code,
-    !! and consequently it is generally safe to assume that the data array
-    !! type, rank, and shape will be consistent across all ranks, so we
-    !! limit the checks to debug mode.
-    ASSERT(c_dims_is_valid(ctx, mem_dims))
-    ASSERT(type_id_is_valid(ctx, type_id))
-    ASSERT(root_is_valid(ctx, root))
+    ASSERT(all(mem_dims(2:) > 0))
 
     if (present(root)) then
+      ASSERT((root >= 0) .and. (root < ctx%size))
       rank_writes = (root == ctx%rank)
     else
       rank_writes = .true.
@@ -330,22 +305,13 @@ contains
 
     !! Create the dataset
     call ctx%global_sum(mem_dims(1), n)
-    if (n == 0) then
-      stat = 1
-      errmsg = 'writing empty dataset "' // name // '" is not supported'
-      return
-    end if
+    INSIST(n > 0) ! writing an empy dataset not allowed
     data_dims = mem_dims
     data_dims(1) = n
     data_space_id = H5Screate(data_dims)
     INSIST(data_space_id > 0)
     dset_id = H5Dcreate(loc_id, name, type_id, data_space_id)
-    if (ctx%global_any(dset_id < 0)) then
-      stat = 1
-      errmsg = 'error creating dataset "' // name // '"'
-      ierr = H5Sclose(data_space_id)
-      return
-    end if
+    INSIST(ctx%global_all(dset_id >= 0))
 
     !! Starting index for the dataset hyperslab for this rank
     allocate(start, mold=mem_dims)
@@ -367,49 +333,35 @@ contains
     else ! rank contributes nothing
       ierr = H5Sselect_none(data_space_id)
     end if
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error creating hyperslab of dataset "' // name // '"'
-      ierr = H5Sclose(data_space_id)
-      ierr = H5Sclose(mem_space_id)
-      ierr = H5Dclose(dset_id)
-      return
-    end if
+    INSIST(ctx%global_all(ierr >= 0))
 
-    stat = 0
+  end subroutine write_dataset_common
 
-  end subroutine write_dataset_aux
-
-  !! Create an extendible dataset NAME at location LOC_ID in the HDF5 file tree
-  !! structure. The array MOLD specifies the type and rank of the dataset, and
-  !! must be the same for all processes. In the multi-rank case, the extent in
-  !! all dimensions but the last must be the same on all processes and sets the
-  !! extent of the dataset in those dimensions. The last dimension is the
-  !! extendible dimension (H5S_UNLIMITED) of the dataset, and the extent of the
-  !! corresponding dimension of MOLD is ignored. Note that the data ARRAY passed
-  !! to subsequent calls to APPEND_TO_DATASET would be suitable to use as MOLD,
-  !! for example. The specified value for CHUNK_SIZE must be the same on all
-  !! processes, and specifies the chunk size in terms of the number of elements
-  !! in the extendible dimension. No data is written to the dataset, and its
-  !! extent in the extendible dimension starts at 0.
+  !! Create an extendable dataset NAME at location LOC_ID. The dataset is
+  !! extendable along the last (slowest-varying) dimension and the rank-1
+  !! array MOLD specifies the fixed leading dimensions; the size of MOLD
+  !! is therefore one less than the dataset rank. Note that the order of
+  !! these Fortran dimensions will be reversed to conform to the C ordering
+  !! used by HDF5. The type of MOLD determines the HDF5 datatype. CHUNK_SIZE
+  !! specifies the chunk size in terms of the number of elements in the
+  !! extendable dimension. All MPI ranks must specify the same values for
+  !! MOLD and CHUNK_SIZE. The dataset's initial extent in the last dimension
+  !! is 0.
 #:for s in num_specs_no_int8
 
-  subroutine create_unlimited_dataset_${s["suffix"]}$(ctx, loc_id, name, value_mold, chunk_size, stat, errmsg)
+  subroutine create_unlimited_dataset_${s["kind"]}$(ctx, loc_id, name, mold, chunk_size)
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: value_mold(..)
+    ${s["decl"]}$, intent(in) :: mold(..)
     integer, intent(in) :: chunk_size
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    call create_unlimited_dataset_aux(ctx, loc_id, name, ${s["h5type"]}$, &
-        shape(value_mold,hsize_t), chunk_size, stat, errmsg)
+    call create_unlimited_dataset_core(ctx, loc_id, name, ${s["h5type"]}$, &
+        shape(mold,hsize_t), chunk_size)
   end subroutine
 #:endfor
 
 
-  subroutine create_unlimited_dataset_aux(ctx, loc_id, name, type_id, dims, &
-      chunk_size, stat, errmsg)
+  subroutine create_unlimited_dataset_core(ctx, loc_id, name, type_id, dims, chunk_size)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
@@ -417,24 +369,18 @@ contains
     integer(hid_t), intent(in) :: type_id
     integer(hsize_t), intent(in) :: dims(:)
     integer, intent(in) :: chunk_size
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
 
-    integer :: ierr
+    integer :: ierr, htri
     integer(hid_t) :: space_id, dcpl_id, dset_id
     integer(hsize_t), allocatable :: c_dims(:), maxdims(:), chunk_dims(:)
 
-    c_dims = [0_hsize_t, dims]
-    if (size(dims) > 1) c_dims(2:) = dims(size(dims):1:-1)
+    htri = H5Lexists(loc_id, name)
+    INSIST(ctx%global_all(htri == 0)) ! Should not exist
 
-    !! Some parallel consistency checks on the input arguments. It is most
-    !! likely that each rank calls CREATE_UNLIMITED_DATASET from the same
-    !! line of code, and consequently it is generally safe to assume that
-    !! the data array type, rank, and shape will be compatible across
-    !! all ranks, so we limit the checks to debug mode.
-    ASSERT(c_dims_is_valid(ctx, c_dims))
-    ASSERT(type_id_is_valid(ctx, type_id))
-    ASSERT(chunk_is_valid(ctx, chunk_size))
+    c_dims = [0_hsize_t, dims(size(dims):1:-1)] ! first dimension is unlimited
+
+    ASSERT(all(c_dims(2:) > 0))
+    ASSERT(chunk_size > 0)
 
     maxdims = c_dims
     maxdims(1) = H5S_UNLIMITED
@@ -451,43 +397,33 @@ contains
     INSIST(ierr >= 0)
 
     dset_id = H5Dcreate(loc_id, name, type_id, space_id, dcpl_id=dcpl_id)
-    if (ctx%global_any(dset_id < 0)) then
-      stat = 1
-      errmsg = 'error creating unlimited dataset "' // name // '"'
-      ierr = H5Pclose(dcpl_id)
-      ierr = H5Sclose(space_id)
-      return
-    end if
+    INSIST(ctx%global_all(dset_id >= 0))
 
     ierr = h5Sclose(space_id)
     ierr = h5Pclose(dcpl_id)
     ierr = h5Dclose(dset_id)
 
-    stat = 0
+  end subroutine create_unlimited_dataset_core
 
-  end subroutine create_unlimited_dataset_aux
-
-  !! Append a distributed ARRAY to an existing extendible dataset NAME at
-  !! location LOC_ID in the HDF5 file tree structure. The dataset should be
-  !! one created by a previous call to CREATE_UNLIMITED_DATASET. The dataset
-  !! is extended to accommodate the concatenation of the arrays from all the
-  !! processes. The rank of ARRAY must be the same on each MPI rank, and in
-  !! the multi-rank case, the extent must be the same in all but the last
-  !! distributed dimension. Moreover these characteristics must match those
-  !! of the dataset. If the optional argument ROOT is present, the behavior
-  !! is different. In this case ROOT specifies the MPI rank of the only rank
-  !! that writes its data, and the written dataset consists of that data alone,
-  !! but these procedures must still be called collectively.
+  !! Append a distributed ARRAY to an existing extendable dataset NAME at
+  !! location LOC_ID. The dataset should be one created by a previous call
+  !! to CREATE_UNLIMITED_DATASET. The dataset is extended to accommodate
+  !! the concatenation of the arrays from all MPI ranks. The rank of ARRAY
+  !! must be the same on each MPI rank, and the extent must be identical
+  !! across all ranks for all but the last (extendable) dimension. These
+  !! characteristics must match those of the dataset schema.
+  !!
+  !! If the optional argument ROOT is present, only the specified MPI rank
+  !! writes its data; the dataset is extended solely by the extent of ARRAY
+  !! on ROOT. This procedure must still be called collectively.
 #:for s in num_specs_no_int8
 
-  subroutine append_to_dataset_${s["suffix"]}$(ctx, loc_id, name, array, stat, errmsg, root)
+  subroutine append_to_dataset_${s["kind"]}$(ctx, loc_id, name, array, root)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
 
     integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl_id
@@ -495,9 +431,8 @@ contains
 
     type_id = ${s["h5type"]}$
 
-    call append_to_dataset_aux(ctx, loc_id, name, type_id, shape(array, hsize_t), &
-        dset_id, mem_space_id, data_space_id, stat, errmsg, root)
-    if (stat /= 0) return
+    call append_to_dataset_common(ctx, loc_id, name, type_id, shape(array, hsize_t), &
+        dset_id, mem_space_id, data_space_id, root)
 
     call ctx%get_dxpl(dxpl_id) ! collective data transfer in MPI build
 
@@ -511,39 +446,33 @@ contains
     rank default
       INSIST(.false.)
     end select
-
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error writing to dataset "' // name // '"'
-    end if
+    INSIST(ctx%global_all(ierr >= 0))
 
     ierr = H5Pclose(dxpl_id)
     ierr = h5sclose(mem_space_id)
     ierr = h5sclose(data_space_id)
     ierr = h5dclose(dset_id)
 
-  end subroutine append_to_dataset_${s["suffix"]}$
+  end subroutine append_to_dataset_${s["kind"]}$
 
 #:endfor
-  !! This auxiliary procedure extracts the part of APPEND_TO_DATASET common to
+  !! This private procedure extracts the part of APPEND_TO_DATASET common to
   !! all types and ranks of the data array. It does not depend on the array
-  !! directly, but only on its shape (DIMS) and its HDF5 type (TYPE_ID). It
-  !! opens the dataset and creates the dataspaces for the data array and the
+  !! directly, but only on its shape (DIMS) and its HDF5 datatype (TYPE_ID).
+  !! It opens the dataset and creates the dataspaces for the data array and the
   !! part of the dataset where the array will be written, extending the dataset
   !! dataset as needed. If ROOT is present, only that MPI rank will write, but
   !! all ranks must still participate in the subsequent collective H5Dwrite
   !! call.
 
-  subroutine append_to_dataset_aux(ctx, loc_id, name, type_id, dims, &
-      dset_id, mem_space_id, data_space_id, stat, errmsg, root)
+  subroutine append_to_dataset_common(ctx, loc_id, name, type_id, dims, &
+      dset_id, mem_space_id, data_space_id, root)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id, type_id
     character(*), intent(in) :: name
     integer(hsize_t), intent(in) :: dims(:)
     integer(hid_t), intent(out) :: dset_id, data_space_id, mem_space_id
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: root
 
     integer :: ndims, ierr, rank
@@ -556,17 +485,12 @@ contains
     if (size(dims) == 0) then ! scalar appended data
       mem_dims = [1]  ! compatible with a rank-1 extendable dataset
     else
-      mem_dims = dims
-      if (size(dims) > 1) mem_dims = dims(size(dims):1:-1) ! reverse order for the C shape
+      mem_dims = dims(size(dims):1:-1) ! reverse order for the C shape
     end if
 
     !! Open the dataset and get its current shape (DATA_DIMS)
     dset_id = H5Dopen(loc_id, name)
-    if (ctx%global_any(dset_id < 0)) then
-      stat = 1
-      errmsg = 'unable to open dataset "' // name // '"'
-      return
-    end if
+    INSIST(ctx%global_all(dset_id >= 0))
     data_space_id = H5Dget_space(dset_id)
     INSIST(data_space_id > 0)
     ndims = H5Sget_simple_extent_ndims(data_space_id)
@@ -576,40 +500,20 @@ contains
     INSIST(ndims > 0)
     ierr = H5Sclose(data_space_id)
 
-    ASSERT(c_dims_is_valid(ctx, mem_dims))
-    ASSERT(type_id_is_valid(ctx, type_id))
-    ASSERT(root_is_valid(ctx, root))
+    ASSERT(all(mem_dims(2:) > 0))
 
-    !! Validate data rank compatibility
-    if (ctx%global_any(size(mem_dims) /= size(data_dims))) then
-      stat = 1
-      errmsg = 'rank of appended data is incompatible with dataset "' // name // '"'
-      ierr = H5Dclose(dset_id)
-      return
-    end if
+    !! Ensure the data rank and fixed extents match the dataset
+    INSIST(ctx%global_all(size(mem_dims) == size(data_dims)))
+    INSIST(ctx%global_all(all(mem_dims(2:) == data_dims(2:))))
 
-    !! Validate fixed extents
-    if (size(data_dims) > 1) then
-      if (ctx%global_any(any(mem_dims(2:) /= data_dims(2:)))) then
-        stat = 1
-        errmsg = 'shape of appended data is incompatible with dataset "' // name // '"'
-        return
-      end if
-    end if
-
-    !! Validate data type compatibility
+    !! Ensure the data type matches the dataset
     dset_type_id = H5Dget_type(dset_id)
     INSIST(dset_type_id > 0)
-    if (ctx%global_any(H5Tequal(dset_type_id, type_id) <= 0)) then
-      errmsg = 'type of appended data is incompatible with dataset "' // name // '"'
-      stat = 1
-      ierr = H5Tclose(dset_type_id)
-      ierr = H5Dclose(dset_id)
-      return
-    end if
+    INSIST(ctx%global_all(H5Tequal(dset_type_id, type_id) > 0))
     ierr = H5Tclose(dset_type_id)
 
     if (present(root)) then
+      ASSERT((root >= 0) .and. (root < ctx%size))
       rank_writes = (root == ctx%rank)
     else
       rank_writes = .true.
@@ -627,12 +531,7 @@ contains
     call ctx%global_sum(mem_dims(1), n)
     data_dims(1) = data_dims(1) + n
     ierr = H5Dset_extent(dset_id, data_dims)
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error resizing dataset "' // name // '"'
-      ierr = H5Dclose(dset_id)
-      return
-    end if
+    INSIST(ctx%global_all(ierr >= 0))
 
     if (mem_dims(1) > 0) then
       mem_space_id = H5Screate(mem_dims)
@@ -649,88 +548,8 @@ contains
     else ! rank contributes nothing
       ierr = H5Sselect_none(data_space_id)
     end if
-    if (ctx%global_any(ierr < 0)) then
-      stat = 1
-      errmsg = 'error creating hyperslab of dataset "' // name // '"'
-      ierr = H5Sclose(data_space_id)
-      ierr = H5Sclose(mem_space_id)
-      ierr = H5Dclose(dset_id)
-      return
-    end if
+    INSIST(ctx%global_all(ierr >= 0))
 
-    stat = 0
-
-  end subroutine append_to_dataset_aux
-
-  !! Check the parallel consistency of TYPE_ID (DEBUGGING)
-  logical function type_id_is_valid(ctx, type_id)
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: type_id
-    integer(int64) :: p_local(2), p_global(2)
-    p_local = [type_id, -type_id] ! conversion to a known MPI type
-    call ctx%global_min(p_local, p_global)
-    type_id_is_valid = (p_global(1) == -p_global(2))
-  end function
-
-  !! Check the parallel consistency and correctness of C_DIMS (DEBUGGING)
-  logical function c_dims_is_valid(ctx, c_dims)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hsize_t), intent(in) :: c_dims(:)
-
-    integer :: p_local(2), p_global(2)
-    integer(int64), allocatable :: q_local(:), q_global(:)
-
-    !! Check that C_DIMS has the same size on all ranks
-    p_local = [size(c_dims), -size(c_dims)]
-    call ctx%global_min(p_local, p_global)
-    c_dims_is_valid = (p_global(1) == -p_global(2)) ! equal min and max values
-
-    if (c_dims_is_valid .and. size(c_dims) > 1) then
-      !! Check that C_DIMS has the same extent in all dimensions but the first.
-      q_local = c_dims(2:) ! conversion to a known MPI type
-      q_local = [q_local, -q_local(size(q_local):1:-1)]
-      allocate(q_global, mold=q_local)
-      call ctx%global_min(q_local, q_global)
-      c_dims_is_valid = all(q_global + q_global(size(q_global):1:-1) == 0) ! equal min and max values in each dimension
-      if (c_dims_is_valid) c_dims_is_valid = all(c_dims(2:) > 0)
-    end if
-
-  end function c_dims_is_valid
-
-  !! Check the parallel consistency of CHUNK_SIZE (DEBUGGING)
-  logical function chunk_is_valid(ctx, chunk_size)
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer, intent(in) :: chunk_size
-    integer :: p_local(2), p_global(2)
-    p_local = [chunk_size, -chunk_size]
-    call ctx%global_min(p_local, p_global)
-    chunk_is_valid = (p_global(1) == -p_global(2))
-    if (chunk_is_valid) chunk_is_valid = (chunk_size > 0)
-  end function
-
-  !! Check the parallel consistency of ROOT (DEBUGGING)
-  logical function root_is_valid(ctx, root)
-
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer, intent(in), optional :: root
-
-    integer :: n, p_local(2), p_global(2), ierr, nproc
-
-    !! Check that all ranks specified root or that none did.
-    n = merge(1, 0, present(root))
-    p_local = [n, -n]
-    call ctx%global_min(p_local, p_global)
-    root_is_valid = (p_global(1) == -p_global(2))
-
-    if (root_is_valid .and. present(root)) then
-      !! Check that all ranks specified the same valid value.
-      p_local = [root, -root]
-      call ctx%global_min(p_local, p_global)
-      root_is_valid = (p_global(1) == -p_global(2))
-      if (root_is_valid) root_is_valid = (root >= 0) .and. (root < ctx%size)
-    end if
-
-  end function root_is_valid
+  end subroutine append_to_dataset_common
 
 end module vtkhdf_h5

@@ -20,35 +20,26 @@ program vtkhdf_mb_test
   !! consist of two non-overlapping shifts of this basic unit.
   call get_mesh_data(x, cnode, xcnode, types)
 
-  call vizfile%add_block('Block-A', stat, errmsg, temporal=.true.)
+  call vizfile%add_block('Block-A', stat, errmsg, is_temporal=.true.)
   if (stat /= 0) error stop errmsg
 
-  call vizfile%write_block_mesh('Block-A', x, cnode, xcnode, types, stat, errmsg)
+  call vizfile%write_block_mesh('Block-A', x, cnode, xcnode, types)
+
+  call vizfile%add_block('Block-B', stat, errmsg, is_temporal=.true.)
   if (stat /= 0) error stop errmsg
 
-  call vizfile%add_block('Block-B', stat, errmsg, temporal=.true.)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_block_mesh('Block-B', x+1, cnode, xcnode, types, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_block_mesh('Block-B', x+1, cnode, xcnode, types)
 
   !! Register the datasets that evolve with time. At this stage the data arrays
   !! are only used to glean their types and shapes.
 
   associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
-  ! Block-A has time-dependent cell data
-    call vizfile%register_temporal_cell_data('Block-A', 'cell-radius', scalar_mold, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-
-    call vizfile%register_temporal_cell_data('Block-A', 'cell-velocity', vector_mold, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-
+    ! Block-A has time-dependent cell data
+    call vizfile%register_temporal_cell_data('Block-A', 'cell-radius', scalar_mold)
+    call vizfile%register_temporal_cell_data('Block-A', 'cell-velocity', vector_mold)
     ! Block-B has time-dependent point data
-    call vizfile%register_temporal_point_data('Block-B', 'point-radius', scalar_mold, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-
-    call vizfile%register_temporal_point_data('Block-B', 'point-velocity', vector_mold, stat, errmsg)
-    if (stat /= 0) error stop errmsg
+    call vizfile%register_temporal_point_data('Block-B', 'point-radius', scalar_mold)
+    call vizfile%register_temporal_point_data('Block-B', 'point-velocity', vector_mold)
   end associate
 
   !! Generate some cell and point data to use for output
@@ -62,48 +53,27 @@ program vtkhdf_mb_test
 
   call vizfile%write_time_step(0.0_r8)
 
-  call vizfile%write_temporal_cell_data('Block-A', 'cell-radius', scalar_cell_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_temporal_cell_data('Block-A', 'cell-velocity', vector_cell_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_temporal_point_data('Block-B', 'point-radius', scalar_point_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_temporal_point_data('Block-B', 'point-velocity', vector_point_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_temporal_cell_data('Block-A', 'cell-radius', scalar_cell_data)
+  call vizfile%write_temporal_cell_data('Block-A', 'cell-velocity', vector_cell_data)
+  call vizfile%write_temporal_point_data('Block-B', 'point-radius', scalar_point_data)
+  call vizfile%write_temporal_point_data('Block-B', 'point-velocity', vector_point_data)
 
   !!!! Write the data for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   call vizfile%write_time_step(1.0_r8)
 
-  call vizfile%write_temporal_cell_data('Block-A', 'cell-radius', scalar_cell_data+1, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_temporal_cell_data('Block-A', 'cell-velocity', vector_cell_data+1, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_temporal_point_data('Block-B', 'point-radius', scalar_point_data+1, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_temporal_point_data('Block-B', 'point-velocity', vector_point_data+1, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_temporal_cell_data('Block-A', 'cell-radius', scalar_cell_data+1)
+  call vizfile%write_temporal_cell_data('Block-A', 'cell-velocity', vector_cell_data+1)
+  call vizfile%write_temporal_point_data('Block-B', 'point-radius', scalar_point_data+1)
+  call vizfile%write_temporal_point_data('Block-B', 'point-velocity', vector_point_data+1)
 
   !! At any point you can write a data that isn't time dependent, but its name must
   !! be unique from any other data temporal or not of the same type (cell or point).
 
-  call vizfile%write_cell_data('Block-A', 'static-cell-scalar', -scalar_cell_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_cell_data('Block-A', 'static-cell-vector', -vector_cell_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_point_data('Block-B', 'static-point-scalar', -scalar_point_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_point_data('Block-B', 'static-point-vector', -vector_point_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_cell_data('Block-A', 'static-cell-scalar', -scalar_cell_data)
+  call vizfile%write_cell_data('Block-A', 'static-cell-vector', -vector_cell_data)
+  call vizfile%write_point_data('Block-B', 'static-point-scalar', -scalar_point_data)
+  call vizfile%write_point_data('Block-B', 'static-point-vector', -vector_point_data)
 
   call vizfile%close
 

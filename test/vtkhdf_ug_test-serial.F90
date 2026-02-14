@@ -13,28 +13,20 @@ program vtkhdf_ug_test
 
   type(vtkhdf_ug_file) :: vizfile
 
-  call vizfile%create('ug_test.vtkhdf', stat, errmsg, temporal=.true.)
+  call vizfile%create('ug_test.vtkhdf', stat, errmsg, is_temporal=.true.)
   if (stat /= 0) error stop errmsg
 
   call get_mesh_data(x, cnode, xcnode, types)
-  call vizfile%write_mesh(x, cnode, xcnode, types, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_mesh(x, cnode, xcnode, types)
 
   !! Register the datasets that evolve with time. At this stage the data arrays
   !! are only used to glean their types and shapes.
 
   associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
-    call vizfile%register_temporal_cell_data('cell-radius', scalar_mold, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-
-    call vizfile%register_temporal_cell_data('cell-velocity', vector_mold, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-
-    call vizfile%register_temporal_point_data('point-radius', scalar_mold, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-
-    call vizfile%register_temporal_point_data('point-velocity', vector_mold, stat, errmsg)
-    if (stat /= 0) error stop errmsg
+    call vizfile%register_temporal_cell_data('cell-radius', scalar_mold)
+    call vizfile%register_temporal_cell_data('cell-velocity', vector_mold)
+    call vizfile%register_temporal_point_data('point-radius', scalar_mold)
+    call vizfile%register_temporal_point_data('point-velocity', vector_mold)
   end associate
 
   !! Generate some cell and point data for output
@@ -48,48 +40,27 @@ program vtkhdf_ug_test
 
   call vizfile%write_time_step(0.0_r8)
 
-  call vizfile%write_temporal_cell_data('cell-radius', scalar_cell_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_temporal_cell_data('cell-velocity', vector_cell_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_temporal_point_data('point-radius', scalar_point_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_temporal_point_data('point-velocity', vector_point_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_temporal_cell_data('cell-radius', scalar_cell_data)
+  call vizfile%write_temporal_cell_data('cell-velocity', vector_cell_data)
+  call vizfile%write_temporal_point_data('point-radius', scalar_point_data)
+  call vizfile%write_temporal_point_data('point-velocity', vector_point_data)
 
   !!!! Write the data for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   call vizfile%write_time_step(1.0_r8)
 
-  call vizfile%write_temporal_cell_data('cell-radius', scalar_cell_data+1, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_temporal_cell_data('cell-velocity', vector_cell_data+1, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_temporal_point_data('point-radius', scalar_point_data+1, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_temporal_point_data('point-velocity', vector_point_data+1, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_temporal_cell_data('cell-radius', scalar_cell_data+1)
+  call vizfile%write_temporal_cell_data('cell-velocity', vector_cell_data+1)
+  call vizfile%write_temporal_point_data('point-radius', scalar_point_data+1)
+  call vizfile%write_temporal_point_data('point-velocity', vector_point_data+1)
 
   !! At any point you can write a data that isn't time dependent, but its name must
   !! be unique from any other data temporal or not of the same type (cell or point).
 
-  call vizfile%write_cell_data('static-cell-scalar', -scalar_cell_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_cell_data('static-cell-vector', -vector_cell_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_point_data('static-point-scalar', -scalar_point_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_point_data('static-point-vector', -vector_point_data, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_cell_data('static-cell-scalar', -scalar_cell_data)
+  call vizfile%write_cell_data('static-cell-vector', -vector_cell_data)
+  call vizfile%write_point_data('static-point-scalar', -scalar_point_data)
+  call vizfile%write_point_data('static-point-vector', -vector_point_data)
 
   call vizfile%close
 

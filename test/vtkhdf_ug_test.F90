@@ -17,7 +17,7 @@ program vtkhdf_ug_test
   call MPI_Comm_size(MPI_COMM_WORLD, nproc, istat)
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, istat)
 
-  call vizfile%create('ug_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, temporal=.true.)
+  call vizfile%create('ug_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, is_temporal=.true.)
   if (stat /= 0) error stop errmsg
 
   !! The unstructured mesh data for a basic mesh unit. The full mesh will
@@ -26,23 +26,15 @@ program vtkhdf_ug_test
   call get_mesh_data(x, cnode, xcnode, types)
   x(1,:) = x(1,:) + rank ! shift right
 
-  call vizfile%write_mesh(x, cnode, xcnode, types, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_mesh(x, cnode, xcnode, types)
 
   !!!! Register the data arrays that evolve with time.
 
   associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
-    call vizfile%register_temporal_cell_data('cell-scalar', scalar_mold, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-
-    call vizfile%register_temporal_cell_data('cell-vector', vector_mold, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-
-    call vizfile%register_temporal_point_data('point-scalar', scalar_mold, stat, errmsg)
-    if (stat /= 0) error stop errmsg
-
-    call vizfile%register_temporal_point_data('point-vector', vector_mold, stat, errmsg)
-    if (stat /= 0) error stop errmsg
+    call vizfile%register_temporal_cell_data('cell-scalar', scalar_mold)
+    call vizfile%register_temporal_cell_data('cell-vector', vector_mold)
+    call vizfile%register_temporal_point_data('point-scalar', scalar_mold)
+    call vizfile%register_temporal_point_data('point-vector', vector_mold)
   end associate
 
   !!!! Write the datasets for the first time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -50,60 +42,46 @@ program vtkhdf_ug_test
   call vizfile%write_time_step(0.0_r8)
 
   call get_scalar_cell_data(x, cnode, xcnode, s)
-  call vizfile%write_temporal_cell_data('cell-scalar', s, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_temporal_cell_data('cell-scalar', s)
 
   call get_vector_cell_data(x, cnode, xcnode, v)
-  call vizfile%write_temporal_cell_data('cell-vector', v, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_temporal_cell_data('cell-vector', v)
 
   call get_scalar_point_data(x, s)
-  call vizfile%write_temporal_point_data('point-scalar', s, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_temporal_point_data('point-scalar', s)
 
   call get_vector_point_data(x, v)
-  call vizfile%write_temporal_point_data('point-vector', v, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_temporal_point_data('point-vector', v)
 
   !!!! Write the datasets for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   call vizfile%write_time_step(1.0_r8)
 
   call get_scalar_cell_data(x, cnode, xcnode, s)
-  call vizfile%write_temporal_cell_data('cell-scalar', s+1, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_temporal_cell_data('cell-scalar', s+1)
 
   call get_vector_cell_data(x, cnode, xcnode, v)
-  call vizfile%write_temporal_cell_data('cell-vector', v+1, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_temporal_cell_data('cell-vector', v+1)
 
   call get_scalar_point_data(x, s)
-  call vizfile%write_temporal_point_data('point-scalar', s+1, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_temporal_point_data('point-scalar', s+1)
 
   call get_vector_point_data(x, v)
-  call vizfile%write_temporal_point_data('point-vector', v+1, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_temporal_point_data('point-vector', v+1)
 
   !! Some time-independent cell and point data
 
   call get_scalar_cell_data(x, cnode, xcnode, s)
-  call vizfile%write_cell_data('static-cell-scalar', -s, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_cell_data('static-cell-scalar', -s)
 
   call get_vector_cell_data(x, cnode, xcnode, v)
-print *, 'FOO', shape(v), shape(-v)
-  call vizfile%write_cell_data('static-cell-vector', -v, stat, errmsg)
-  if (stat /= 0) error stop errmsg
-print *, 'BAR'
+  call vizfile%write_cell_data('static-cell-vector', -v)
 
   call get_scalar_point_data(x, s)
-  call vizfile%write_point_data('static-point-scalar', -s, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_point_data('static-point-scalar', -s)
 
   call get_vector_point_data(x, v)
-  call vizfile%write_point_data('static-point-vector', -v, stat, errmsg)
-  if (stat /= 0) error stop errmsg
+  call vizfile%write_point_data('static-point-vector', -v)
 
   call vizfile%close
   call MPI_Finalize(istat)

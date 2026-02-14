@@ -18,7 +18,14 @@
 !! https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html#
 !!
 
-#include "f90_assert.fpp"
+#include "vtkhdf_assert.inc"
+
+#:set int_specs  = [ {"kind":"int32",  "decl":"integer(int32)"}, &
+                   & {"kind":"int64",  "decl":"integer(int64)"} ]
+#:set real_specs = [ {"kind":"real32", "decl":"real(real32)"}, &
+                   & {"kind":"real64", "decl":"real(real64)"} ]
+#:set num_specs = int_specs + real_specs
+#:set locations = ["cell", "point"]
 
 module vtkhdf_ug_type
 
@@ -31,17 +38,12 @@ module vtkhdf_ug_type
   implicit none
   private
 
-#:set int_specs  = [ {"kind":"int32",  "decl":"integer(int32)"}, &
-                   & {"kind":"int64",  "decl":"integer(int64)"} ]
-#:set real_specs = [ {"kind":"real32", "decl":"real(real32)"}, &
-                   & {"kind":"real64", "decl":"real(real64)"} ]
-#:set num_specs = int_specs + real_specs
   type, public :: vtkhdf_ug
     type(vtkhdf_ctx) :: ctx ! unowned copy
     integer(hid_t) :: root_id=H5I_INVALID_HID
     integer(hid_t) :: cgrp_id=H5I_INVALID_HID, pgrp_id=H5I_INVALID_HID
     integer :: nnode, ncell, nnode_tot, ncell_tot, npart
-    logical :: temporal = .false.
+    logical :: is_temporal = .false.
     integer :: nsteps = -1
     integer(hid_t) :: steps_id=H5I_INVALID_HID
     integer(hid_t) :: cogrp_id=H5I_INVALID_HID, pogrp_id=H5I_INVALID_HID
@@ -58,12 +60,14 @@ module vtkhdf_ug_type
 #:endfor
     procedure :: write_time_step
 #:for s in num_specs
-    procedure :: write_cell_data_${s["kind"]}$
-    procedure :: write_point_data_${s["kind"]}$
-    procedure :: register_temporal_cell_data_${s["kind"]}$
-    procedure :: register_temporal_point_data_${s["kind"]}$
-    procedure :: write_temporal_cell_data_${s["kind"]}$
-    procedure :: write_temporal_point_data_${s["kind"]}$
+#:for loc in locations
+    generic :: write_${loc}$_data => write_${loc}$_data_${s["kind"]}$
+    procedure, private :: write_${loc}$_data_${s["kind"]}$
+    generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${s["kind"]}$
+    procedure, private :: register_temporal_${loc}$_data_${s["kind"]}$
+    generic :: write_temporal_${loc}$_data => write_temporal_${loc}$_data_${s["kind"]}$
+    procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$
+#:endfor
 #:endfor
     final :: vtkhdf_ug_delete
   end type
@@ -81,8 +85,8 @@ contains
 
   !! Finalizer for VTKHDF_UG_FILE objects. We free heap memory we own but avoid
   !! doing things that may require syncronization with other ranks (MPI/PHDF5)
-  !! because where implicit finalization occurs it is not guaranteed to be
-  !! collective or ordered with respect to other ranks. This can leak HDF5
+  !! because implicit finalization occurs it is not guaranteed to be collective
+  !! or ordered with respect to other ranks when it occurs. This can leak HDF5
   !! IDs, but that is unavoidable. Users should always use CLOSE to do a proper
   !! collective cleanup.
 
@@ -123,7 +127,7 @@ contains
   !! supporting time-dependent data, specify the optional argument
   !! TEMPORAL to true; otherwise a static group is created by default.
 
-  subroutine init(this, loc_id, name, ctx, stat, errmsg, temporal)
+  subroutine init(this, loc_id, name, ctx, temporal)
 
     use vtkhdf_version_param
 
@@ -131,105 +135,66 @@ contains
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     type(vtkhdf_ctx), intent(in) :: ctx
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
     logical, intent(in), optional :: temporal
 
     integer :: ierr
 
     this%ctx = ctx
 
-    this%root_id = H5Gcreate(loc_id, name)
-    if (this%ctx%global_any(this%root_id < 0)) then
-      stat = 1
-      errmsg = 'unable to create group'
-      return
-    end if
+    INSIST(this%ctx%global_all(loc_id >= 0))
 
-    call h5_write_attr(this%ctx, this%root_id, 'Version', vtkhdf_version, stat, errmsg)
-    if (stat /= 0) return
-    call h5_write_attr(this%ctx, this%root_id, 'Type', 'UnstructuredGrid', stat, errmsg)
-    if (stat /= 0) return
+    this%root_id = H5Gcreate(loc_id, name)
+    INSIST(this%ctx%global_all(this%root_id >= 0))
+
+    call h5_write_attr(this%ctx, this%root_id, 'Version', vtkhdf_version)
+    call h5_write_attr(this%ctx, this%root_id, 'Type', 'UnstructuredGrid')
 
     this%cgrp_id = H5Gcreate(this%root_id, 'CellData')
-    if (this%ctx%global_any(this%cgrp_id < 0)) then
-      stat = 1
-      errmsg = 'unable to create "CellData" group'
-      return
-    end if
+    INSIST(this%ctx%global_all(this%cgrp_id >= 0))
 
     this%pgrp_id = H5Gcreate(this%root_id, 'PointData')
-    if (this%ctx%global_any(this%pgrp_id < 0)) then
-      stat = 1
-      errmsg = 'unable to create "PointData" group'
-      return
-    end if
+    INSIST(this%ctx%global_all(this%pgrp_id >= 0))
 
-    if (present(temporal)) this%temporal = temporal
-    if (this%temporal) then
-
+    if (present(temporal)) this%is_temporal = temporal
+    if (this%is_temporal) then
       this%steps_id = H5Gcreate(this%root_id, 'Steps')
-      if (this%ctx%global_any(this%steps_id < 0)) then
-        stat = 1
-        errmsg = 'unable to create "Steps" group'
-        return
-      end if
+      INSIST(this%ctx%global_all(this%steps_id >= 0))
 
       this%cogrp_id = H5Gcreate(this%steps_id, 'CellDataOffsets')
-      if (this%ctx%global_any(this%cogrp_id < 0)) then
-        stat = 1
-        errmsg = 'unable to create "CellDataOffsets" group'
-        return
-      end if
+      INSIST(this%ctx%global_all(this%cogrp_id >= 0))
 
       this%pogrp_id = H5Gcreate(this%steps_id, 'PointDataOffsets')
-      if (this%ctx%global_any(this%pogrp_id < 0)) then
-        stat = 1
-        errmsg = 'unable to create "PointDataOffsets" group'
-        return
-      end if
+      INSIST(this%ctx%global_all(this%pogrp_id >= 0))
 
       this%nsteps = 0
-      call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps, stat, errmsg)
-      if (stat /= 0) return
+      call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps)
 
-      associate (value_mold => 1.0_real64, chunk_size => 100)
-        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'Values', value_mold, chunk_size, stat, errmsg)
-        if (stat /= 0) return
+      associate (mold => 1.0_real64, chunk_size => 100)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'Values', mold, chunk_size)
       end associate
 
       ! NB: Only static meshes are supported. ParaView 6.1 uses this attribute
       ! setting to signal it should use mesh caching -- read once and reuse.
-      call h5_write_attr(this%ctx, this%steps_id, 'StaticMesh', 1, stat, errmsg)
-      if (stat /= 0) return
+      call h5_write_attr(this%ctx, this%steps_id, 'StaticMesh', 1)
 
       ! NB: These are no longer needed in ParaView 6.1 when StaticMesh=1, but
       ! we retain them for compatibility with earlier versions. They will be
       ! filled with 0 offsets and the constant number of parts.
-      associate (value_mold => 1, chunk_size => 100)
-        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'PointOffsets', value_mold, chunk_size, stat, errmsg)
-        if (stat /= 0) return
-        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'CellOffsets', value_mold, chunk_size, stat, errmsg)
-        if (stat /= 0) return
-        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'ConnectivityIdOffsets', value_mold, chunk_size, stat, errmsg)
-        if (stat /= 0) return
-        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'NumberOfParts', value_mold, chunk_size, stat, errmsg)
-        if (stat /= 0) return
-        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'PartOffsets', value_mold, chunk_size, stat, errmsg)
-        if (stat /= 0) return
+      associate (mold => 1, chunk_size => 100)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'PointOffsets', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'CellOffsets', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'ConnectivityIdOffsets', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'NumberOfParts', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'PartOffsets', mold, chunk_size)
       end associate
-
     end if
-
-    stat = 0
 
   end subroutine init
 
   !! Write the unstructured mesh to the file. The mesh is described in the
   !! conventional manner by the X, CNODE, and XCNODE arrays. The additional
-  !! array TYPES provides an unambiguous specification of the cell types,
-  !! that we would otherwise infer from the OFFSETS array. This procedure
-  !! must be called before any of the following procedures.
+  !! array TYPES specifies the VTK cell types. This procedure must be called
+  !! before any of the following procedures.
 
   !! NB: Paraview and/or the VTKHDF reader currently has a problem handling
   !! 0-sized parts (see https://gitlab.kitware.com/vtk/vtk/-/issues/19923).
@@ -240,157 +205,162 @@ contains
 #:for r in real_specs
 #:for i in int_specs
 
-  subroutine write_mesh_${r["kind"]}$_${i["kind"]}$(this, x, cnode, xcnode, types, stat, errmsg)
+  subroutine write_mesh_${r["kind"]}$_${i["kind"]}$(this, x, cnode, xcnode, types)
 
     class(vtkhdf_ug), intent(inout) :: this
     ${r["decl"]}$, intent(in) :: x(:,:)
     ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
 
     integer :: ierr, idum(0)
 
-    INSIST(this%root_id > 0)
+    INSIST(this%root_id >= 0)
 
     this%nnode = size(x, dim=2)
     this%ncell = size(types)
 
-    ASSERT(size(xcnode) == this%ncell+1)
-    ASSERT(size(cnode) == xcnode(size(xcnode))-1)
-    ASSERT(minval(cnode) >= 1)
-    ASSERT(maxval(cnode) <= this%nnode)
+    INSIST(size(xcnode) == this%ncell+1)
+    INSIST(size(cnode) == xcnode(size(xcnode))-1)
+    INSIST(minval(cnode) >= 1)
+    INSIST(maxval(cnode) <= this%nnode)
 
     call this%ctx%global_sum(this%nnode, this%nnode_tot)
     call this%ctx%global_sum(this%ncell, this%ncell_tot)
     call this%ctx%global_sum(merge(1, 0, this%ncell>0), this%npart) ! see NB above
 
-    if (this%ncell > 0) then
-      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfPoints', this%nnode, stat, errmsg)
-    else ! see NB above
-      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfPoints', idum, stat, errmsg)
+    if (this%ncell > 0) then ! see NB above
+      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfPoints', this%nnode)
+    else
+      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfPoints', idum)
     end if
-    if (stat /= 0) return
 
-    if (this%ncell > 0) then
-      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfCells',  this%ncell, stat, errmsg)
-    else ! see NB above
-      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfCells',  idum, stat, errmsg)
+    if (this%ncell > 0) then ! see NB above
+      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfCells',  this%ncell)
+    else
+      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfCells',  idum)
     end if
-    if (stat /= 0) return
 
-    if (this%ncell > 0) then
-      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfConnectivityIds', size(cnode), stat, errmsg)
-    else ! see NB above
-      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfConnectivityIds', idum, stat, errmsg)
+    if (this%ncell > 0) then ! see NB above
+      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfConnectivityIds', size(cnode))
+    else
+      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfConnectivityIds', idum)
     end if
-    if (stat /= 0) return
 
-    if (this%ncell > 0) then
-      call h5_write_dataset(this%ctx, this%root_id, 'Offsets', xcnode-1, stat, errmsg) ! offsets instead of starting indices
-    else ! see NB above
-      call h5_write_dataset(this%ctx, this%root_id, 'Offsets', [${i["decl"]}$::], stat, errmsg)
+    if (this%ncell > 0) then ! see NB above
+      call h5_write_dataset(this%ctx, this%root_id, 'Offsets', xcnode-1) ! offsets instead of starting indices
+    else
+#ifdef GNU_PR123899
+      block
+        ${i["decl"]}$ :: idum(0)
+        call h5_write_dataset(this%ctx, this%root_id, 'Offsets', idum)
+      end block
+#else
+      call h5_write_dataset(this%ctx, this%root_id, 'Offsets', [${i["decl"]}$::])
+#endif
     end if
-    if (stat /= 0) return
 
+#ifdef GNU_PR123899
     if (this%ncell > 0) then
-      call h5_write_dataset(this%ctx, this%root_id, 'Connectivity', cnode-1, stat, errmsg)  ! 0-based indexing
-    else ! workaround for gfortran bug https://gcc.gnu.org/bugzilla/show_bug.cgi?id=123899
-      call h5_write_dataset(this%ctx, this%root_id, 'Connectivity', [${i["decl"]}$::], stat, errmsg)
+      call h5_write_dataset(this%ctx, this%root_id, 'Connectivity', cnode-1)  ! 0-based indexing
+    else
+      block
+        ${i["decl"]}$ :: idum(0)
+        call h5_write_dataset(this%ctx, this%root_id, 'Connectivity', idum)
+      end block
     endif
-    if (stat /= 0) return
+#else
+    call h5_write_dataset(this%ctx, this%root_id, 'Connectivity', cnode-1)  ! 0-based indexing
+#endif
 
-    call h5_write_dataset(this%ctx, this%root_id, 'Types', types, stat, errmsg)
-    if (stat /= 0) return
-
-    call h5_write_dataset(this%ctx, this%root_id, 'Points', x, stat, errmsg)
-    if (stat /= 0) return
+    call h5_write_dataset(this%ctx, this%root_id, 'Types', types)
+    call h5_write_dataset(this%ctx, this%root_id, 'Points', x)
 
   end subroutine write_mesh_${r["kind"]}$_${i["kind"]}$
 
 #:endfor
 #:endfor
-  !! Writes the cell DATA to a new CellData group dataset NAME. Scalar,
-  !! vector, and tensor cell-based data are supported. In the case of a
-  !! temporal file supporting time-dependent datasets, this dataset is
-  !! static and not associated with any time step.
+  !! Writes the cell data ARRAY to a new CellData group dataset NAME. In the
+  !! case of a temporal file supporting time-dependent datasets, this dataset
+  !! is static and not associated with any time step. Note that VTK only
+  !! supports scalar and vector-valued mesh data (rank-1 and 2 ARRAY); this
+  !! should be a compile time constraint implemented by the public API.
 #:for s in num_specs
 
-  subroutine write_cell_data_${s["kind"]}$(this, name, data, stat, errmsg)
+  subroutine write_cell_data_${s["kind"]}$(this, name, array)
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: data(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
+    ${s["decl"]}$, intent(in) :: array(..)
     integer, allocatable :: dims(:)
-    dims = shape(data)
-    INSIST(size(dims) >= 1 .and. size(dims) <= 3)
-    INSIST(dims(size(dims)) == this%ncell)
-    call h5_write_dataset(this%ctx, this%cgrp_id, name, data, stat, errmsg)
+    dims = shape(array)
+    INSIST(this%ctx%global_all(dims(size(dims)) == this%ncell))
+    call h5_write_dataset(this%ctx, this%cgrp_id, name, array)
   end subroutine
 #:endfor
 
-  !! Writes the point DATA to a new PointData group dataset NAME. Scalar,
-  !! vector, and tensor point-based data are supported. In the case of a
-  !! temporal file supporting time-dependent datasets, this dataset is
-  !! static and not associated with any time step.
+  !! Writes the point data ARRAY to a new PointData group dataset NAME. In the
+  !! case of a temporal file supporting time-dependent datasets, this dataset
+  !! is static and not associated with any time step. Note that VTK only
+  !! supports scalar and vector-valued mesh data (rank-1 and 2 ARRAY); this
+  !! should be a compile time constraint implemented by the public API.
 #:for s in num_specs
 
-  subroutine write_point_data_${s["kind"]}$(this, name, data, stat, errmsg)
+  subroutine write_point_data_${s["kind"]}$(this, name, array)
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: data(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
+    ${s["decl"]}$, intent(in) :: array(..)
     integer, allocatable :: dims(:)
-    dims = shape(data)
-    INSIST(size(dims) >= 1 .and. size(dims) <= 3)
-    INSIST(dims(size(dims)) == this%nnode)
-    call h5_write_dataset(this%ctx, this%pgrp_id, name, data, stat, errmsg)
+    dims = shape(array)
+    INSIST(this%ctx%global_all(dims(size(dims)) == this%nnode))
+    call h5_write_dataset(this%ctx, this%pgrp_id, name, array)
   end subroutine
 #:endfor
 
-  !! Register the specified NAME as a time-dependent CellData group dataset.
-  !! This writes no data, but only configures some necessary metadata.
-  !! The MOLD array argument shall have the same type, kind, and rank as the
-  !! actual cell data, and the same extent in all but the last dimension,
-  !! but the array values themselves are not accessed. Scalar, vector, and
-  !! tensor-valued cell data are supported (rank-1, 2, and 3 MOLD).
+  !! Register NAME as a time-dependent CellData group dataset. This writes
+  !! no data, but configures a new extendable HDF5 dataset for future writing.
+  !!
+  !! The rank-1 array MOLD determines the dataset's fixed leading dimensions:
+  !! - For scalar-valued point data: MOLD has size 0;
+  !! - For vector-valued point data: MOLD size equals the number of components.
+  !!
+  !! The type and kind of MOLD defines the HDF5 datatype, and its value is
+  !! ignored. The last dimension of written data will correspond to the cell
+  !! index, making it the extendable (slowest-varying) dimension of the dataset.
+  !! All MPI ranks must provide identical MOLD characteristics.
+
+  !! Register NAME as a time-dependent CellData group dataset. This writes
+  !! no data, but configures a new extendable HDF5 dataset for future writing.
+  !!
+  !! MOLD determines the dataset's fixed leading dimensions:
+  !! - For scalar-valued cell data: MOLD is a scalar;
+  !! - For vector-valued cell data: MOLD is a 1D array whose size equals the
+  !!   number of components.
+  !!
+  !! The type and kind of MOLD defines the HDF5 datatype, and its value is
+  !! ignored. The last dimension of written data will correspond to the cell
+  !! index, making it the extendable (slowest-varying) dimension of the dataset.
+  !! All MPI ranks must provide identical MOLD characteristics.
 #:for s in num_specs
 
-  subroutine register_temporal_cell_data_${s["kind"]}$(this, name, value_mold, stat, errmsg)
+  subroutine register_temporal_cell_data_${s["kind"]}$(this, name, mold)
 
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: value_mold(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
+    ${s["decl"]}$, intent(in) :: mold(..)
 
     type(temporal_data), pointer :: new
 
-    if (this%ctx%global_any(this%nsteps < 0)) then
-      stat = 1
-      errmsg = 'UnstructuredGrid dataset not configured for temporal data'
-      return
-    end if
-
-    if (this%ctx%global_any(this%nsteps > 0)) then
-      stat = 1
-      errmsg = 'not allowed after first time step'
-      return
-    end if
+    INSIST(this%nsteps >= 0) ! must be configured for temporal
+    INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
 
     !! Dataset for the cell data
     associate (chunk_size => this%ncell_tot)
-      call h5_create_unlimited_dataset(this%ctx, this%cgrp_id, name, value_mold, chunk_size, stat, errmsg)
+      call h5_create_unlimited_dataset(this%ctx, this%cgrp_id, name, mold, chunk_size)
     end associate
-    if (stat /= 0) return
 
     !! Dataset for its time step offsets
-    associate (value_mold => 1, chunk_size => 100)
-      call h5_create_unlimited_dataset(this%ctx, this%cogrp_id, name, value_mold, chunk_size, stat, errmsg)
+    associate (mold => 1, chunk_size => 100)
+      call h5_create_unlimited_dataset(this%ctx, this%cogrp_id, name, mold, chunk_size)
     end associate
-    if (stat /= 0) return
 
     !! Add to list CellData datasets
     allocate(new)
@@ -401,37 +371,40 @@ contains
   end subroutine register_temporal_cell_data_${s["kind"]}$
 #:endfor
 
-  !! Register the specified NAME as a time-dependent PointData group dataset.
-  !! This writes no data, but only configures some necessary internal metadata.
-  !! The MOLD array argument shall have the same type, kind, and rank as the
-  !! actual point data, and the same extent in all but the last dimension,
-  !! but the array values themselves are not accessed. Scalar, vector, and
-  !! tensor-valued point data are supported (rank-1, 2, and 3 MOLD).
+  !! Register NAME as a time-dependent PointData group dataset. This writes
+  !! no data, but configures a new extendable HDF5 dataset for future writing.
+  !!
+  !! MOLD determines the dataset's fixed leading dimensions:
+  !! - For scalar-valued point data: MOLD is a scalar;
+  !! - For vector-valued point data: MOLD is a 1D array whose size equals the
+  !!   number of components.
+  !!
+  !! The type and kind of MOLD defines the HDF5 datatype, and its value is
+  !! ignored. The last dimension of written data will correspond to the point
+  !! index, making it the extendable (slowest-varying) dimension of the dataset.
+  !! All MPI ranks must provide identical MOLD characteristics.
 #:for s in num_specs
 
-  subroutine register_temporal_point_data_${s["kind"]}$(this, name, value_mold, stat, errmsg)
+  subroutine register_temporal_point_data_${s["kind"]}$(this, name, mold)
 
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: value_mold(..)
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
+    ${s["decl"]}$, intent(in) :: mold(..)
 
     type(temporal_data), pointer :: new
 
-    INSIST(this%nsteps == 0)
+    INSIST(this%nsteps >= 0) ! must be configured for temporal
+    INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
 
     !! Dataset for the point data
     associate (chunk_size => this%nnode_tot)
-      call h5_create_unlimited_dataset(this%ctx, this%pgrp_id, name, value_mold, chunk_size, stat, errmsg)
+      call h5_create_unlimited_dataset(this%ctx, this%pgrp_id, name, mold, chunk_size)
     end associate
-    if (stat /= 0) return
 
     !! Dataset for its time step offsets
-    associate (value_mold => 1, chunk_size => 100)
-      call h5_create_unlimited_dataset(this%ctx, this%pogrp_id, name, value_mold, chunk_size, stat, errmsg)
+    associate (mold => 1, chunk_size => 100)
+      call h5_create_unlimited_dataset(this%ctx, this%pogrp_id, name, mold, chunk_size)
     end associate
-    if (stat /= 0) return
 
     !! Add to list PointData datasets
     allocate(new)
@@ -451,70 +424,58 @@ contains
     real(real64), intent(in) :: time
 
     type(temporal_data), pointer :: tmp
-    integer :: stat
-    character(:), allocatable :: errmsg
 
     INSIST(this%nsteps >= 0)
 
     this%nsteps = this%nsteps + 1
-    call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps, stat, errmsg)
-    INSIST(stat == 0)
+    call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps)
 
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'Values', time, stat, errmsg, root=0)
-    INSIST(stat == 0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'Values', time, root=0)
 
     !! A single mesh is used for all time steps so there are no offsets
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'PointOffsets', 0, stat, errmsg, root=0)
-    INSIST(stat == 0)
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'CellOffsets', 0, stat, errmsg, root=0)
-    INSIST(stat == 0)
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'ConnectivityIdOffsets', 0, stat, errmsg, root=0)
-    INSIST(stat == 0)
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'NumberOfParts', this%npart, stat, errmsg, root=0)
-    INSIST(stat == 0)
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'PartOffsets', 0, stat, errmsg, root=0)
-    INSIST(stat == 0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'PointOffsets', 0, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'CellOffsets', 0, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'ConnectivityIdOffsets', 0, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'NumberOfParts', this%npart, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'PartOffsets', 0, root=0)
 
     !! Cell and point data offsets for each of the temporal datasets for this timestep
 
     tmp => this%temporal_point_data
     do while (associated(tmp))
       tmp%flag = .false.  ! dataset not yet written for this time step
-      call h5_append_to_dataset(this%ctx, this%pogrp_id, tmp%name, tmp%next_offset, stat, errmsg, root=0)
-      INSIST(stat == 0)
+      call h5_append_to_dataset(this%ctx, this%pogrp_id, tmp%name, tmp%next_offset, root=0)
       tmp => tmp%next
     end do
 
     tmp => this%temporal_cell_data
     do while (associated(tmp))
       tmp%flag = .false.  ! dataset not yet written for this time step
-      call h5_append_to_dataset(this%ctx, this%cogrp_id, tmp%name, tmp%next_offset, stat, errmsg, root=0)
-      INSIST(stat == 0)
+      call h5_append_to_dataset(this%ctx, this%cogrp_id, tmp%name, tmp%next_offset, root=0)
       tmp => tmp%next
     end do
 
   end subroutine write_time_step
 
-  !! Write the cell DATA to the time-dependent CellData group dataset NAME.
-  !! The data is associated with the current time step. The type and shape
-  !! of DATA must be consistent with the MOLD argument passed to the call
-  !! of REGISTER_TEMPORAL_CELL_DATA that created this dataset.
+  !! Write the cell-based ARRAY to the time-dependent CellData group dataset
+  !! NAME. The data is associated with the current time step. The type and
+  !! leading dimensions of ARRAY must match the MOLD provided during the
+  !! registration of NAME. The last (or only) dimension of ARRAY must
+  !  correspond to the local number of cells on this MPI rank.
 #:for s in num_specs
 
-  subroutine write_temporal_cell_data_${s["kind"]}$(this, name, data, stat, errmsg)
+  subroutine write_temporal_cell_data_${s["kind"]}$(this, name, array)
 
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: data(..)
-    integer, intent(out) :: stat
-    character(:), allocatable :: errmsg
+    ${s["decl"]}$, intent(in) :: array(..)
 
     integer, allocatable :: dims(:)
     type(temporal_data), pointer :: dset
 
-    INSIST(this%nsteps >= 0)
+    INSIST(this%nsteps > 0)
 
-    dims = shape(data)
+    dims = shape(array)
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
     INSIST(dims(size(dims)) == this%ncell)
 
@@ -523,47 +484,35 @@ contains
       if (dset%name == name) exit
       dset => dset%next
     end do
+    INSIST(associated(dset))
 
-    if (associated(dset)) then
-      if (dset%flag) then
-        stat = 1
-        errmsg = 'dataset "' // name // '" already written for this time step'
-        return
-      else
-        call h5_append_to_dataset(this%ctx, this%cgrp_id, name, data, stat, errmsg)
-        if (stat /= 0) return
-        dset%next_offset = dset%next_offset + this%ncell_tot
-        dset%flag = .true. ! dataset has been written for this time step
-      end if
-    else
-      stat = 1
-      errmsg = '"' // name // '" is not a valid temporal cell dataset'
-      return
-    end if
+    INSIST(.not.dset%flag) ! no double writing in a single step
+    call h5_append_to_dataset(this%ctx, this%cgrp_id, name, array)
+    dset%next_offset = dset%next_offset + this%ncell_tot
+    dset%flag = .true. ! dataset has been written for this step
 
   end subroutine write_temporal_cell_data_${s["kind"]}$
 #:endfor
 
-  !! Write the point DATA to the time-dependent PointData group dataset NAME.
-  !! The data is associated with the current time step. The type and shape
-  !! of DATA must be consistent with the MOLD argument passed to the call
-  !! of REGISTER_TEMPORAL_POINT_DATA that created this dataset.
+  !! Write the point-based ARRAY to the time-dependent PointData group dataset
+  !! NAME. The data is associated with the current time step. The type and
+  !! leading dimensions of ARRAY must match the MOLD provided during the
+  !! registration of NAME. The last (or only) dimension of ARRAY must
+  !  correspond to the local number of points on this MPI rank.
 #:for s in num_specs
 
-  subroutine write_temporal_point_data_${s["kind"]}$(this, name, data, stat, errmsg)
+  subroutine write_temporal_point_data_${s["kind"]}$(this, name, array)
 
     class(vtkhdf_ug), intent(in) :: this
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: data(..)
-    integer, intent(out) :: stat
-    character(:), allocatable :: errmsg
+    ${s["decl"]}$, intent(in) :: array(..)
 
     integer, allocatable :: dims(:)
     type(temporal_data), pointer :: dset
 
-    INSIST(this%nsteps >= 0)
+    INSIST(this%nsteps > 0)
 
-    dims = shape(data)
+    dims = shape(array)
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
     INSIST(dims(size(dims)) == this%nnode)
 
@@ -572,23 +521,12 @@ contains
       if (dset%name == name) exit
       dset => dset%next
     end do
+    INSIST(associated(dset))
 
-    if (associated(dset)) then
-      if (dset%flag) then
-        stat = 1
-        errmsg = 'dataset "' // name // '" already written for this time step'
-        return
-      else
-        call h5_append_to_dataset(this%ctx, this%pgrp_id, name, data, stat, errmsg)
-        if (stat /= 0) return
-        dset%next_offset = dset%next_offset + this%nnode_tot
-        dset%flag = .true. ! dataset has been written for this time step
-      end if
-    else
-      stat = 1
-      errmsg = '"' // name // '" is not a valid temporal point dataset'
-      return
-    end if
+    INSIST(.not.dset%flag) ! no double writing in a single step
+    call h5_append_to_dataset(this%ctx, this%pgrp_id, name, array)
+    dset%next_offset = dset%next_offset + this%nnode_tot
+    dset%flag = .true. ! dataset has been written for this step
 
   end subroutine write_temporal_point_data_${s["kind"]}$
 #:endfor
