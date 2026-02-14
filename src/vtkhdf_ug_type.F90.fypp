@@ -34,7 +34,6 @@ module vtkhdf_ug_type
   use vtkhdf_h5
   use vtkhdf_ctx_type
   use vtkhdf_h5e_context_type
-  use mpi
   implicit none
   private
 

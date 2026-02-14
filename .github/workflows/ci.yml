@@ -45,4 +45,7 @@ jobs:
 
     - name: Run Tests
       working-directory: build
+      env:
+        # Allow running 4 processes on a 2-core machine
+        OMPI_MCA_rmaps_base_oversubscribe: 1
       run: ctest --output-on-failure
