@@ -50,6 +50,7 @@ module vtkhdf_mb_file_type
     integer(hid_t) :: file_id=H5I_INVALID_HID, vtk_id=H5I_INVALID_HID, ass_id=H5I_INVALID_HID
     integer :: next_bid = 0
     type(pdc_block), pointer :: blocks => null()
+    type(pdc_block), pointer :: last_block => null()
     logical :: is_temporal = .false., write_time_step_called = .false.
   contains
     procedure :: create
@@ -102,6 +103,7 @@ contains
     this%vtk_id  = H5I_INVALID_HID
     this%file_id = H5I_INVALID_HID
     this%next_bid = 0
+    this%last_block => null()
   end subroutine
 
   recursive subroutine pdc_block_delete(this)
@@ -320,7 +322,7 @@ contains
 #:for d in data_specs
 
   subroutine write_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, block_name, name, array)
-    class(vtkhdf_mb_file), intent(in) :: this
+    class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array${d["array"]}$
     type(vtkhdf_ug), pointer :: bptr
@@ -387,7 +389,7 @@ contains
 #:for d in data_specs
 
   subroutine write_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, block_name, name, array)
-    class(vtkhdf_mb_file), intent(in) :: this
+    class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array${d["array"]}$
     type(vtkhdf_ug), pointer :: bptr
@@ -404,11 +406,18 @@ contains
   !! This private procedure returns a pointer to the named block.
   subroutine get_block_ptr(this, name, bptr)
 
-    class(vtkhdf_mb_file), intent(in) :: this
+    class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: name
     type(vtkhdf_ug), pointer, intent(out) :: bptr
 
     type(pdc_block), pointer :: b
+
+    if (associated(this%last_block)) then
+      if (this%last_block%name == name) then
+        bptr => this%last_block%b
+        return
+      end if
+    end if
 
     b => this%blocks
     do while (associated(b))
@@ -417,6 +426,7 @@ contains
     end do
 
     INSIST(this%ctx%global_all(associated(b)))
+    this%last_block => b
     bptr => b%b
 
   end subroutine get_block_ptr
