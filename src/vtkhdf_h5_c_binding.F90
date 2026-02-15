@@ -426,7 +426,6 @@ contains
 
   subroutine init_hdf5
     logical, save :: initialized = .false.
-    if (initialized) return
 
     interface
       function H5P_DATASET_CREATE_value() result(type_id) &
@@ -490,6 +489,9 @@ contains
         integer(hid_t) :: type_id
       end function
     end interface
+
+    if (initialized) return
+
     H5P_DATASET_CREATE = H5P_DATASET_CREATE_value()
     H5P_GROUP_CREATE = H5P_GROUP_CREATE_value()
     H5P_CRT_ORDER_TRACKED = H5P_CRT_ORDER_TRACKED_value()
