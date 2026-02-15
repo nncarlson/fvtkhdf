@@ -1,1 +1,0 @@
-/usr/bin/f95 -O3 -DNDEBUG -O3 CMakeFiles/benchmark_ug.dir/benchmark_ug.F90.o -o benchmark_ug  -Wl,-rpath,/app/build/src ../src/libfvtkhdf.so.0.1.0
