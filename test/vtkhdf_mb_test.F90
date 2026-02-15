@@ -2,6 +2,7 @@ program vtkhdf_mb_test
 
   use,intrinsic :: iso_fortran_env, only: r8 => real64, int8
   use vtkhdf_mb_file_type
+  use vtkhdf_vtk_cell_types
   use mpi
   implicit none
 
