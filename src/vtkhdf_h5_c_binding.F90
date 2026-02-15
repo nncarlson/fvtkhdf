@@ -487,6 +487,11 @@ contains
         integer(hid_t) :: type_id
       end function
     end interface
+
+    logical, save :: initialized = .false.
+
+    if (initialized) return
+
     H5P_DATASET_CREATE = H5P_DATASET_CREATE_value()
     H5P_GROUP_CREATE = H5P_GROUP_CREATE_value()
     H5P_CRT_ORDER_TRACKED = H5P_CRT_ORDER_TRACKED_value()
@@ -499,6 +504,9 @@ contains
     H5T_NATIVE_FLOAT = H5T_NATIVE_FLOAT_value()
     H5T_NATIVE_DOUBLE = H5T_NATIVE_DOUBLE_value()
     H5T_NATIVE_CHARACTER = H5T_NATIVE_CHARACTER_value()
+
+    initialized = .true.
+
   end subroutine
 
   function H5Fcreate(filename, flags, fcpl_id, fapl_id) result(file_id)
