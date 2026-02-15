@@ -86,12 +86,6 @@ module vtkhdf_mb_file_type
     final :: pdc_block_delete
   end type
 
-  !! TODO: get a more exhaustive list, separate module
-  integer(int8), parameter, public :: VTK_TETRA = 10
-  integer(int8), parameter, public :: VTK_HEXAHEDRON = 12
-  integer(int8), parameter, public :: VTK_WEDGE = 13
-  integer(int8), parameter, public :: VTK_PYRAMID = 14
-
 contains
 
   !! Finalizer for vtkhdf_mb_file objects. We free heap memory we own but avoid
