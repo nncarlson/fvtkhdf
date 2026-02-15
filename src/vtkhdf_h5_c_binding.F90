@@ -425,6 +425,9 @@ module vtkhdf_h5_c_binding
 contains
 
   subroutine init_hdf5
+    logical, save :: initialized = .false.
+    if (initialized) return
+
     interface
       function H5P_DATASET_CREATE_value() result(type_id) &
           bind(c,name='H5P_DATASET_CREATE_value')
@@ -499,6 +502,8 @@ contains
     H5T_NATIVE_FLOAT = H5T_NATIVE_FLOAT_value()
     H5T_NATIVE_DOUBLE = H5T_NATIVE_DOUBLE_value()
     H5T_NATIVE_CHARACTER = H5T_NATIVE_CHARACTER_value()
+
+    initialized = .true.
   end subroutine
 
   function H5Fcreate(filename, flags, fcpl_id, fapl_id) result(file_id)
