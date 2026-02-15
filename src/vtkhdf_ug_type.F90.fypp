@@ -37,6 +37,10 @@ module vtkhdf_ug_type
   implicit none
   private
 
+  type :: temporal_cache_wrapper
+    type(temporal_data), pointer :: p => null()
+  end type
+
   type, public :: vtkhdf_ug
     type(vtkhdf_ctx) :: ctx ! unowned copy
     integer(hid_t) :: root_id=H5I_INVALID_HID
@@ -48,6 +52,8 @@ module vtkhdf_ug_type
     integer(hid_t) :: cogrp_id=H5I_INVALID_HID, pogrp_id=H5I_INVALID_HID
     type(temporal_data), pointer :: temporal_point_data => null()
     type(temporal_data), pointer :: temporal_cell_data => null()
+    type(temporal_cache_wrapper), pointer :: cell_cache => null()
+    type(temporal_cache_wrapper), pointer :: point_cache => null()
   contains
     procedure :: init
     procedure :: close
@@ -93,6 +99,8 @@ contains
     type(vtkhdf_ug), intent(inout) :: this
     if (associated(this%temporal_cell_data)) deallocate(this%temporal_cell_data)
     if (associated(this%temporal_point_data)) deallocate(this%temporal_point_data)
+    if (associated(this%cell_cache)) deallocate(this%cell_cache)
+    if (associated(this%point_cache)) deallocate(this%point_cache)
     this%cogrp_id = H5I_INVALID_HID
     this%pogrp_id = H5I_INVALID_HID
     this%steps_id = H5I_INVALID_HID
@@ -186,6 +194,9 @@ contains
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'NumberOfParts', mold, chunk_size)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'PartOffsets', mold, chunk_size)
       end associate
+
+      allocate(this%cell_cache)
+      allocate(this%point_cache)
     end if
 
   end subroutine init
@@ -346,7 +357,7 @@ contains
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: mold(..)
 
-    type(temporal_data), pointer :: new
+    type(temporal_data), pointer :: new, tail
 
     INSIST(this%nsteps >= 0) ! must be configured for temporal
     INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
@@ -361,11 +372,19 @@ contains
       call h5_create_unlimited_dataset(this%ctx, this%cogrp_id, name, mold, chunk_size)
     end associate
 
-    !! Add to list CellData datasets
+    !! Add to list CellData datasets (append to end)
     allocate(new)
     new%name = name
-    new%next => this%temporal_cell_data
-    this%temporal_cell_data => new
+    new%next => null()
+    if (.not. associated(this%temporal_cell_data)) then
+       this%temporal_cell_data => new
+    else
+       tail => this%temporal_cell_data
+       do while (associated(tail%next))
+          tail => tail%next
+       end do
+       tail%next => new
+    end if
 
   end subroutine register_temporal_cell_data_${s["kind"]}$
 #:endfor
@@ -390,7 +409,7 @@ contains
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: mold(..)
 
-    type(temporal_data), pointer :: new
+    type(temporal_data), pointer :: new, tail
 
     INSIST(this%nsteps >= 0) ! must be configured for temporal
     INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
@@ -405,11 +424,19 @@ contains
       call h5_create_unlimited_dataset(this%ctx, this%pogrp_id, name, mold, chunk_size)
     end associate
 
-    !! Add to list PointData datasets
+    !! Add to list PointData datasets (append to end)
     allocate(new)
     new%name = name
-    new%next => this%temporal_point_data
-    this%temporal_point_data => new
+    new%next => null()
+    if (.not. associated(this%temporal_point_data)) then
+       this%temporal_point_data => new
+    else
+       tail => this%temporal_point_data
+       do while (associated(tail%next))
+          tail => tail%next
+       end do
+       tail%next => new
+    end if
 
   end subroutine register_temporal_point_data_${s["kind"]}$
 #:endfor
@@ -478,12 +505,34 @@ contains
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
     INSIST(dims(size(dims)) == this%ncell)
 
-    dset => this%temporal_cell_data
-    do while (associated(dset))
-      if (dset%name == name) exit
-      dset => dset%next
-    end do
-    INSIST(associated(dset))
+    dset => null()
+    if (associated(this%cell_cache)) then
+      ! Check current
+      if (associated(this%cell_cache%p)) then
+        if (this%cell_cache%p%name == name) then
+          dset => this%cell_cache%p
+        ! Check next (optimization for sequential access)
+        elseif (associated(this%cell_cache%p%next)) then
+          if (this%cell_cache%p%next%name == name) then
+             dset => this%cell_cache%p%next
+          end if
+        end if
+      end if
+    end if
+
+    if (.not. associated(dset)) then
+      dset => this%temporal_cell_data
+      do while (associated(dset))
+        if (dset%name == name) exit
+        dset => dset%next
+      end do
+      INSIST(associated(dset))
+    end if
+
+    ! Update cache
+    if (associated(this%cell_cache)) then
+       this%cell_cache%p => dset
+    end if
 
     INSIST(.not.dset%flag) ! no double writing in a single step
     call h5_append_to_dataset(this%ctx, this%cgrp_id, name, array)
@@ -515,12 +564,34 @@ contains
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
     INSIST(dims(size(dims)) == this%nnode)
 
-    dset => this%temporal_point_data
-    do while (associated(dset))
-      if (dset%name == name) exit
-      dset => dset%next
-    end do
-    INSIST(associated(dset))
+    dset => null()
+    if (associated(this%point_cache)) then
+      ! Check current
+      if (associated(this%point_cache%p)) then
+        if (this%point_cache%p%name == name) then
+          dset => this%point_cache%p
+        ! Check next (optimization for sequential access)
+        elseif (associated(this%point_cache%p%next)) then
+          if (this%point_cache%p%next%name == name) then
+             dset => this%point_cache%p%next
+          end if
+        end if
+      end if
+    end if
+
+    if (.not. associated(dset)) then
+      dset => this%temporal_point_data
+      do while (associated(dset))
+        if (dset%name == name) exit
+        dset => dset%next
+      end do
+      INSIST(associated(dset))
+    end if
+
+    ! Update cache
+    if (associated(this%point_cache)) then
+       this%point_cache%p => dset
+    end if
 
     INSIST(.not.dset%flag) ! no double writing in a single step
     call h5_append_to_dataset(this%ctx, this%pgrp_id, name, array)
