@@ -50,6 +50,9 @@ module vtkhdf_h5_c_binding
   integer(c_int), parameter :: H5F_ACC_TRUNC  = int(Z'0002', c_int)
   integer(c_int), parameter :: H5F_ACC_EXCL   = int(Z'0004', c_int)
 
+  integer(c_int), parameter :: H5F_SCOPE_LOCAL  = 0
+  integer(c_int), parameter :: H5F_SCOPE_GLOBAL = 1
+
   !! Header file constants from H5Ppublic.h
   integer(hid_t), parameter :: H5P_DEFAULT = 0
 
@@ -97,6 +100,13 @@ module vtkhdf_h5_c_binding
       integer(c_int) :: h5err
     end function
 
+    function H5Fflush(object_id, scope) result(h5err) bind(c,name='H5Fflush')
+      import :: hid_t, c_int
+      integer(hid_t), value :: object_id
+      integer(c_int), value :: scope
+      integer(c_int) :: h5err
+    end function
+
     function H5Fget_access_plist(file_id) &
         result(plist_id) bind(c,name='H5Fget_access_plist')
       import :: hid_t
@@ -105,7 +115,7 @@ module vtkhdf_h5_c_binding
     end function
   end interface
 
-  public :: H5Fclose, H5Fget_access_plist
+  public :: H5Fclose, H5Fflush, H5Fget_access_plist
 
   !!!! H5G functions that can be used as-is !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 

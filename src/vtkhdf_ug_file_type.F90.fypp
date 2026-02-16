@@ -49,6 +49,7 @@ module vtkhdf_ug_file_type
   contains
     procedure :: create
     procedure :: close
+    procedure :: flush
 #:for r in real_specs
 #:for i in int_specs
     generic :: write_mesh => write_mesh_${r["kind"]}$_${i["kind"]}$
@@ -100,6 +101,16 @@ contains
     subroutine finalize(this)
       class(vtkhdf_ug_file), intent(out) :: this
     end subroutine
+  end subroutine
+
+  subroutine flush(this)
+    class(vtkhdf_ug_file), intent(in) :: this
+    integer :: ierr
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    ierr = H5Fflush(this%file_id, H5F_SCOPE_LOCAL)
+    INSIST(ierr >= 0)
+    call err_ctx%restore(0)
   end subroutine
 
 #ifdef USE_MPI
