@@ -50,8 +50,8 @@ module vtkhdf_h5_c_binding
   integer(c_int), parameter :: H5F_ACC_TRUNC  = int(Z'0002', c_int)
   integer(c_int), parameter :: H5F_ACC_EXCL   = int(Z'0004', c_int)
 
-  integer(c_int), parameter :: H5F_SCOPE_LOCAL  = 0
-  integer(c_int), parameter :: H5F_SCOPE_GLOBAL = 1
+  integer(c_int), parameter, public :: H5F_SCOPE_LOCAL  = 0
+  integer(c_int), parameter, public :: H5F_SCOPE_GLOBAL = 1
 
   !! Header file constants from H5Ppublic.h
   integer(hid_t), parameter :: H5P_DEFAULT = 0
