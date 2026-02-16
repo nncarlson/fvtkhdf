@@ -93,6 +93,8 @@ program vtkhdf_mb_test
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do
 
+  call vizfile%flush()
+
   !!!! Write the datasets for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   call vizfile%write_time_step(1.0_r8)

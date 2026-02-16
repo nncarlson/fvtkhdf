@@ -54,6 +54,8 @@ program vtkhdf_ug_test
   call get_vector_point_data(x, v)
   call vizfile%write_temporal_point_data('point-vector', v)
 
+  call vizfile%flush()
+
   !!!! Write the datasets for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   call vizfile%write_time_step(1.0_r8)
