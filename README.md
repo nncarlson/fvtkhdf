@@ -8,6 +8,9 @@ a more scalable alternative to older VTK ASCII or XML formats.
 
 ### Documentation
 
+Detailed documentation for the library modules can be found in the `docs/` directory:
+- [vtkhdf_ug_file_type](docs/vtkhdf_ug_file_type.md): Documentation for the UnstructuredGrid file type.
+
 ### Compiling
 
 ### Installation
