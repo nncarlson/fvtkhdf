@@ -56,7 +56,8 @@ module vtkhdf_ug_file_type
     procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
 #:endfor
 #:endfor
-    procedure :: write_time_step
+    generic :: write_time_step => write_time_step_real32, write_time_step_real64
+    procedure, private :: write_time_step_real32, write_time_step_real64
 #:for s in num_specs
 #:for loc in locations
 #:for r in data_specs
@@ -239,14 +240,20 @@ contains
   !! Mark the start of a new time step with time value TIME. Subsequent output
   !! of time-dependent datasets will be associated with this time step.
 
-  subroutine write_time_step(this, time)
+  subroutine write_time_step_real32(this, time)
+    class(vtkhdf_ug_file), intent(inout) :: this
+    real(real32), intent(in) :: time
+    call this%write_time_step(real(time, real64))
+  end subroutine write_time_step_real32
+
+  subroutine write_time_step_real64(this, time)
     class(vtkhdf_ug_file), intent(inout) :: this
     real(real64), intent(in) :: time
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
     call this%ug%write_time_step(time)
     call err_ctx%restore(0)
-  end subroutine
+  end subroutine write_time_step_real64
 
   !! Write the cell/point-based data ARRAY to the named time-dependent dataset.
   !! The data is associated with the current time step.
