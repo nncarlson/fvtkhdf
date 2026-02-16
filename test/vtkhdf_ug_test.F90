@@ -1,6 +1,6 @@
 program vtkhdf_ug_test
 
-  use,intrinsic :: iso_fortran_env, only: r8 => real64, int8
+  use,intrinsic :: iso_fortran_env, only: r8 => real64, r4 => real32, int8
   use vtkhdf_ug_file_type
   use vtkhdf_vtk_cell_types
   use mpi
@@ -40,7 +40,7 @@ program vtkhdf_ug_test
 
   !!!! Write the datasets for the first time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  call vizfile%write_time_step(0.0_r8)
+  call vizfile%write_time_step(0.0_r4)
 
   call get_scalar_cell_data(x, cnode, xcnode, s)
   call vizfile%write_temporal_cell_data('cell-scalar', s)
@@ -58,7 +58,7 @@ program vtkhdf_ug_test
 
   !!!! Write the datasets for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  call vizfile%write_time_step(1.0_r8)
+  call vizfile%write_time_step(1.0_r4)
 
   call get_scalar_cell_data(x, cnode, xcnode, s)
   call vizfile%write_temporal_cell_data('cell-scalar', s+1)
