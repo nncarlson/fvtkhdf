@@ -41,9 +41,10 @@ module vtkhdf_ug_type
     type(vtkhdf_ctx) :: ctx ! unowned copy
     integer(hid_t) :: root_id=H5I_INVALID_HID
     integer(hid_t) :: cgrp_id=H5I_INVALID_HID, pgrp_id=H5I_INVALID_HID
-    integer(int64) :: nnode, ncell, nnode_tot, ncell_tot, npart
+    integer(int64) :: nnode, ncell, nnode_tot, ncell_tot
+    integer :: npart
     logical :: is_temporal = .false.
-    integer(int64) :: nsteps = -1
+    integer :: nsteps = -1
     integer(hid_t) :: steps_id=H5I_INVALID_HID
     integer(hid_t) :: cogrp_id=H5I_INVALID_HID, pogrp_id=H5I_INVALID_HID
     type(temporal_data), pointer :: temporal_point_data => null()
@@ -168,7 +169,7 @@ contains
       this%nsteps = 0
       call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps)
 
-      associate (mold => 1.0_real64, chunk_size => 100_int64)
+      associate (mold => 1.0_real64, chunk_size => 100)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'Values', mold, chunk_size)
       end associate
 
@@ -179,7 +180,7 @@ contains
       ! NB: These are no longer needed in ParaView 6.1 when StaticMesh=1, but
       ! we retain them for compatibility with earlier versions. They will be
       ! filled with 0 offsets and the constant number of parts.
-      associate (mold => 0_int64, chunk_size => 100_int64)
+      associate (mold => 0_int64, chunk_size => 100)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'PointOffsets', mold, chunk_size)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'CellOffsets', mold, chunk_size)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'ConnectivityIdOffsets', mold, chunk_size)
@@ -226,7 +227,7 @@ contains
 
     call this%ctx%global_sum(this%nnode, this%nnode_tot)
     call this%ctx%global_sum(this%ncell, this%ncell_tot)
-    call this%ctx%global_sum(merge(1_int64, 0_int64, this%ncell>0), this%npart) ! see NB above
+    call this%ctx%global_sum(merge(1, 0, this%ncell>0), this%npart) ! see NB above
 
     if (this%ncell > 0) then ! see NB above
       call h5_write_dataset(this%ctx, this%root_id, 'NumberOfPoints', this%nnode)
@@ -353,12 +354,12 @@ contains
     INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
 
     !! Dataset for the cell data
-    associate (chunk_size => this%ncell_tot)
+    associate (chunk_size => int(this%ncell_tot))
       call h5_create_unlimited_dataset(this%ctx, this%cgrp_id, name, mold, chunk_size)
     end associate
 
     !! Dataset for its time step offsets
-    associate (mold => 0_int64, chunk_size => 100_int64)
+    associate (mold => 0_int64, chunk_size => 100)
       call h5_create_unlimited_dataset(this%ctx, this%cogrp_id, name, mold, chunk_size)
     end associate
 
@@ -397,12 +398,12 @@ contains
     INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
 
     !! Dataset for the point data
-    associate (chunk_size => this%nnode_tot)
+    associate (chunk_size => int(this%nnode_tot))
       call h5_create_unlimited_dataset(this%ctx, this%pgrp_id, name, mold, chunk_size)
     end associate
 
     !! Dataset for its time step offsets
-    associate (mold => 0_int64, chunk_size => 100_int64)
+    associate (mold => 0_int64, chunk_size => 100)
       call h5_create_unlimited_dataset(this%ctx, this%pogrp_id, name, mold, chunk_size)
     end associate
 
@@ -436,7 +437,7 @@ contains
     call h5_append_to_dataset(this%ctx, this%steps_id, 'PointOffsets', 0_int64, root=0)
     call h5_append_to_dataset(this%ctx, this%steps_id, 'CellOffsets', 0_int64, root=0)
     call h5_append_to_dataset(this%ctx, this%steps_id, 'ConnectivityIdOffsets', 0_int64, root=0)
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'NumberOfParts', this%npart, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'NumberOfParts', int(this%npart, int64), root=0)
     call h5_append_to_dataset(this%ctx, this%steps_id, 'PartOffsets', 0_int64, root=0)
 
     !! Cell and point data offsets for each of the temporal datasets for this timestep

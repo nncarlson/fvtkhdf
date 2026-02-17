@@ -48,7 +48,7 @@ module vtkhdf_mb_file_type
     private
     type(vtkhdf_ctx) :: ctx
     integer(hid_t) :: file_id=H5I_INVALID_HID, vtk_id=H5I_INVALID_HID, ass_id=H5I_INVALID_HID
-    integer(int64) :: next_bid = 0
+    integer :: next_bid = 0
     type(pdc_block), pointer :: blocks => null()
     type(pdc_block), pointer :: last_block => null()
     logical :: is_temporal = .false., write_time_step_called = .false.
@@ -104,7 +104,7 @@ contains
     this%ass_id  = H5I_INVALID_HID
     this%vtk_id  = H5I_INVALID_HID
     this%file_id = H5I_INVALID_HID
-    this%next_bid = 0_int64
+    this%next_bid = 0
     this%last_block => null()
   end subroutine
 
