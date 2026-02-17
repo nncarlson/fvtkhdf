@@ -184,8 +184,10 @@ contains
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'PointOffsets', mold, chunk_size)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'CellOffsets', mold, chunk_size)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'ConnectivityIdOffsets', mold, chunk_size)
-        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'NumberOfParts', mold, chunk_size)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'PartOffsets', mold, chunk_size)
+      end associate
+      associate (mold => 0, chunk_size => 100)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'NumberOfParts', mold, chunk_size)
       end associate
     end if
 
@@ -437,7 +439,7 @@ contains
     call h5_append_to_dataset(this%ctx, this%steps_id, 'PointOffsets', 0_int64, root=0)
     call h5_append_to_dataset(this%ctx, this%steps_id, 'CellOffsets', 0_int64, root=0)
     call h5_append_to_dataset(this%ctx, this%steps_id, 'ConnectivityIdOffsets', 0_int64, root=0)
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'NumberOfParts', int(this%npart, int64), root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'NumberOfParts', this%npart, root=0)
     call h5_append_to_dataset(this%ctx, this%steps_id, 'PartOffsets', 0_int64, root=0)
 
     !! Cell and point data offsets for each of the temporal datasets for this timestep
