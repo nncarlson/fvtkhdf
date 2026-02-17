@@ -135,7 +135,7 @@ configure_package_config_file("${CONFIG_FILE}.in" "${CONFIG_FILE}"
 )
 
 write_basic_package_version_file("${VERSION_FILE}"
-    VERSION 0.1.0
+    VERSION ${PROJECT_VERSION}
     COMPATIBILITY AnyNewerVersion
 )
 

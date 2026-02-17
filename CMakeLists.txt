@@ -6,6 +6,7 @@ project(fVTKHDF VERSION 0.1.0 LANGUAGES Fortran C)
 option(ENABLE_MPI "Enable MPI support" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(ENABLE_STD_MOD_PROC_NAME "Build with -assume std_mod_proc_name when using Intel" OFF)
+option(BUILD_HTML "Build HTML documentation" OFF)
 
 # Default to Release build if not specified
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -75,4 +76,14 @@ add_subdirectory(src)
 include(CTest)
 if(BUILD_TESTING)
   add_subdirectory(test)
+endif()
+
+if(BUILD_HTML)
+  find_program(SPHINX_EXECUTABLE NAMES sphinx-build
+    DOC "Path to sphinx-build executable"
+  )
+  if(NOT SPHINX_EXECUTABLE)
+    message(FATAL_ERROR "sphinx-build not found. Please install Sphinx.")
+  endif()
+  add_subdirectory(doc/sphinx)
 endif()

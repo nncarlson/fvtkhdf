@@ -1,0 +1,42 @@
+# Configuration file for the Sphinx documentation builder.
+#
+# For the full list of built-in configuration values, see the documentation:
+# https://www.sphinx-doc.org/en/master/usage/configuration.html
+
+# -- Project information -----------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+
+project = 'fVTKHDF'
+copyright = '2026, Neil N. Carlson'
+author = 'Neil N. Carlson'
+version = '@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@'
+release = '@PROJECT_VERSION@'
+
+# -- General configuration ---------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
+
+extensions = ['sphinx_rtd_theme']
+
+templates_path = ['_templates']
+exclude_patterns = []
+
+#import guzzle_sphinx_theme
+
+# -- Options for HTML output -------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
+
+#html_theme = 'alabaster'
+#html_theme_path = guzzle_sphinx_theme.html_theme_path()
+#html_theme = 'guzzle_sphinx_theme'
+html_theme = 'sphinx_rtd_theme'
+
+html_static_path = ['_static']
+
+# get rid of navigation sidebar for single-page document
+html_sidebars = {
+    '**': []
+}
+
+html_theme_options = {
+    'nosidebar': True,
+}
