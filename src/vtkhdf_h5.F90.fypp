@@ -354,7 +354,7 @@ contains
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: mold(..)
-    integer, intent(in) :: chunk_size
+    integer(int64), intent(in) :: chunk_size
     call create_unlimited_dataset_core(ctx, loc_id, name, ${s["h5type"]}$, &
         shape(mold,hsize_t), chunk_size)
   end subroutine
@@ -368,7 +368,7 @@ contains
     character(*), intent(in) :: name
     integer(hid_t), intent(in) :: type_id
     integer(hsize_t), intent(in) :: dims(:)
-    integer, intent(in) :: chunk_size
+    integer(int64), intent(in) :: chunk_size
 
     integer :: ierr, htri
     integer(hid_t) :: space_id, dcpl_id, dset_id
