@@ -173,7 +173,7 @@ contains
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     type(MPI_Comm) :: f08_comm
-    f08_comm%MPI_VAL = comm
+    f08_comm%mpi_val = comm
     call this%create(filename, f08_comm, stat, errmsg)
   end subroutine create_int
 #else

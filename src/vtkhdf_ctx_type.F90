@@ -143,7 +143,7 @@ contains
     integer(hid_t), intent(out) :: fapl
     integer :: stat
     fapl = H5Pcreate(H5P_FILE_ACCESS)
-    stat = H5Pset_fapl_mpio(fapl, this%comm%MPI_VAL)
+    stat = H5Pset_fapl_mpio(fapl, this%comm%mpi_val)
     stat = H5Pset_all_coll_metadata_ops(fapl, is_collective=.true._c_bool)
     stat = H5Pset_coll_metadata_write(fapl, is_collective=.true._c_bool)
   end subroutine
