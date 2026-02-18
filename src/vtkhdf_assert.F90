@@ -11,7 +11,7 @@ subroutine vtkhdf_assert(file, line)
 
 #ifdef USE_MPI
   block
-    use mpi
+    use mpi_f08
     integer :: rank
     logical :: mpi_is_init
     call MPI_Initialized(mpi_is_init, ierr)
@@ -28,7 +28,10 @@ subroutine vtkhdf_assert(file, line)
   write(error_unit,'(/,4a,i0,a)') trim(rank_str), 'Panic! Assertion failed at ', file, ':', line
 
 #ifdef USE_MPI
-  call MPI_Abort(MPI_COMM_WORLD, 1, ierr)
+  block
+    use mpi_f08
+    call MPI_Abort(MPI_COMM_WORLD, 1, ierr)
+  end block
 #else
   error stop
 #endif

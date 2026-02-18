@@ -14,12 +14,12 @@
 module vtkhdf_ctx_type
 
   use,intrinsic :: iso_fortran_env
-  use mpi
+  use mpi_f08
   implicit none
   private
 
   type, public :: vtkhdf_ctx
-    integer :: comm = MPI_COMM_NULL
+    type(MPI_Comm) :: comm = MPI_COMM_NULL
     integer :: rank = 0
     integer :: size = 1
   contains
@@ -40,7 +40,7 @@ contains
 
   subroutine init(this, comm)
     class(vtkhdf_ctx), intent(out) :: this
-    integer, intent(in) :: comm
+    type(MPI_Comm), intent(in) :: comm
     integer :: ierr
     call MPI_Comm_dup(comm, this%comm, ierr)
     INSIST(ierr == 0)
@@ -143,7 +143,7 @@ contains
     integer(hid_t), intent(out) :: fapl
     integer :: stat
     fapl = H5Pcreate(H5P_FILE_ACCESS)
-    stat = H5Pset_fapl_mpio(fapl, this%comm)
+    stat = H5Pset_fapl_mpio(fapl, this%comm%mpi_val)
     stat = H5Pset_all_coll_metadata_ops(fapl, is_collective=.true._c_bool)
     stat = H5Pset_coll_metadata_write(fapl, is_collective=.true._c_bool)
   end subroutine
