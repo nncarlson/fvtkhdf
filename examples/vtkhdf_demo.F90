@@ -60,11 +60,11 @@ program vtkhdf_demo
 
   !!!! Register the data arrays that evolve with time.
 
-  associate (v_mold => [real(r8) :: 0, 0, 0])
+  associate (s_mold => 0.0_r8, v_mold => [real(r8) :: 0, 0, 0])
     do j = 0, nproc-1
-      call vizfile%register_temporal_cell_data(name(j), 'cell-scalar', s0)
+      call vizfile%register_temporal_cell_data(name(j), 'cell-scalar', s_mold)
       call vizfile%register_temporal_cell_data(name(j), 'cell-vector', v_mold)
-      call vizfile%register_temporal_point_data(name(j), 'point-scalar', s0)
+      call vizfile%register_temporal_point_data(name(j), 'point-scalar', s_mold)
       call vizfile%register_temporal_point_data(name(j), 'point-vector', v_mold)
     end do
   end associate
