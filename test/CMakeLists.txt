@@ -23,3 +23,7 @@ else()
   add_test(vtkhdf_mb_file_type ./vtkhdf_mb_test)
   set_tests_properties(vtkhdf_mb_file_type PROPERTIES PROCESSORS 1)
 endif()
+
+add_executable(test_leak test_leak.F90)
+target_link_libraries(test_leak PRIVATE fvtkhdf)
+add_test(NAME test_leak COMMAND test_leak)
