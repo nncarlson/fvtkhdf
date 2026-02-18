@@ -11,7 +11,7 @@ subroutine vtkhdf_assert(file, line)
 
 #ifdef USE_MPI
   block
-    use mpi
+    use mpi_f08
     integer :: rank
     logical :: mpi_is_init
     call MPI_Initialized(mpi_is_init, ierr)

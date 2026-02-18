@@ -30,6 +30,9 @@
 module vtkhdf_ug_file_type
 
   use,intrinsic :: iso_fortran_env
+#ifdef USE_MPI
+  use mpi_f08
+#endif
   use vtkhdf_h5_c_binding
   use vtkhdf_h5
   use vtkhdf_ug_type
@@ -123,7 +126,7 @@ contains
     class(vtkhdf_ug_file), intent(out) :: this
     character(*), intent(in) :: filename
 #ifdef USE_MPI
-    integer, intent(in) :: comm
+    type(MPI_Comm), intent(in) :: comm
 #endif
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
