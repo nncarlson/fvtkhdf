@@ -47,7 +47,13 @@ module vtkhdf_ug_file_type
     integer(hid_t)  :: file_id=H5I_INVALID_HID
     type(vtkhdf_ug) :: ug
   contains
+#ifdef USE_MPI
+    generic :: create => create_f08, create_int
+    procedure, private :: create_f08, create_int
+#else
     procedure :: create
+#endif
+    procedure, private :: create_impl
     procedure :: close
     procedure :: flush
 #:for r in real_specs
@@ -115,16 +121,46 @@ contains
   end subroutine
 
 #ifdef USE_MPI
-  subroutine create(this, filename, comm, stat, errmsg, is_temporal)
-#else
-  subroutine create(this, filename, stat, errmsg, is_temporal)
-#endif
-
+  subroutine create_f08(this, filename, comm, stat, errmsg, is_temporal)
+    use mpi_f08, only: MPI_Comm
     class(vtkhdf_ug_file), intent(out) :: this
     character(*), intent(in) :: filename
-#ifdef USE_MPI
+    type(MPI_Comm), intent(in) :: comm
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    logical, intent(in), optional :: is_temporal
+    call this%ctx%init(comm)
+    call this%create_impl(filename, stat, errmsg, is_temporal)
+  end subroutine create_f08
+
+  subroutine create_int(this, filename, comm, stat, errmsg, is_temporal)
+    use mpi_f08, only: MPI_Comm
+    class(vtkhdf_ug_file), intent(out) :: this
+    character(*), intent(in) :: filename
     integer, intent(in) :: comm
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    logical, intent(in), optional :: is_temporal
+    type(MPI_Comm) :: f08_comm
+    f08_comm%MPI_VAL = comm
+    call this%create(filename, f08_comm, stat, errmsg, is_temporal)
+  end subroutine create_int
+#else
+  subroutine create(this, filename, stat, errmsg, is_temporal)
+    class(vtkhdf_ug_file), intent(out) :: this
+    character(*), intent(in) :: filename
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    logical, intent(in), optional :: is_temporal
+    call this%ctx%init()
+    call this%create_impl(filename, stat, errmsg, is_temporal)
+  end subroutine create
 #endif
+
+  subroutine create_impl(this, filename, stat, errmsg, is_temporal)
+
+    class(vtkhdf_ug_file), intent(inout) :: this
+    character(*), intent(in) :: filename
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     logical, intent(in), optional :: is_temporal
@@ -132,14 +168,6 @@ contains
     integer(hid_t) :: fapl
     integer :: ierr
     type(vtkhdf_h5e_context) :: err_ctx
-
-    ! MPI build: duplicates comm, caches rank/size
-    ! Serial build: no comm, sets rank=0, size=1
-#ifdef USE_MPI
-    call this%ctx%init(comm)
-#else
-    call this%ctx%init()
-#endif
 
     call init_hdf5
     call err_ctx%capture
@@ -163,7 +191,7 @@ contains
     stat = 0
     call err_ctx%restore(stat)
 
-  end subroutine create
+  end subroutine create_impl
 
   !! Write the unstructured mesh to the file. The mesh is described in the
   !! conventional manner by the X, CNODE, and XCNODE arrays. The additional

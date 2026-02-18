@@ -3,7 +3,7 @@ program vtkhdf_ug_test
   use,intrinsic :: iso_fortran_env, only: r8 => real64, r4 => real32, int8
   use vtkhdf_ug_file_type
   use vtkhdf_vtk_cell_types
-  use mpi
+  use mpi_f08
   implicit none
 
   type(vtkhdf_ug_file) :: vizfile
