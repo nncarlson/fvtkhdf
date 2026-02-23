@@ -24,12 +24,12 @@ program vtkhdf_mb_test
   call vizfile%add_block('Block-A', stat, errmsg, is_temporal=.true.)
   if (stat /= 0) error stop errmsg
 
-  call vizfile%write_block_mesh('Block-A', x, cnode, xcnode, types)
+  call vizfile%write_mesh('Block-A', x, cnode, xcnode, types)
 
   call vizfile%add_block('Block-B', stat, errmsg, is_temporal=.true.)
   if (stat /= 0) error stop errmsg
 
-  call vizfile%write_block_mesh('Block-B', x+1, cnode, xcnode, types)
+  call vizfile%write_mesh('Block-B', x+1, cnode, xcnode, types)
 
   !! Register the datasets that evolve with time. At this stage the data arrays
   !! are only used to glean their types and shapes.
