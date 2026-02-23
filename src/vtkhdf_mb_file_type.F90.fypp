@@ -65,8 +65,8 @@ module vtkhdf_mb_file_type
     procedure :: add_block
 #:for r in real_specs
 #:for i in int_specs
-    generic :: write_block_mesh => write_block_mesh_${r["kind"]}$_${i["kind"]}$
-    procedure, private :: write_block_mesh_${r["kind"]}$_${i["kind"]}$
+    generic :: write_mesh => write_mesh_${r["kind"]}$_${i["kind"]}$
+    procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
 #:endfor
 #:endfor
     generic :: write_time_step => write_time_step_real32, write_time_step_real64
@@ -330,7 +330,7 @@ contains
 #:for r in real_specs
 #:for i in int_specs
 
-  subroutine write_block_mesh_${r["kind"]}$_${i["kind"]}$(this, block_name, x, cnode, xcnode, types)
+  subroutine write_mesh_${r["kind"]}$_${i["kind"]}$(this, block_name, x, cnode, xcnode, types)
 
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name
@@ -346,7 +346,7 @@ contains
     call bptr%write_mesh(x, cnode, xcnode, types)
     call err_ctx%restore(0)
 
-  end subroutine write_block_mesh_${r["kind"]}$_${i["kind"]}$
+  end subroutine write_mesh_${r["kind"]}$_${i["kind"]}$
 
 #:endfor
 #:endfor

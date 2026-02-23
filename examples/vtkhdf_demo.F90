@@ -51,9 +51,9 @@ program vtkhdf_demo
     call vizfile%add_block(name(j), stat, errmsg, temporal=.true.)
     if (stat /= 0) error stop errmsg
     if (abs(rank-j) <= 1) then
-      call vizfile%write_block_mesh(name(j), y, cnode, xcnode, types, stat, errmsg)
+      call vizfile%write_mesh(name(j), y, cnode, xcnode, types, stat, errmsg)
     else ! pass a 0-sized mesh
-      call vizfile%write_block_mesh(name(j), x0, cnode0, xcnode0, types0, stat, errmsg)
+      call vizfile%write_mesh(name(j), x0, cnode0, xcnode0, types0, stat, errmsg)
     endif
     if (stat /= 0) error stop errmsg
     y(2,:) = y(2,:) + 1 ! everyone shifts up
