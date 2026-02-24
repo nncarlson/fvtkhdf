@@ -40,6 +40,6 @@ jobs:
           context: .github/workflows/docker
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/${{ lower(github.repository) }}/fvtkhdf-ci:latest
+            ghcr.io/${{ github.repository }}/fvtkhdf-ci:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
