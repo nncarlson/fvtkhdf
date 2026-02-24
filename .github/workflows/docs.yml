@@ -17,7 +17,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: ghcr.io/${{ lower(github.repository) }}/fvtkhdf-ci:latest
+    container: ghcr.io/${{ github.repository }}/fvtkhdf-ci:latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
