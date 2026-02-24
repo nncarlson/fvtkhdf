@@ -31,19 +31,16 @@ File Creation and Management
 ----------------------------
 
 ``call file%create(filename, [comm,] stat, errmsg)``
-
    Create a new VTKHDF MultiBlockDataSet file.
 
    Arguments are identical to those of ``vtkhdf_ug_file%create``,
    except that there is no ``is_temporal`` argument.
 
 ``call file%flush()``
-
    Collectively flush the file's HDF5 buffers and request the operating
    system to flush file buffers.
 
 ``call file%close()``
-
    Close the file and release internal resources. Users should always
    call this to "finalize" the object; automatic finalization
    cannot perform a proper collective cleanup.
@@ -52,7 +49,6 @@ Block definition
 ----------------
 
 ``call file%add_block(block_name, stat, errmsg [, is_temporal])``
-
    Define a named UnstructuredGrid block in the file.
 
    ``block_name`` must be non-empty and unique within the file.
@@ -70,7 +66,6 @@ Mesh Data
 ---------
 
 ``call file%write_mesh(block_name, points, cnode, xcnode, types)``
-
    Write the mesh geometry and topology for the block ``block_name``.
 
    Mesh arguments and semantics are identical to those of
@@ -105,12 +100,10 @@ or temporal dataset registrations are allowed.
 
    ``call file%register_temporal_cell_data(block_name, name, mold)``
    ``call file%register_temporal_point_data(block_name, name, mold)``
-
       Register ``name`` as a time-dependent dataset on block ``block_name``.
       Registration semantics are identical to those of ``vtkhdf_ug_file``.
 
 ``call file%write_time_step(time)``
-
    Start a new time step with time value ``time``. The timeline is shared by
    all temporal blocks in the file. A call to ``write_time_step`` is required
    before writing any temporal dataset in any block.
@@ -119,7 +112,6 @@ or temporal dataset registrations are allowed.
 
    ``call file%write_temporal_cell_data(block_name, name, array)``
    ``call file%write_temporal_point_data(block_name, name, array)``
-
       Write ``array`` to the temporal dataset ``name`` on block ``block_name``,
       associating it with the current time step. Write semantics are identical
       to those of ``vtkhdf_ug_file``.
