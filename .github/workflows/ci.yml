@@ -6,6 +6,7 @@ jobs:
   build-test:
     name: Build & Test (Ubuntu/GFortran)
     runs-on: ubuntu-latest
+    container: ghcr.io/${{ lower(github.repository) }}/fvtkhdf-ci:latest
     
     strategy:
       fail-fast: false
@@ -15,20 +16,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y gfortran cmake python3-pip
-        # Install HDF5 (Serial or MPI version based on matrix)
-        if [ "${{ matrix.mpi }}" == "ON" ]; then
-          sudo apt-get install -y libopenmpi-dev libhdf5-openmpi-dev
-        else
-          sudo apt-get install -y libhdf5-dev
-        fi
-
-    - name: Install fypp
-      run: pip3 install fypp
 
     - name: Configure CMake
       run: |
