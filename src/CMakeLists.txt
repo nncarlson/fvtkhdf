@@ -77,6 +77,7 @@ target_include_directories(fvtkhdf PUBLIC
 if(ENABLE_MPI)
   target_link_libraries(fvtkhdf PUBLIC MPI::MPI_Fortran)
 endif()
+target_link_libraries(fvtkhdf PUBLIC HDF5::HDF5)
 target_link_libraries(fvtkhdf PRIVATE cshim)
 
 # --- Installation & Export ---
@@ -147,5 +148,6 @@ install(FILES "${CONFIG_FILE}" "${VERSION_FILE}"
 # 4. Install Export Set (Target definitions)
 install(EXPORT fVTKHDFTargets
     FILE fVTKHDFTargets.cmake
+    NAMESPACE fVTKHDF::
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/fVTKHDF"
 )
