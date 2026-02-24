@@ -276,7 +276,9 @@ contains
 #endif
 
     call h5_write_dataset(this%ctx, this%root_id, 'Types', types)
-    call h5_write_dataset(this%ctx, this%root_id, 'Points', x)
+
+    INSIST(size(x,1) <= 3)
+    call h5_write_dataset(this%ctx, this%root_id, 'Points', x, force_leading_dims=[3_hsize_t])
 
   end subroutine write_mesh_${r["kind"]}$_${i["kind"]}$
 

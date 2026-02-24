@@ -221,21 +221,24 @@ contains
   !! dataset itself is a collective operation.
 #:for s in num_specs
 
-  subroutine write_dataset_${s["kind"]}$(ctx, loc_id, name, array, root)
+  subroutine write_dataset_${s["kind"]}$(ctx, loc_id, name, array, root, force_leading_dims)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array(..)
     integer, intent(in), optional :: root
+    integer(hsize_t), intent(in), optional :: force_leading_dims(:)
 
     integer(hid_t) :: type_id, dset_id, mem_space_id, data_space_id, dxpl_id
     integer :: ierr
+    ${s["decl"]}$ :: fill_value
 
     type_id = ${s["h5type"]}$
+    fill_value = 0
 
     call write_dataset_common(ctx, loc_id, name, type_id, shape(array,hsize_t), &
-        dset_id, mem_space_id, data_space_id, root)
+        dset_id, mem_space_id, data_space_id, root, force_leading_dims, fill_value)
 
     call ctx%get_dxpl(dxpl_id) ! collective data transfer in MPI build
 
@@ -270,7 +273,7 @@ contains
   !! in the subsequent collective H5Dwrite call.
 
   subroutine write_dataset_common(ctx, loc_id, name, type_id, dims, &
-      dset_id, mem_space_id, data_space_id, root)
+      dset_id, mem_space_id, data_space_id, root, force_leading_dims, fill_value)
 
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id, type_id
@@ -278,11 +281,14 @@ contains
     integer(hsize_t), intent(in) :: dims(:)
     integer(hid_t), intent(out) :: dset_id, mem_space_id, data_space_id
     integer, intent(in), optional :: root
+    integer(hsize_t), intent(in), optional :: force_leading_dims(:)
+    type(*), intent(in), optional :: fill_value
 
     integer :: ierr, rank
     integer(hsize_t), allocatable :: mem_dims(:), data_dims(:), start(:), count(:)
     integer(hsize_t) :: n
     logical :: rank_writes
+    integer(hid_t) :: dcpl_id
 
     !! Convert DIMS to its equivalent C form (MEM_DIMS)
     if (size(dims) == 0) then ! scalar data
@@ -308,10 +314,26 @@ contains
     INSIST(n > 0) ! writing an empy dataset not allowed
     data_dims = mem_dims
     data_dims(1) = n
+
+    if (present(force_leading_dims)) then
+      INSIST(size(force_leading_dims) == size(dims)-1)
+      INSIST(all(force_leading_dims >= dims(1:size(dims)-1)))
+      data_dims(2:) = force_leading_dims(size(force_leading_dims):1:-1)
+    end if
+
     data_space_id = H5Screate(data_dims)
     INSIST(data_space_id > 0)
-    dset_id = H5Dcreate(loc_id, name, type_id, data_space_id)
+
+    dcpl_id = H5Pcreate(H5P_DATASET_CREATE)
+    if (present(force_leading_dims)) then
+      if (present(fill_value)) then
+        ierr = H5Pset_fill_value(dcpl_id, type_id, fill_value)
+        INSIST(ierr >= 0)
+      end if
+    end if
+    dset_id = H5Dcreate(loc_id, name, type_id, data_space_id, dcpl_id=dcpl_id)
     INSIST(ctx%global_all(dset_id >= 0))
+    ierr = H5Pclose(dcpl_id)
 
     !! Starting index for the dataset hyperslab for this rank
     allocate(start, mold=mem_dims)
