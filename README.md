@@ -1,77 +1,83 @@
-## fVTKHDF
-
-fVTKHDF is a modern Fortran library for writing files in the VTKHDF format,
-designed for high-performance scientific simulations. VTKHDF is a relatively
-new VTK file format designed for high-performance and parallel data storage.
-It utilizes the HDF5 standard as its underlying storage mechanism, providing
-a more scalable alternative to older VTK ASCII or XML formats.
-
-### Documentation
-
-### Compiling
-
-### Installation
-
-### Testing
-
-### License
-fVTKHDF distributed under the 2-clause BSD license.
-See [LICENSE.md](./LICENSE.md) for details.
+[![Docs](https://github.com/nncarlson/fvtkhdf/actions/workflows/docs.yml/badge.svg)](https://nncarlson.github.io/fvtkhdf/)
 
 # fVTKHDF
 
-A modern Fortran library for writing **VTKHDF** format files. 
+A modern Fortran library for writing **VTKHDF** format files.
 
-This library provides a high-level, object-oriented Fortran interface to
-generating VTKHDF files, a standard widely supported by visualization tools
-like ParaView (5.10+) and VisIt. It is designed for High-Performance Computing
-(HPC) applications, offering robust MPI-parallel output via HDF5, while fully
-supporting serial workflows.
+This library provides a high-level, object-oriented Fortran interface for
+generating **VTKHDF** files, a relatively new HDF5-based VTK file format used
+by ParaView. The library is designed for high-performance computing (HPC)
+applications, offering robust MPI-parallel output via HDF5, while also
+supporting serial workflows. By utilizing HDF5 as the underlying storage
+mechanism, **fVTKHDF** provides a more scalable alternative to older VTK
+ASCII or XML formats.
 
-## Features
+* Targets version 2.5 of the [VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html).
+* Paraview 5.13+ recommended for full support of the generated files.
 
-* Targets version **2.5** of the [VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html).
-* **Dataset Support:**
-    * **UnstructuredGrid (UG):** Full support for arbitrary cell types and topologies.
-    * **MultiBlockDataSet (MB):** Supports flat collections of UnstructuredGrid blocks.
-* **Parallel & Serial:** * Built on top of **HDF5**, allowing for efficient, collective MPI-parallel
-    I/O.
-    * Can be built as a purely serial library (no MPI dependency required) for simpler workflows.
-* **Time-Dependent Data:** Supports writing temporal data (transient fields on a static mesh) using the VTKHDF `Steps` group mechanism.
-* **Type Polymorphism:**
-    * **Coordinates/Data:** Supports both `real32` and `real64`.
-    * **Connectivity/Ids:** Supports `int32` and `int64`.
-    * **Mesh Size:** Supports both "small" (standard integer) and "large" (64-bit integer) mesh addressing.
+**Dataset Support**
+
+**fVTKHDF** currently supports the following VTK data models:
+
+* **UnstructuredGrid (UG):** For meshes with arbitrary cell types
+  (tetrahedrons, hexahedrons, etc.).
+
+   * Supports a static mesh (fixed geometry and topology) with both
+     static and temporal data.
+
+   * Supports point-centered and cell-centered data.
+
+* **MultiBlockDataSet (MB):** Supports a flat assembly/collection of
+  UnstructuredGrid blocks (leaf nodes).
+
+  * Hierarchical assembly of MultiBlock datasets is not supported.
+
+  * Ideal for a logical decomposition of a model into distinct components
+  (e.g., piston, cylinder, valves), independent of any parallel domain
+  decomposition.
+
+
+## Documentation
+See the [Reference Manual](https://nncarlson.github.io/fvtkhdf/).
+
 
 ## Installation
-
 ### Prerequisites
 * Fortran Compiler (GCC 13+, Intel oneAPI, etc.)
-* CMake (3.30+)
+* CMake (3.28+)
 * HDF5 Library (1.10+)
 * Python 3 + `fypp` (`pip install fypp`)
 * MPI (Optional)
 
-### Build Instructions
-
-**Standard Parallel Build:**
+### Build and Install
+By default, the library builds with MPI support enabled. Use
+`-DENABLE_MPI=OFF` for a serial-only build.
 ```bash
-git clone [https://github.com/nncarlson/fvtkhdf](https://github.com/nncarlson/fvtkhdf)
+git clone https://github.com/nncarlson/fvtkhdf
 cd fvtkhdf
-cmake -B build -DENABLE_MPI=ON
+# Configure the build and set install location
+cmake -B build --install-prefix /path/to/install
+# Build and install
 cmake --build build --parallel
-
-**Standard Serial Build:**
-```bash
-cmake -B build -DENABLE_MPI=OFF
-cmake --build build
+cmake --install build
 ```
 
-## Quck Start
+## Using fVTKHDF in your Project
+Once installed, you can use **fVTKHDF** in your own CMake-based project by
+adding the following to your `CMakeLists.txt`:
 
+```CMake
+find_package(fVTKHDF REQUIRED)
+
+add_executable(my_simulation main.f90)
+target_link_libraries(my_simulation PRIVATE fVTKHDF::fvtkhdf)
+```
+
+## Quick Start
 Here is a minimal serial example that writes a VTKHDF UstructuredGrid dataset
 for an unstructured mesh consisting of a single tetrahedral cell with a scalar
-field.
+field. More complete examples (serial and MPI-parallel, UnstructuredGrid and
+MultiBlockDataSet) are provided in the `examples` directory.
 
 ```fortran
 program quick_start
@@ -83,10 +89,10 @@ program quick_start
 
   ! 1. Declare the file object (Unstructured Grid)
   type(vtkhdf_ug_file) :: myfile
-  
+
   ! Data arrays
   real, allocatable :: points(:,:)
-  integer, allocatable :: connectivity(:), cell_ptr(:)
+  integer, allocatable :: cnode(:), xcnode(:)
   integer(int8), allocatable :: types(:)
   real, allocatable :: temperature(:)
 
@@ -94,26 +100,27 @@ program quick_start
   character(:), allocatable :: errmsg
 
   ! 2. Define a simple Tetrahedron (4 points, 1 cell)
-  points = reshape([0,0,0,  1,0,0,  0,1,0,  0,0,1], shape=[3,4])
-  connectivity = [1, 2, 3, 4] ! Point IDs
-  cell_ptr = [1, 5]           ! starting index of each cell in connectivity
+  points = reshape([real :: 0,0,0,  1,0,0,  0,1,0,  0,0,1], [3,4])
+  cnode = [1, 2, 3, 4] ! cell-node connectivity
+  xcnode = [1, 5]      ! cnode start index of connectivity list
   types = [VTK_TETRA]
   temperature = [100.0, 200.0, 300.0, 400.0] ! Point data
 
   ! 3. Create and Write
   call myfile%create("simple.vtkhdf", stat, errmsg)
   if (stat /= 0) error stop errmsg
-  
+
   ! Write the mesh topology (Static Mesh)
-  call myfile%write_mesh(points, connectivity, offsets, types)
-  
+  call myfile%write_mesh(points, cnode, xcnode, types)
+
   ! Write a data field
   call myfile%write_point_data("Temperature", temperature)
 
   call myfile%close()
 
 end program quick_start
-
 ```
 
- simple Unstructured Grid (a single tetrahedon) with a scalar field.
+### License
+**fVTKHDF** is distributed under the 2-clause BSD license.
+See [LICENSE.md](./LICENSE.md) for details.
