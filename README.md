@@ -43,7 +43,7 @@ See the [Reference Manual](https://nncarlson.github.io/fvtkhdf/).
 
 ## Installation
 ### Prerequisites
-* Fortran Compiler (GCC 13+, Intel oneAPI, etc.)
+* Fortran 2018 Compiler (GCC 13+, Intel oneAPI, etc.)
 * CMake (3.28+)
 * HDF5 Library (1.10+)
 * Python 3 + `fypp` (`pip install fypp`)
