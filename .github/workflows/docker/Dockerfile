@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip3 install --no-cache-dir --break-system-packages \
     fypp \
     sphinx \
-    sphinx-rtd-theme
+    furo
 
 # Set environment variables for MPI to run as root (common in CI)
 ENV OMPI_ALLOW_RUN_AS_ROOT=1
