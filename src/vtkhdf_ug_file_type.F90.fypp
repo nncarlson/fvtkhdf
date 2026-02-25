@@ -205,8 +205,8 @@ contains
     ${r["decl"]}$, intent(in) :: points(:,:)
     ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
-    INSIST(size(points,dim=1) == 3)
     type(vtkhdf_h5e_context) :: err_ctx
+    INSIST(size(points,dim=1) == 3)
     call err_ctx%capture
     call this%ug%write_mesh(points, cnode, xcnode, types)
     call err_ctx%restore(0)

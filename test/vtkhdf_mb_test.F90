@@ -15,7 +15,7 @@ program vtkhdf_mb_test
   integer  :: cnode0(0), xcnode0(1) = 1
   integer(int8) :: types0(0)
   !! Basic mesh unit
-  real(r8), allocatable :: x(:,:), y(:,:)
+  real(r8), allocatable :: points(:,:), y(:,:)
   integer,  allocatable :: cnode(:), xcnode(:)
   integer(int8), allocatable :: types(:)
   real(r8), allocatable :: s(:), v(:,:) ! scalar and vector data arrays
@@ -31,8 +31,8 @@ program vtkhdf_mb_test
   !! The unstructured mesh data for a basic mesh unit. The full mesh will
   !! be a collection of non-overlapping shifts of this basic unit. Each
   !! rank has one of these, which is right-shifted proportional to the rank.
-  call get_mesh_data(x, cnode, xcnode, types)
-  x(1,:) = x(1,:) + rank ! shift right
+  call get_mesh_data(points, cnode, xcnode, types)
+  points(1,:) = points(1,:) + rank ! shift right
 
   !! Create the mesh blocks and export the mesh for each. Each mesh block
   !! consists of 2 or 3 basic mesh units from select ranks; other ranks
@@ -46,7 +46,7 @@ program vtkhdf_mb_test
     write(name(j),'("block",i2.2)') j
   end do
 
-  y = x ! initial node coordinates
+  y = points ! initial node coordinates
   do j = 0, nproc-1 ! block loop
     call vizfile%add_block(name(j), stat, errmsg, is_temporal=.true.)
     if (stat /= 0) error stop errmsg
@@ -73,7 +73,7 @@ program vtkhdf_mb_test
 
   call vizfile%write_time_step(0.0_r8)
 
-  y = x ! restore initial node coordinates
+  y = points ! restore initial node coordinates
   do j = 0, nproc-1
     if (abs(rank-j) <= 1) then
       call get_scalar_cell_data(y, cnode, xcnode, s)
@@ -99,7 +99,7 @@ program vtkhdf_mb_test
 
   call vizfile%write_time_step(1.0_r8)
 
-  y = x ! restore initial node coordinates
+  y = points ! restore initial node coordinates
   do j = 0, nproc-1
     if (abs(rank-j) <= 1) then
       call get_scalar_cell_data(y, cnode, xcnode, s)
@@ -122,7 +122,7 @@ program vtkhdf_mb_test
   !! At any point you can write a dataset that isn't time dependent, but its name must
   !! be unique from any other dataset, temporal or not, of the same type (cell or point).
 
-  y = x ! restore initial node coordinates
+  y = points ! restore initial node coordinates
   do j = 0, nproc-1
     if (abs(rank-j) <= 1) then
       call get_scalar_cell_data(y, cnode, xcnode, s)
@@ -148,62 +148,62 @@ program vtkhdf_mb_test
 contains
 
   ! A 5-tet subdivision of a squished unit cube.
-  subroutine get_mesh_data(x, cnode, xcnode, types)
-    real(r8), allocatable, intent(out) :: x(:,:)
+  subroutine get_mesh_data(points, cnode, xcnode, types)
+    real(r8), allocatable, intent(out) :: points(:,:)
     integer, allocatable, intent(out) :: cnode(:), xcnode(:)
     integer(int8), allocatable :: types(:)
-    x = reshape([0,0,0, 1,0,0, 1,1,0, 0,1,0, 0,0,1, 1,0,1, 1,1,1, 0,1,1], shape=[3,8])
+    points = reshape([0,0,0, 1,0,0, 1,1,0, 0,1,0, 0,0,1, 1,0,1, 1,1,1, 0,1,1], shape=[3,8])
     ! distort to catch C/Fortran index ordering errors
-    x(1,:) = 0.9_r8*x(1,:)
-    x(2,:) = 0.7_r8*x(2,:)
-    x(3,:) = 0.5_r8*x(3,:)
+    points(1,:) = 0.9_r8*points(1,:)
+    points(2,:) = 0.7_r8*points(2,:)
+    points(3,:) = 0.5_r8*points(3,:)
     cnode = [1,2,4,5, 2,3,4,7, 2,5,6,7, 4,5,7,8, 2,4,5,7]
     xcnode = [1,5,9,13,17,21]
     types = spread(VTK_TETRA, dim=1, ncopies=5)
   end subroutine
 
   ! Point scalar is the magnitude of the node coordinate
-  subroutine get_scalar_point_data(x, pdata)
-    real(r8), intent(in) :: x(:,:)
+  subroutine get_scalar_point_data(points, pdata)
+    real(r8), intent(in) :: points(:,:)
     real(r8), allocatable, intent(out) :: pdata(:)
     integer :: j
-    allocate(pdata(size(x,dim=2)))
-    do j = 1, size(x,dim=2)
-      pdata(j) = norm2(x(:,j))
+    allocate(pdata(size(points,dim=2)))
+    do j = 1, size(points,dim=2)
+      pdata(j) = norm2(points(:,j))
     end do
   end subroutine
 
   ! Point vector is the node coordinate itself
-  subroutine get_vector_point_data(x, pdata)
-    real(r8), intent(in) :: x(:,:)
+  subroutine get_vector_point_data(points, pdata)
+    real(r8), intent(in) :: points(:,:)
     real(r8), allocatable, intent(out) :: pdata(:,:)
-    pdata = x
+    pdata = points
   end subroutine
 
   ! Cell scalar is the magnitude of the cell centroid
-  subroutine get_scalar_cell_data(x, cnode, xcnode, cdata)
-    real(r8), intent(in) :: x(:,:)
+  subroutine get_scalar_cell_data(points, cnode, xcnode, cdata)
+    real(r8), intent(in) :: points(:,:)
     integer, intent(in) :: cnode(:), xcnode(:)
     real(r8), allocatable, intent(out) :: cdata(:)
     integer :: j
     allocate(cdata(size(xcnode)-1))
     do j = 1, size(cdata)
       associate(pid => cnode(xcnode(j):xcnode(j+1)-1))
-        cdata(j) = norm2(sum(x(:,pid),dim=2)/size(pid))
+        cdata(j) = norm2(sum(points(:,pid),dim=2)/size(pid))
       end associate
     end do
   end subroutine
 
   ! Cell vector is the cell centroid
-  subroutine get_vector_cell_data(x, cnode, xcnode, cdata)
-    real(r8), intent(in) :: x(:,:)
+  subroutine get_vector_cell_data(points, cnode, xcnode, cdata)
+    real(r8), intent(in) :: points(:,:)
     integer, intent(in) :: cnode(:), xcnode(:)
     real(r8), allocatable, intent(out) :: cdata(:,:)
     integer :: j
-    allocate(cdata(size(x,dim=1),size(xcnode)-1))
+    allocate(cdata(size(points,dim=1),size(xcnode)-1))
     do j = 1, size(cdata,dim=2)
       associate(pid => cnode(xcnode(j):xcnode(j+1)-1))
-        cdata(:,j) = sum(x(:,pid),dim=2)/size(pid)
+        cdata(:,j) = sum(points(:,pid),dim=2)/size(pid)
       end associate
     end do
   end subroutine
