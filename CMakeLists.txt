@@ -7,6 +7,7 @@ option(ENABLE_MPI "Enable MPI support" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(ENABLE_STD_MOD_PROC_NAME "Build with -assume std_mod_proc_name when using Intel" OFF)
 option(BUILD_HTML "Build HTML documentation" OFF)
+option(BUILD_EXAMPLES "Build example programs" OFF)
 
 # Default to Release build if not specified
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -86,4 +87,8 @@ if(BUILD_HTML)
     message(FATAL_ERROR "sphinx-build not found. Please install Sphinx.")
   endif()
   add_subdirectory(doc/sphinx)
+endif()
+
+if(BUILD_EXAMPLES)
+  add_subdirectory(examples)
 endif()

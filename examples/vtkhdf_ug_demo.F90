@@ -1,0 +1,85 @@
+program vtkhdf_ug_test
+
+  use,intrinsic :: iso_fortran_env, only: r8 => real64, r4 => real32, int8
+  use vtkhdf_ug_file_type
+  use vtkhdf_vtk_cell_types, only: VTK_TETRA
+  use mpi_f08
+  implicit none
+
+  real(r8), allocatable :: points(:,:)
+  real(r8), allocatable :: pressure(:), temperature(:), velocity(:,:)
+  integer, allocatable :: cnode(:), xcnode(:)
+  integer(int8), allocatable :: types(:)
+  real(r8) :: time
+  character(:), allocatable :: errmsg
+  integer :: stat, j, npoints, ncells
+  integer :: nproc, rank
+
+  type(vtkhdf_ug_file) :: vizfile
+
+  call MPI_Init(stat)
+  call MPI_Comm_size(MPI_COMM_WORLD, nproc, stat)
+  call MPI_Comm_rank(MPI_COMM_WORLD, rank, stat)
+
+  !! Create the file with support for time-dependent data (COLLECTIVE)
+  call vizfile%create('ug_demo.vtkhdf', MPI_COMM_WORLD, stat, errmsg, is_temporal=.true.)
+  if (stat /= 0) error stop errmsg
+
+  !! Generate unstructured mesh data for a basic mesh unit.
+  !! The global mesh is a collection of non-overlapping shifts
+  !! of this basic unit, one per MPI rank.
+  call get_mesh_data(points, cnode, xcnode, types)
+  points(1,:) = points(1,:) + rank ! shift right
+
+  !! Each rank writes its part of the mesh collectively.
+  call vizfile%write_mesh(points, cnode, xcnode, types)
+
+  !! local mesh sizes
+  npoints = size(points,dim=2)
+  ncells  = size(xcnode) - 1
+
+  !! We have time-dependent cell-centered pressure and point-centered velocity.
+  !! They need to be registered before starting time stepping. (COLLECTIVE)
+  allocate(pressure(ncells), velocity(3,npoints))
+  associate (scalar_mold => pressure(1), vector_mold => velocity(:,1))
+    call vizfile%register_temporal_cell_data('pressure', scalar_mold)
+    call vizfile%register_temporal_point_data('velocity', vector_mold)
+  end associate
+
+  !! Start simulation time stepping
+  do j = 0, 10
+    time = j*0.1_r8
+
+    !! Start the time step (COLLECTIVE)
+    call vizfile%write_time_step(time)
+
+    !! Generate some arbitrary local time-dependent data and write it (COLLECTIVE)
+    pressure = cos(time) + rank
+    velocity = spread([cos(time+rank),sin(time+rank),1.0_r8],dim=2,ncopies=npoints)
+    call vizfile%write_temporal_cell_data('pressure', pressure)
+    call vizfile%write_temporal_point_data('velocity', velocity)
+  end do
+
+  !! We have time-independent (static) point-centered temperature.
+  !! Static data can be written at any time after the mesh, but its
+  !! name must be unique among data of its mesh entity type.
+  allocate(temperature(npoints), source=real(rank,r8))
+  call vizfile%write_point_data('temperature', temperature)
+
+  call vizfile%close
+  call MPI_Finalize(stat)
+
+contains
+
+  ! A 5-tet subdivision of a unit cube.
+  subroutine get_mesh_data(points, cnode, xcnode, types)
+    real(r8), allocatable, intent(out) :: points(:,:)
+    integer, allocatable, intent(out) :: cnode(:), xcnode(:)
+    integer(int8), allocatable :: types(:)
+    points = 0.8*reshape([0,0,0, 1,0,0, 1,1,0, 0,1,0, 0,0,1, 1,0,1, 1,1,1, 0,1,1], shape=[3,8])
+    cnode = [1,2,4,5, 2,3,4,7, 2,5,6,7, 4,5,7,8, 2,4,5,7]
+    xcnode = [1,5,9,13,17,21]
+    types = spread(VTK_TETRA, dim=1, ncopies=5)
+  end subroutine
+
+end program
