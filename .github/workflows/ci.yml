@@ -46,7 +46,7 @@ jobs:
     - name: Configure consumer against installed package
       if: always()
       run: |
-        cmake -S tests/packaging -B build-consumer \
+        cmake -S test/packaging -B build-consumer \
           -DCMAKE_BUILD_TYPE=Debug \
           -DENABLE_MPI=${{ matrix.mpi }} \
           -DCMAKE_PREFIX_PATH="${{ runner.temp }}/fvtkhdf-stage"
