@@ -36,3 +36,44 @@ jobs:
         # Allow running 4 processes on a 2-core machine
         OMPI_MCA_rmaps_base_oversubscribe: 1
       run: ctest --output-on-failure
+      
+    # --- Installed-package consumer check (runs even if ctest fails) ---
+
+    - name: Install to staging prefix
+      if: always()
+      run: cmake --install build --prefix "${{ runner.temp }}/fvtkhdf-stage"
+
+    - name: Configure consumer against installed package
+      if: always()
+      run: |
+        cmake -S tests/packaging -B build-consumer \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DENABLE_MPI=${{ matrix.mpi }} \
+          -DCMAKE_PREFIX_PATH="${{ runner.temp }}/fvtkhdf-stage"
+
+    - name: Build consumer
+      id: consumer_build
+      if: always()
+      run: cmake --build build-consumer --parallel 2
+
+    # Optional: run a consumer executable if you have one
+    # - name: Run consumer smoke
+    #   if: always()
+    #   run: ./build-consumer/consumer_smoke
+
+    # --- Gate: fail job if either ctest failed or consumer build failed ---
+    - name: Gate results
+      if: always()
+      run: |
+        echo "ctest outcome: ${{ steps.ctest.outcome }}"
+        echo "consumer_build outcome: ${{ steps.consumer_build.outcome }}"
+
+        if [ "${{ steps.consumer_build.outcome }}" != "success" ]; then
+          echo "Consumer build failed"
+          exit 1
+        fi
+
+        if [ "${{ steps.ctest.outcome }}" != "success" ]; then
+          echo "CTest failed"
+          exit 1
+        fi
