@@ -31,6 +31,8 @@ jobs:
       run: cmake --build build --parallel 2
 
     - name: Run Tests
+      id: ctest
+      continue-on-error: true
       working-directory: build
       env:
         # Allow running 4 processes on a 2-core machine
