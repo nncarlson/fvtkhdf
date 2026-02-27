@@ -315,8 +315,7 @@ contains
     call err_ctx%restore(0)
   end subroutine write_time_step_real64
 
-  !! Write the location of the POINTS of the mesh to the time-independent PointData
-  !! group dataset NAME.
+  !! Write the mesh geometry for the current time step (deformed meshes only).
 #:for r in real_specs
 
   subroutine write_temporal_points_${r["kind"]}$(this, points)

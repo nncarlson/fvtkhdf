@@ -279,7 +279,6 @@ contains
 
     integer :: ierr
     integer(int64) :: idum(0)
-    type(temporal_data), pointer :: new
     
     INSIST(this%root_id >= 0)
 
@@ -522,11 +521,9 @@ contains
 
   end subroutine write_time_step
 
-  !! Write the location of the POINTS of the mesh to the time-dependent PointData
-  !! group dataset NAME. The data is associated with the current time step. The
-  !! type and leading dimensions of ARRAY must match the MOLD provided during the
-  !! registration of NAME. The last (or only) dimension of ARRAY must
-  !  correspond to the local number of points on this MPI rank.
+  !! Write the mesh geometry for the current time step (deformed meshes only).
+  !! The POINTS array must have shape (3, nnode) matching the mesh topology.
+  !! This procedure must be called after write_time_step for each time step.
 
 #:for r in real_specs
 

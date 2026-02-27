@@ -1,4 +1,4 @@
-program vtkhdf_ug_test
+program vtkhdf_deformed_ug_test
 
   use,intrinsic :: iso_fortran_env, only: r8 => real64, int8
   use vtkhdf_ug_file_type
@@ -100,7 +100,6 @@ contains
   subroutine get_vector_point_data(points, pdata)
     real(r8), intent(in) :: points(:,:)
     real(r8), allocatable, intent(out) :: pdata(:,:)
-    integer :: j
     pdata = points
   end subroutine
 

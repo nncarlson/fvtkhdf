@@ -4,7 +4,8 @@ The vtkhdf_ug_file_type module
 This module defines the ``vtkhdf_ug_file`` derived type for writing
 VTKHDF UnstructuredGrid files. It supports:
 
-* A static mesh
+* A static mesh (fixed geometry and topology) with static and temporal data
+* A deformed mesh (varying geometry but fixed topology) with temporal data
 * Static point and cell datasets
 * Optional time-dependent point and cell datasets
 
@@ -30,7 +31,7 @@ identical values.
 File Creation and Management
 ----------------------------
 
-``call file%create(filename, [comm,] stat, errmsg [,is_temporal])``
+``call file%create(filename, [comm,] stat, errmsg [,is_temporal] [,is_deformed])``
    Create a new VTKHDF "UnstructuredGrid" file.
    
    * ``filename``: path to the file to create. The recommended file extension
@@ -39,6 +40,9 @@ File Creation and Management
      In serial builds ``comm`` is omitted from the interface.
    * ``is_temporal`` (optional): set ``.true.`` to enable time-dependent
      datasets. The default is ``.false.``
+   * ``is_deformed`` (optional): set ``.true.`` to enable deformed mesh mode
+     where the mesh geometry changes over time but topology remains fixed.
+     Requires ``is_temporal=.true.``. The default is ``.false.``
 
 ``call file%close()``
     Close the file and release internal resources. Users should *always* call
@@ -55,6 +59,8 @@ Writes the portion of the unstructured mesh provided by the calling MPI rank.
 The mesh must be written before any mesh-centered data is written.
 
 ``call file%write_mesh(points, cnode, xcnode, types)``
+  Write the mesh geometry and topology. Use this for static meshes.
+  
   * ``points``: ``real32`` or ``real64`` array of shape (3, `npoints`)
     containing the node coordinates. Coordinates are always interpreted
     as 3D; for 1D or 2D geometries, the unused components must be set
@@ -73,6 +79,16 @@ The mesh must be written before any mesh-centered data is written.
   * ``types``: an ``int8`` array of size `ncells` containing VTK cell type
     codes. Named constants such as ``VTK_TETRA`` and ``VTK_HEXAHEDRON``
     are provided by ``vtkhdf_vtk_cell_types``.
+
+``call file%write_mesh_topology(mold, cnode, xcnode, types)``
+  Write the mesh topology only (for deformed meshes). Use this together with
+  ``write_temporal_points`` for meshes where geometry changes over time but
+  topology remains fixed. Requires ``is_deformed=.true.`` at file creation.
+  
+  * ``mold``: ``real32`` or ``real64`` array of shape (3, `npoints`) used
+    to determine the data type and shape for the temporal Points dataset.
+    The actual coordinate values are written later via ``write_temporal_points``.
+  * ``cnode``, ``xcnode``, ``types``: same as for ``write_mesh``.
 
 Static mesh-centered data
 -------------------------
@@ -118,6 +134,14 @@ step must be started before temporal datasets are written.
    ``call file%write_time_step(time)``
       Start a new time step with time value ``time``.
 
+   ``call file%write_temporal_points(points)``
+      Write the mesh geometry for the current time step (deformed meshes only).
+      This procedure is used together with ``write_mesh_topology`` for meshes
+      where geometry changes over time. Must be called after ``write_time_step``
+      for each time step. Requires ``is_deformed=.true.`` at file creation.
+      
+      * ``points``: ``real32`` or ``real64`` array of shape (3, `npoints`)
+        containing the node coordinates for this time step.
 
    ``call file%write_temporal_cell_data(name, array)``
    ``call file%write_temporal_point_data(name, array)``
