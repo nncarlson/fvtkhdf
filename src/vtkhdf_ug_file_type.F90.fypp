@@ -62,6 +62,12 @@ module vtkhdf_ug_file_type
     procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
 #:endfor
 #:endfor
+#:for r in real_specs
+#:for i in int_specs
+    generic :: write_mesh_topology => write_mesh_topology_${r["kind"]}$_${i["kind"]}$
+    procedure, private :: write_mesh_topology_${r["kind"]}$_${i["kind"]}$
+#:endfor
+#:endfor
     generic :: write_time_step => write_time_step_real32, write_time_step_real64
     procedure, private :: write_time_step_real32, write_time_step_real64
 #:for s in num_specs
@@ -121,19 +127,19 @@ contains
   end subroutine
 
 #ifdef USE_MPI
-  subroutine create_f08(this, filename, comm, stat, errmsg, is_temporal)
+  subroutine create_f08(this, filename, comm, stat, errmsg, is_temporal, is_deformed)
     use mpi_f08, only: MPI_Comm
     class(vtkhdf_ug_file), intent(out) :: this
     character(*), intent(in) :: filename
     type(MPI_Comm), intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    logical, intent(in), optional :: is_temporal
+    logical, intent(in), optional :: is_temporal, is_deformed
     call this%ctx%init(comm)
-    call this%create_impl(filename, stat, errmsg, is_temporal)
+    call this%create_impl(filename, stat, errmsg, is_temporal, is_deformed)
   end subroutine create_f08
 
-  subroutine create_int(this, filename, comm, stat, errmsg, is_temporal)
+  subroutine create_int(this, filename, comm, stat, errmsg, is_temporal, is_deformed)
     use mpi_f08, only: MPI_Comm
     class(vtkhdf_ug_file), intent(out) :: this
     character(*), intent(in) :: filename
@@ -143,27 +149,27 @@ contains
     logical, intent(in), optional :: is_temporal
     type(MPI_Comm) :: f08_comm
     f08_comm%mpi_val = comm
-    call this%create(filename, f08_comm, stat, errmsg, is_temporal)
+    call this%create(filename, f08_comm, stat, errmsg, is_temporal, is_deformed)
   end subroutine create_int
 #else
-  subroutine create(this, filename, stat, errmsg, is_temporal)
+  subroutine create(this, filename, stat, errmsg, is_temporal, is_deformed)
     class(vtkhdf_ug_file), intent(out) :: this
     character(*), intent(in) :: filename
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    logical, intent(in), optional :: is_temporal
+    logical, intent(in), optional :: is_temporal, is_deformed
     call this%ctx%init()
-    call this%create_impl(filename, stat, errmsg, is_temporal)
+    call this%create_impl(filename, stat, errmsg, is_temporal, is_deformed)
   end subroutine create
 #endif
 
-  subroutine create_impl(this, filename, stat, errmsg, is_temporal)
+  subroutine create_impl(this, filename, stat, errmsg, is_temporal, is_deformed)
 
     class(vtkhdf_ug_file), intent(inout) :: this
     character(*), intent(in) :: filename
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    logical, intent(in), optional :: is_temporal
+    logical, intent(in), optional :: is_temporal, is_deformed
 
     integer(hid_t) :: fapl
     integer :: ierr
@@ -186,7 +192,7 @@ contains
       return
     end if
 
-    call this%ug%init(this%file_id, 'VTKHDF', this%ctx, is_temporal)
+    call this%ug%init(this%file_id, 'VTKHDF', this%ctx, is_temporal, is_deformed)
 
     stat = 0
     call err_ctx%restore(stat)
@@ -209,6 +215,25 @@ contains
     INSIST(size(points,dim=1) == 3)
     call err_ctx%capture
     call this%ug%write_mesh(points, cnode, xcnode, types)
+    call err_ctx%restore(0)
+  end subroutine
+#:endfor
+#:endfor
+
+  !! Write the unstructured mesh topology to the file. The mesh is described
+  !! in the conventional manner by the POINTS, CNODE, and XCNODE arrays. The
+  !! additional array TYPES specifies the VTK cell types.
+#:for r in real_specs
+#:for i in int_specs
+
+  subroutine write_mesh_topology_${r["kind"]}$_${i["kind"]}$(this, mold, cnode, xcnode, types)
+    class(vtkhdf_ug_file), intent(inout) :: this
+    ${r["decl"]}$, intent(in) :: mold(:,:)
+    ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
+    integer(int8), intent(in) :: types(:)
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%ug%write_mesh_topology(mold, cnode, xcnode, types)
     call err_ctx%restore(0)
   end subroutine
 #:endfor

@@ -44,6 +44,7 @@ module vtkhdf_ug_type
     integer(int64) :: nnode, ncell, nnode_tot, ncell_tot
     integer :: npart
     logical :: is_temporal = .false.
+    logical :: is_deformed = .false.
     integer :: nsteps = -1
     integer(hid_t) :: steps_id=H5I_INVALID_HID
     integer(hid_t) :: cogrp_id=H5I_INVALID_HID, pogrp_id=H5I_INVALID_HID
@@ -58,7 +59,17 @@ module vtkhdf_ug_type
     procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
 #:endfor
 #:endfor
+#:for r in real_specs
+#:for i in int_specs
+    generic :: write_mesh_topology => write_mesh_topology_${r["kind"]}$_${i["kind"]}$
+    procedure, private :: write_mesh_topology_${r["kind"]}$_${i["kind"]}$
+#:endfor
+#:endfor
     procedure :: write_time_step
+! #:for r in real_specs
+!     generic :: write_temporal_points => write_temporal_points_${r["kind"]}$
+!     procedure, private :: write_temporal_points_${r["kind"]}$
+! #:endfor
 #:for s in num_specs
 #:for loc in locations
     generic :: write_${loc}$_data => write_${loc}$_data_${s["kind"]}$
@@ -127,7 +138,7 @@ contains
   !! supporting time-dependent data, specify the optional argument
   !! TEMPORAL to true; otherwise a static group is created by default.
 
-  subroutine init(this, loc_id, name, ctx, temporal)
+  subroutine init(this, loc_id, name, ctx, temporal, deformed)
 
     use vtkhdf_version_param
 
@@ -135,7 +146,7 @@ contains
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     type(vtkhdf_ctx), intent(in) :: ctx
-    logical, intent(in), optional :: temporal
+    logical, intent(in), optional :: temporal, deformed
 
     integer :: ierr
 
@@ -156,6 +167,7 @@ contains
     INSIST(this%ctx%global_all(this%pgrp_id >= 0))
 
     if (present(temporal)) this%is_temporal = temporal
+    if (present(deformed)) this%is_deformed = deformed
     if (this%is_temporal) then
       this%steps_id = H5Gcreate(this%root_id, 'Steps')
       INSIST(this%ctx%global_all(this%steps_id >= 0))
@@ -214,13 +226,65 @@ contains
     ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
 
+    call write_mesh_topology_impl_${r["kind"]}$_${i["kind"]}$(this, points, cnode, xcnode, types)
+    call h5_write_dataset(this%ctx, this%root_id, 'Points', points)
+
+  end subroutine write_mesh_${r["kind"]}$_${i["kind"]}$
+
+#:endfor
+#:endfor
+
+  !! Write the unstructured mesh topology to the file. The mesh is described
+  !! in the conventional manner by the POINTS, CNODE, and XCNODE arrays. The
+  !! additional array TYPES specifies the VTK cell types.
+
+#:for r in real_specs
+#:for i in int_specs
+
+  subroutine write_mesh_topology_${r["kind"]}$_${i["kind"]}$(this, mold, cnode, xcnode, types)
+
+    class(vtkhdf_ug), intent(inout) :: this
+    ${r["decl"]}$, intent(in) :: mold(:,:)
+    ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
+    integer(int8), intent(in) :: types(:)
+
+    type(temporal_data), pointer :: new
+
+    call write_mesh_topology_impl_${r["kind"]}$_${i["kind"]}$(this, mold, cnode, xcnode, types)
+
+    ! set up the temporal Points dataset
+    associate (chunk_size => int(this%nnode_tot))
+      call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Points', mold, chunk_size)
+    end associate
+
+    !! Add to list PointData datasets
+    allocate (new)
+    new%name = 'Points'
+    new%next => this%temporal_cell_data
+    this%temporal_cell_data => new
+
+  end subroutine write_mesh_topology_${r["kind"]}$_${i["kind"]}$
+#:endfor
+#:endfor
+
+#:for r in real_specs
+#:for i in int_specs
+
+  subroutine write_mesh_topology_impl_${r["kind"]}$_${i["kind"]}$(this, mold, cnode, xcnode, types)
+
+    type(vtkhdf_ug), intent(inout) :: this
+    ${r["decl"]}$, intent(in) :: mold(:,:)
+    ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
+    integer(int8), intent(in) :: types(:)
+
     integer :: ierr
     integer(int64) :: idum(0)
-
+    type(temporal_data), pointer :: new
+    
     INSIST(this%root_id >= 0)
 
-    INSIST(size(points,dim=1) == 3)
-    this%nnode = size(points, dim=2, kind=int64)
+    INSIST(size(mold,dim=1) == 3)
+    this%nnode = size(mold, dim=2, kind=int64)
     this%ncell = size(types, kind=int64)
 
     INSIST(size(xcnode, kind=int64) == this%ncell+1)
@@ -277,12 +341,11 @@ contains
 #endif
 
     call h5_write_dataset(this%ctx, this%root_id, 'Types', types)
-    call h5_write_dataset(this%ctx, this%root_id, 'Points', points)
-
-  end subroutine write_mesh_${r["kind"]}$_${i["kind"]}$
-
+  
+  end subroutine write_mesh_topology_impl_${r["kind"]}$_${i["kind"]}$
 #:endfor
 #:endfor
+
   !! Writes the cell data ARRAY to a new CellData group dataset NAME. In the
   !! case of a temporal file supporting time-dependent datasets, this dataset
   !! is static and not associated with any time step. Note that VTK only
@@ -426,13 +489,22 @@ contains
     call h5_append_to_dataset(this%ctx, this%steps_id, 'Values', time, root=0)
 
     !! A single mesh is used for all time steps so there are no offsets
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'PointOffsets', 0_int64, root=0)
     call h5_append_to_dataset(this%ctx, this%steps_id, 'CellOffsets', 0_int64, root=0)
     call h5_append_to_dataset(this%ctx, this%steps_id, 'ConnectivityIdOffsets', 0_int64, root=0)
     call h5_append_to_dataset(this%ctx, this%steps_id, 'NumberOfParts', this%npart, root=0)
     call h5_append_to_dataset(this%ctx, this%steps_id, 'PartOffsets', 0_int64, root=0)
-
+    
     !! Cell and point data offsets for each of the temporal datasets for this timestep
+    if (this%is_deformed) then
+      tmp => this%temporal_cell_data
+      do while (associated(tmp))
+        tmp%flag = .false.  ! dataset not yet written for this time step
+        call h5_append_to_dataset(this%ctx, this%steps_id, tmp%name, tmp%next_offset, root=0)
+        tmp => tmp%next
+      end do
+    else
+      call h5_append_to_dataset(this%ctx, this%steps_id, 'PointOffsets', 0_int64, root=0)
+    end if
 
     tmp => this%temporal_point_data
     do while (associated(tmp))
@@ -449,6 +521,42 @@ contains
     end do
 
   end subroutine write_time_step
+
+  !! Write the location of the POINTS of the mesh to the time-dependent PointData
+  !! group dataset NAME. The data is associated with the current time step. The
+  !! type and leading dimensions of ARRAY must match the MOLD provided during the
+  !! registration of NAME. The last (or only) dimension of ARRAY must
+  !  correspond to the local number of points on this MPI rank.
+
+! #:for r in real_specs
+
+!   subroutine write_temporal_points_${r["kind"]}$(this, points)
+
+!     class(vtkhdf_ug), intent(in) :: this
+!     ${r["decl"]}$, intent(in) :: points(:,:)
+
+!     integer, allocatable :: dims(:)
+!     type(temporal_data), pointer :: dset
+
+!     INSIST(this%nsteps > 0)
+
+!     dims = shape(points)
+!     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
+!     INSIST(dims(1) == 3)
+!     INSIST(dims(size(dims)) == this%nnode)
+
+!     dset => this%temporal_point_data
+!     do while (associated(dset))
+!       if (dset%name == 'Points') exit
+!       dset => dset%next
+!     end do
+!     INSIST(associated(dset))
+
+!     INSIST(.not.dset%flag) ! no double writing in a single step
+!     call h5_append_to_dataset(this%ctx, this%pgrp_id, name, points)
+!     dset%next_offset = dset%next_offset + this%nnode_tot
+!     dset%flag = .true. ! dataset has been written for this step
+
 
   !! Write the cell-based ARRAY to the time-dependent CellData group dataset
   !! NAME. The data is associated with the current time step. The type and

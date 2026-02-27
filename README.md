@@ -22,8 +22,9 @@ ASCII or XML formats.
 * **UnstructuredGrid (UG):** For meshes with arbitrary cell types
   (tetrahedrons, hexahedrons, etc.).
 
-   * Supports a static mesh (fixed geometry and topology) with both
-     static and temporal data.
+   * Supports a static mesh (fixed geometry and topology) with both static and temporal data.
+
+   * Supports a deformed mesh (varying geometry but fixed topology) with temporal data.
 
    * Supports point-centered and cell-centered data.
 
