@@ -150,7 +150,7 @@ contains
     integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    logical, intent(in), optional :: is_temporal
+    logical, intent(in), optional :: is_temporal, is_deformed
     type(MPI_Comm) :: f08_comm
     f08_comm%mpi_val = comm
     call this%create(filename, f08_comm, stat, errmsg, is_temporal, is_deformed)
