@@ -13,6 +13,7 @@ program vtkhdf_mb_test
   integer :: stat
 
   type(vtkhdf_mb_file) :: vizfile
+  type(vtkhdf_block_handle) :: hblk_a, hblk_b
 
   call vizfile%create('mb_test.vtkhdf', stat, errmsg)
   if (stat /= 0) error stop errmsg
@@ -21,26 +22,22 @@ program vtkhdf_mb_test
   !! consist of two non-overlapping shifts of this basic unit.
   call get_mesh_data(points, cnode, xcnode, types)
 
-  call vizfile%add_block('Block-A', stat, errmsg, is_temporal=.true.)
-  if (stat /= 0) error stop errmsg
+  hblk_a = vizfile%add_block('Block-A', is_temporal=.true.)
+  call vizfile%write_mesh(hblk_a, points, cnode, xcnode, types)
 
-  call vizfile%write_mesh('Block-A', points, cnode, xcnode, types)
-
-  call vizfile%add_block('Block-B', stat, errmsg, is_temporal=.true.)
-  if (stat /= 0) error stop errmsg
-
-  call vizfile%write_mesh('Block-B', points+1, cnode, xcnode, types)
+  hblk_b = vizfile%add_block('Block-B', is_temporal=.true.)
+  call vizfile%write_mesh(hblk_b, points+1, cnode, xcnode, types)
 
   !! Register the datasets that evolve with time. At this stage the data arrays
   !! are only used to glean their types and shapes.
 
   associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
     ! Block-A has time-dependent cell data
-    call vizfile%register_temporal_cell_data('Block-A', 'cell-radius', scalar_mold)
-    call vizfile%register_temporal_cell_data('Block-A', 'cell-velocity', vector_mold)
+    call vizfile%register_temporal_cell_data(hblk_a, 'cell-radius', scalar_mold)
+    call vizfile%register_temporal_cell_data(hblk_a, 'cell-velocity', vector_mold)
     ! Block-B has time-dependent point data
-    call vizfile%register_temporal_point_data('Block-B', 'point-radius', scalar_mold)
-    call vizfile%register_temporal_point_data('Block-B', 'point-velocity', vector_mold)
+    call vizfile%register_temporal_point_data(hblk_b, 'point-radius', scalar_mold)
+    call vizfile%register_temporal_point_data(hblk_b, 'point-velocity', vector_mold)
   end associate
 
   !! Generate some cell and point data to use for output
@@ -54,27 +51,27 @@ program vtkhdf_mb_test
 
   call vizfile%write_time_step(0.0_r8)
 
-  call vizfile%write_temporal_cell_data('Block-A', 'cell-radius', scalar_cell_data)
-  call vizfile%write_temporal_cell_data('Block-A', 'cell-velocity', vector_cell_data)
-  call vizfile%write_temporal_point_data('Block-B', 'point-radius', scalar_point_data)
-  call vizfile%write_temporal_point_data('Block-B', 'point-velocity', vector_point_data)
+  call vizfile%write_temporal_cell_data(hblk_a, 'cell-radius', scalar_cell_data)
+  call vizfile%write_temporal_cell_data(hblk_a, 'cell-velocity', vector_cell_data)
+  call vizfile%write_temporal_point_data(hblk_b, 'point-radius', scalar_point_data)
+  call vizfile%write_temporal_point_data(hblk_b, 'point-velocity', vector_point_data)
 
   !!!! Write the data for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   call vizfile%write_time_step(1.0_r8)
 
-  call vizfile%write_temporal_cell_data('Block-A', 'cell-radius', scalar_cell_data+1)
-  call vizfile%write_temporal_cell_data('Block-A', 'cell-velocity', vector_cell_data+1)
-  call vizfile%write_temporal_point_data('Block-B', 'point-radius', scalar_point_data+1)
-  call vizfile%write_temporal_point_data('Block-B', 'point-velocity', vector_point_data+1)
+  call vizfile%write_temporal_cell_data(hblk_a, 'cell-radius', scalar_cell_data+1)
+  call vizfile%write_temporal_cell_data(hblk_a, 'cell-velocity', vector_cell_data+1)
+  call vizfile%write_temporal_point_data(hblk_b, 'point-radius', scalar_point_data+1)
+  call vizfile%write_temporal_point_data(hblk_b, 'point-velocity', vector_point_data+1)
 
   !! At any point you can write a data that isn't time dependent, but its name must
   !! be unique from any other data temporal or not of the same type (cell or point).
 
-  call vizfile%write_cell_data('Block-A', 'static-cell-scalar', -scalar_cell_data)
-  call vizfile%write_cell_data('Block-A', 'static-cell-vector', -vector_cell_data)
-  call vizfile%write_point_data('Block-B', 'static-point-scalar', -scalar_point_data)
-  call vizfile%write_point_data('Block-B', 'static-point-vector', -vector_point_data)
+  call vizfile%write_cell_data(hblk_a, 'static-cell-scalar', -scalar_cell_data)
+  call vizfile%write_cell_data(hblk_a, 'static-cell-vector', -vector_cell_data)
+  call vizfile%write_point_data(hblk_b, 'static-point-scalar', -scalar_point_data)
+  call vizfile%write_point_data(hblk_b, 'static-point-vector', -vector_point_data)
 
   call vizfile%close
 

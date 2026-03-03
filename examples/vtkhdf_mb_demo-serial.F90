@@ -14,6 +14,7 @@ program vtkhdf_mb_test
   integer :: stat, j, npoints, ncells
 
   type(vtkhdf_mb_file) :: vizfile
+  type(vtkhdf_block_handle) :: bliq, bsol
 
   !! Create the file
   call vizfile%create('mb_demo.vtkhdf', stat, errmsg)
@@ -32,24 +33,22 @@ program vtkhdf_mb_test
   ncells  = size(xcnode) - 1
 
   !! Add the blocks to the file and write their meshes.
-  call vizfile%add_block('liquid', stat, errmsg, is_temporal=.true.)
-  if (stat /= 0) error stop errmsg
-  call vizfile%write_mesh('liquid', points, cnode, xcnode, types)
+  bliq = vizfile%add_block('liquid', is_temporal=.true.)
+  call vizfile%write_mesh(bliq, points, cnode, xcnode, types)
 
   !! Shift the points right to get the solid block mesh
   points(1,:) = points(1,:) + 1.2_r8
   !NB: A bug in the current reader that requires it to be temporal.
-  !call vizfile%add_block('solid', stat, errmsg)
-  call vizfile%add_block('solid', stat, errmsg, is_temporal=.true.)
-  if (stat /= 0) error stop errmsg
-  call vizfile%write_mesh('solid', points, cnode, xcnode, types)
+  !bsol = vizfile%add_block('solid')
+  bsol = vizfile%add_block('solid', is_temporal=.true.)
+  call vizfile%write_mesh(bsol, points, cnode, xcnode, types)
 
   !! Register the time-dependent cell-centered pressure and point-centered
   !! velocity for the liquid block.
   allocate(pressure(ncells), velocity(3,npoints))
   associate (scalar_mold => pressure(1), vector_mold => velocity(:,1))
-    call vizfile%register_temporal_cell_data('liquid', 'pressure', scalar_mold)
-    call vizfile%register_temporal_point_data('liquid', 'velocity', vector_mold)
+    call vizfile%register_temporal_cell_data(bliq, 'pressure', scalar_mold)
+    call vizfile%register_temporal_point_data(bliq, 'velocity', vector_mold)
   end associate
 
   !! Start simulation time stepping
@@ -62,16 +61,16 @@ program vtkhdf_mb_test
     !! Generate some arbitrary time-dependent data and write it.
     pressure = cos(time)
     velocity = spread([cos(time),sin(time),1.0_r8],dim=2,ncopies=npoints)
-    call vizfile%write_temporal_cell_data('liquid', 'pressure', pressure)
-    call vizfile%write_temporal_point_data('liquid', 'velocity', velocity)
+    call vizfile%write_temporal_cell_data(bliq, 'pressure', pressure)
+    call vizfile%write_temporal_point_data(bliq, 'velocity', velocity)
   end do
 
   !! We have time-independent (static) point-centered temperature in
   !! both blocks. Static data can be written at any time after the mesh,
   !! but its name must be unique among data of its mesh entity type.
   allocate(temperature(npoints), source=1.0_r8)
-  call vizfile%write_point_data('liquid', 'temperature', temperature)
-  call vizfile%write_point_data('solid',  'temperature', 1+temperature)
+  call vizfile%write_point_data(bliq, 'temperature', temperature)
+  call vizfile%write_point_data(bsol,  'temperature', 1+temperature)
 
   call vizfile%close
 

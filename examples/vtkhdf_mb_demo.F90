@@ -16,10 +16,16 @@ program vtkhdf_mb_test
   integer :: npoints_liquid, ncells_liquid, npoints_solid, ncells_solid
 
   type(vtkhdf_mb_file) :: vizfile
+  type(vtkhdf_block_handle) :: bliq, bsol
 
   call MPI_Init(stat)
   call MPI_Comm_size(MPI_COMM_WORLD, nproc, stat)
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, stat)
+
+  if (nproc < 2) then
+    call MPI_Finalize(stat)
+    error stop 'must be run with at least 2 processes'
+  end if
 
   !! Create the file
   call vizfile%create('mb_demo.vtkhdf', MPI_COMM_WORLD, stat, errmsg)
@@ -36,9 +42,8 @@ program vtkhdf_mb_test
   call get_liquid_mesh_data(points, cnode, xcnode, types)
 
   !! Add the liquid block and write the local mesh piece (COLLECTIVE!)
-  call vizfile%add_block('liquid', stat, errmsg, is_temporal=.true.)
-  if (stat /= 0) error stop errmsg
-  call vizfile%write_mesh('liquid', points, cnode, xcnode, types)
+  bliq = vizfile%add_block('liquid', is_temporal=.true.)
+  call vizfile%write_mesh(bliq, points, cnode, xcnode, types)
 
   !! local mesh sizes
   npoints_liquid = size(points,dim=2)
@@ -51,10 +56,9 @@ program vtkhdf_mb_test
   !! Add the solid block and write the local mesh piece (COLLECTIVE!)
   !! Rank 0 must participate with its 0-sized mesh!
   !NB: A bug in the current reader requires it to be temporal.
-  !call vizfile%add_block('solid', stat, errmsg)
-  call vizfile%add_block('solid', stat, errmsg, is_temporal=.true.)
-  if (stat /= 0) error stop errmsg
-  call vizfile%write_mesh('solid', points, cnode, xcnode, types)
+  !bsol = vizfile%add_block('solid')
+  bsol = vizfile%add_block('solid', is_temporal=.true.)
+  call vizfile%write_mesh(bsol, points, cnode, xcnode, types)
 
   !! local mesh sizes
   npoints_solid = size(points,dim=2)
@@ -64,8 +68,8 @@ program vtkhdf_mb_test
   !! velocity for the liquid block. (COLLECTIVE!)
   allocate(pressure(ncells_liquid), velocity(3,npoints_liquid))
   associate (scalar_mold => pressure(1), vector_mold => velocity(:,1))
-    call vizfile%register_temporal_cell_data('liquid', 'pressure', scalar_mold)
-    call vizfile%register_temporal_point_data('liquid', 'velocity', vector_mold)
+    call vizfile%register_temporal_cell_data(bliq, 'pressure', scalar_mold)
+    call vizfile%register_temporal_point_data(bliq, 'velocity', vector_mold)
   end associate
 
   !! Start simulation time stepping
@@ -78,8 +82,8 @@ program vtkhdf_mb_test
     !! Generate some arbitrary time-dependent data and write it. (COLLECTIVE!)
     pressure = cos(time) + rank
     velocity = spread([cos(time+rank),sin(time+rank),1.0_r8],dim=2,ncopies=npoints_liquid)
-    call vizfile%write_temporal_cell_data('liquid', 'pressure', pressure)
-    call vizfile%write_temporal_point_data('liquid', 'velocity', velocity)
+    call vizfile%write_temporal_cell_data(bliq, 'pressure', pressure)
+    call vizfile%write_temporal_point_data(bliq, 'velocity', velocity)
   end do
 
   !! Write the time-independent point-centered temperature for both blocks
@@ -88,10 +92,10 @@ program vtkhdf_mb_test
   !! time after the mesh, but its name must be unique among data of its mesh
   !! entity type.
   temperature = spread(rank, dim=1, ncopies=npoints_liquid)
-  call vizfile%write_point_data('liquid', 'temperature', temperature)
+  call vizfile%write_point_data(bliq, 'temperature', temperature)
 
   temperature = spread(rank, dim=1, ncopies=npoints_solid)
-  call vizfile%write_point_data('solid', 'temperature', temperature)
+  call vizfile%write_point_data(bsol, 'temperature', temperature)
 
   call vizfile%close
   call MPI_Finalize(stat)
