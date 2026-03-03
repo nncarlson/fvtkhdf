@@ -90,7 +90,7 @@ contains
   !! IDs, but that is unavoidable. Users should always use CLOSE to do a proper
   !! collective cleanup.
 
-  subroutine vtkhdf_ug_delete(this)
+  impure elemental subroutine vtkhdf_ug_delete(this)
     type(vtkhdf_ug), intent(inout) :: this
     if (associated(this%temporal_cell_data)) deallocate(this%temporal_cell_data)
     if (associated(this%temporal_point_data)) deallocate(this%temporal_point_data)

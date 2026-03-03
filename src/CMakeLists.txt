@@ -8,8 +8,7 @@ set(FYPP_SRC
   vtkhdf_mb_file_type.F90.fypp
 )
 
-add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC} FLAGS)
-#add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC} FLAGS --line-numbering)
+add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC} FLAGS --line-numbering)
 
 set(SRC
   vtkhdf_assert.F90

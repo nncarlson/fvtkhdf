@@ -49,8 +49,7 @@ module vtkhdf_mb_file_type
     type(vtkhdf_ctx) :: ctx
     integer(hid_t) :: file_id=H5I_INVALID_HID, vtk_id=H5I_INVALID_HID, ass_id=H5I_INVALID_HID
     integer :: next_bid = 0
-    type(pdc_block), pointer :: blocks => null()
-    type(pdc_block), pointer :: last_block => null()
+    type(block_item), allocatable :: blocks(:) ! a 0-indexed array
     logical :: is_temporal = .false., write_time_step_called = .false.
   contains
 #ifdef USE_MPI
@@ -83,16 +82,14 @@ module vtkhdf_mb_file_type
 #:endfor
 #:endfor
 #:endfor
-    procedure, private :: get_block_ptr
+    procedure, private :: get_block_idx
     final :: vtkhdf_mb_file_delete
   end type
 
-  type :: pdc_block
-    character(:), allocatable :: name
-    type(vtkhdf_ug) :: b
-    type(pdc_block), pointer :: next => null()
-  contains
-    final :: pdc_block_delete
+  type :: block_item
+    integer :: index = -1
+    type(vtkhdf_ug), allocatable :: b
+    character(:), allocatable :: name ! TEMPORARY WHILE IN TRANSITION
   end type
 
 contains
@@ -106,31 +103,19 @@ contains
 
   subroutine vtkhdf_mb_file_delete(this)
     type(vtkhdf_mb_file), intent(inout) :: this
-    if (associated(this%blocks)) deallocate(this%blocks)
     this%ass_id  = H5I_INVALID_HID
     this%vtk_id  = H5I_INVALID_HID
     this%file_id = H5I_INVALID_HID
     this%next_bid = 0
-    this%last_block => null()
-  end subroutine
-
-  recursive subroutine pdc_block_delete(this)
-    type(pdc_block), intent(inout) :: this
-    if (associated(this%next)) deallocate(this%next)
   end subroutine
 
   !! Cleanly closes H5 identifiers and the file, and default initializes.
   subroutine close(this)
     class(vtkhdf_mb_file), intent(inout) :: this
     integer :: ierr
-    type(pdc_block), pointer :: p
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    p => this%blocks
-    do while (associated(p))
-      call p%b%close
-      p => p%next
-    end do
+    if (allocated(this%blocks)) deallocate(this%blocks)
     if (H5Iis_valid(this%ass_id) > 0) ierr = H5Gclose(this%ass_id)
     if (H5Iis_valid(this%vtk_id) > 0) ierr = H5Gclose(this%vtk_id)
     if (H5Iis_valid(this%file_id) > 0) ierr = H5Fclose(this%file_id)
@@ -254,7 +239,6 @@ contains
     logical, intent(in), optional :: is_temporal
 
     integer :: n, ierr
-    type(pdc_block), pointer :: b, new
     type(vtkhdf_h5e_context) :: err_ctx
     logical :: temporal_flag
 
@@ -280,15 +264,15 @@ contains
       return
     end if
 
-    b => this%blocks
-    do while (associated(b))
-      if (b%name == block_name) then
-        stat = 1
-        errmsg = 'block "' // block_name // '" already defined'
-        return
-      end if
-      b => b%next
-    end do
+    if (allocated(this%blocks)) then
+      do n = 0, ubound(this%blocks,dim=1)
+        if (this%blocks(n)%name == block_name) then
+          stat = 1
+          errmsg = 'block "' // block_name // '" already defined'
+          return
+        end if
+      end do
+    end if
 
     ! If a block is temporal, it must be added before the
     ! timeline starts to ensure step-count consistency.
@@ -299,18 +283,34 @@ contains
       this%is_temporal = .true.
     end if
 
-    !! Create the UG block group and its HDF5 hierarchy
-    allocate(new)
-    new%name = block_name
-    new%next => this%blocks
-    this%blocks => new
+    if (.not.allocated(this%blocks)) then
+      allocate(this%blocks(0:0))
+      allocate(this%blocks(0)%b)
+    else ! resize blocks
+      block
+        integer :: j, n
+        type(block_item), allocatable :: tmp(:)
+        n = size(this%blocks)
+        allocate(tmp(0:n))
+        do j = 0, n-1
+          call move_alloc(this%blocks(j)%b, tmp(j)%b)
+          call move_alloc(this%blocks(j)%name, tmp(j)%name) ! TEMP WHILE IN TRANSITION
+        end do
+        allocate(tmp(n)%b)
+        call move_alloc(tmp, this%blocks)
+      end block
+    end if
 
     call err_ctx%capture ! begin HDF5 calls
 
-    call new%b%init(this%vtk_id, block_name, this%ctx, is_temporal)
+    !! Create the UG block group and its HDF5 hierarchy
+    associate (new_block => this%blocks(this%next_bid)%b)
+      call new_block%init(this%vtk_id, block_name, this%ctx, is_temporal)
+      !NB: Index unused by MB, but required for PDC.
+      call h5_write_attr(this%ctx, new_block%root_id, 'Index', this%next_bid)
+    end associate
+    this%blocks(this%next_bid)%name = block_name ! TEMP WHILE IN TRANSITION
 
-    !NB: Unused for MultiBlockDataSet, but required for PartitionedDataSetCollection.
-    call h5_write_attr(this%ctx, new%b%root_id, 'Index', this%next_bid)
     this%next_bid = this%next_bid + 1
 
     !! Create a softlink in Assembly group to the block group.
@@ -338,13 +338,13 @@ contains
     ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
 
-    type(vtkhdf_ug), pointer :: bptr
+    integer :: n
     type(vtkhdf_h5e_context) :: err_ctx
 
     INSIST(size(points,dim=1) == 3)
     call err_ctx%capture
-    call this%get_block_ptr(block_name, bptr)
-    call bptr%write_mesh(points, cnode, xcnode, types)
+    call this%get_block_idx(block_name, n)
+    call this%blocks(n)%b%write_mesh(points, cnode, xcnode, types)
     call err_ctx%restore(0)
 
   end subroutine write_mesh_${r["kind"]}$_${i["kind"]}$
@@ -363,11 +363,11 @@ contains
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array${d["array"]}$
-    type(vtkhdf_ug), pointer :: bptr
+    integer :: n
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    call this%get_block_ptr(block_name, bptr)
-    call bptr%write_${loc}$_data(name, array)
+    call this%get_block_idx(block_name, n)
+    call this%blocks(n)%b%write_${loc}$_data(name, array)
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -399,11 +399,11 @@ contains
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: mold${d["mold"]}$
-    type(vtkhdf_ug), pointer :: bptr
+    integer :: n
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    call this%get_block_ptr(block_name, bptr)
-    call bptr%register_temporal_${loc}$_data(name, mold)
+    call this%get_block_idx(block_name, n)
+    call this%blocks(n)%b%register_temporal_${loc}$_data(name, mold)
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -422,16 +422,18 @@ contains
   subroutine write_time_step_real64(this, time)
     class(vtkhdf_mb_file), intent(inout) :: this
     real(real64), intent(in) :: time
-    type(pdc_block), pointer :: b
     type(vtkhdf_h5e_context) :: err_ctx
+    integer :: j
     call err_ctx%capture
     INSIST(this%is_temporal)
     this%write_time_step_called = .true.
-    b => this%blocks
-    do while (associated(b))
-      if (b%b%nsteps >= 0) call b%b%write_time_step(time)
-      b => b%next
-    end do
+    if (allocated(this%blocks)) then
+      do j = 0, ubound(this%blocks,dim=1)
+        associate (b => this%blocks(j)%b)
+          if (b%nsteps >= 0) call b%write_time_step(time)
+        end associate
+      end do
+    end if
     call err_ctx%restore(0)
   end subroutine write_time_step_real64
 
@@ -446,11 +448,11 @@ contains
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name, name
     ${s["decl"]}$, intent(in) :: array${d["array"]}$
-    type(vtkhdf_ug), pointer :: bptr
+    integer :: n
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    call this%get_block_ptr(block_name, bptr)
-    call bptr%write_temporal_${loc}$_data(name, array)
+    call this%get_block_idx(block_name, n)
+    call this%blocks(n)%b%write_temporal_${loc}$_data(name, array)
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -458,31 +460,22 @@ contains
 #:endfor
 
   !! This private procedure returns a pointer to the named block.
-  subroutine get_block_ptr(this, name, bptr)
+  subroutine get_block_idx(this, name, idx)
 
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: name
-    type(vtkhdf_ug), pointer, intent(out) :: bptr
+    integer, intent(out) :: idx
 
-    type(pdc_block), pointer :: b
+    integer :: j
 
-    if (associated(this%last_block)) then
-      if (this%last_block%name == name) then
-        bptr => this%last_block%b
-        return
-      end if
-    end if
+    INSIST(this%ctx%global_all(allocated(this%blocks)))
 
-    b => this%blocks
-    do while (associated(b))
-      if (b%name == name) exit
-      b => b%next
+    do idx = 0, ubound(this%blocks,dim=1)
+      if (this%blocks(idx)%name == name) exit
     end do
 
-    INSIST(this%ctx%global_all(associated(b)))
-    this%last_block => b
-    bptr => b%b
+    INSIST(this%ctx%global_all(idx < size(this%blocks)))
 
-  end subroutine get_block_ptr
+  end subroutine get_block_idx
 
 end module vtkhdf_mb_file_type
