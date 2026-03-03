@@ -40,6 +40,7 @@ module vtkhdf_ug_file_type
   private
 
   public :: vtkhdf_version
+  public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle
 
   type, public :: vtkhdf_ug_file
     private
@@ -222,7 +223,7 @@ contains
 #:for d in data_specs
 
   subroutine write_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, name, array)
-    class(vtkhdf_ug_file), intent(in) :: this
+    class(vtkhdf_ug_file), intent(inout) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array${d["array"]}$
     type(vtkhdf_h5e_context) :: err_ctx
@@ -255,15 +256,16 @@ contains
 #:for s in num_specs
 #:for r in data_specs
 
-  subroutine register_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$(this, name, mold)
+  function register_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$(this, name, mold) result(handle)
     class(vtkhdf_ug_file), intent(inout) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: mold${r["mold"]}$
     type(vtkhdf_h5e_context) :: err_ctx
+    type(vtkhdf_${loc}$_data_handle) :: handle
     call err_ctx%capture !TODO? push this down?
-    call this%ug%register_temporal_${loc}$_data(name, mold)
+    handle = this%ug%register_temporal_${loc}$_data(name, mold)
     call err_ctx%restore(0)
-  end subroutine
+  end function
 #:endfor
 #:endfor
 #:endfor
@@ -292,13 +294,13 @@ contains
 #:for s in num_specs
 #:for r in data_specs
 
-  subroutine write_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$(this, name, array)
-    class(vtkhdf_ug_file), intent(in) :: this
-    character(*), intent(in) :: name
+  subroutine write_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$(this, handle, array)
+    class(vtkhdf_ug_file), intent(inout) :: this
+    type(vtkhdf_${loc}$_data_handle), intent(in) :: handle
     ${s["decl"]}$, intent(in) :: array${r["array"]}$
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    call this%ug%write_temporal_${loc}$_data(name, array)
+    call this%ug%write_temporal_${loc}$_data(handle, array)
     call err_ctx%restore(0)
   end subroutine
 #:endfor

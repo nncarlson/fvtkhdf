@@ -17,6 +17,8 @@ program vtkhdf_mb_test
 
   type(vtkhdf_mb_file) :: vizfile
   type(vtkhdf_block_handle) :: bliq, bsol
+  type(vtkhdf_cell_data_handle) :: pressure_handle
+  type(vtkhdf_point_data_handle) :: velocity_handle
 
   call MPI_Init(stat)
   call MPI_Comm_size(MPI_COMM_WORLD, nproc, stat)
@@ -68,8 +70,8 @@ program vtkhdf_mb_test
   !! velocity for the liquid block. (COLLECTIVE!)
   allocate(pressure(ncells_liquid), velocity(3,npoints_liquid))
   associate (scalar_mold => pressure(1), vector_mold => velocity(:,1))
-    call vizfile%register_temporal_cell_data(bliq, 'pressure', scalar_mold)
-    call vizfile%register_temporal_point_data(bliq, 'velocity', vector_mold)
+    pressure_handle = vizfile%register_temporal_cell_data(bliq, 'pressure', scalar_mold)
+    velocity_handle = vizfile%register_temporal_point_data(bliq, 'velocity', vector_mold)
   end associate
 
   !! Start simulation time stepping
@@ -82,8 +84,8 @@ program vtkhdf_mb_test
     !! Generate some arbitrary time-dependent data and write it. (COLLECTIVE!)
     pressure = cos(time) + rank
     velocity = spread([cos(time+rank),sin(time+rank),1.0_r8],dim=2,ncopies=npoints_liquid)
-    call vizfile%write_temporal_cell_data(bliq, 'pressure', pressure)
-    call vizfile%write_temporal_point_data(bliq, 'velocity', velocity)
+    call vizfile%write_temporal_cell_data(bliq, pressure_handle, pressure)
+    call vizfile%write_temporal_point_data(bliq, velocity_handle, velocity)
   end do
 
   !! Write the time-independent point-centered temperature for both blocks

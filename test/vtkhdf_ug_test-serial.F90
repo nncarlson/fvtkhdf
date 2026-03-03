@@ -13,6 +13,8 @@ program vtkhdf_ug_test
   integer :: stat
 
   type(vtkhdf_ug_file) :: vizfile
+  type(vtkhdf_cell_data_handle) :: hcell_radius, hcell_velocity
+  type(vtkhdf_point_data_handle) :: hpoint_radius, hpoint_velocity
 
   call vizfile%create('ug_test.vtkhdf', stat, errmsg, is_temporal=.true.)
   if (stat /= 0) error stop errmsg
@@ -24,10 +26,10 @@ program vtkhdf_ug_test
   !! are only used to glean their types and shapes.
 
   associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
-    call vizfile%register_temporal_cell_data('cell-radius', scalar_mold)
-    call vizfile%register_temporal_cell_data('cell-velocity', vector_mold)
-    call vizfile%register_temporal_point_data('point-radius', scalar_mold)
-    call vizfile%register_temporal_point_data('point-velocity', vector_mold)
+    hcell_radius = vizfile%register_temporal_cell_data('cell-radius', scalar_mold)
+    hcell_velocity = vizfile%register_temporal_cell_data('cell-velocity', vector_mold)
+    hpoint_radius = vizfile%register_temporal_point_data('point-radius', scalar_mold)
+    hpoint_velocity = vizfile%register_temporal_point_data('point-velocity', vector_mold)
   end associate
 
   !! Generate some cell and point data for output
@@ -41,19 +43,19 @@ program vtkhdf_ug_test
 
   call vizfile%write_time_step(0.0_r8)
 
-  call vizfile%write_temporal_cell_data('cell-radius', scalar_cell_data)
-  call vizfile%write_temporal_cell_data('cell-velocity', vector_cell_data)
-  call vizfile%write_temporal_point_data('point-radius', scalar_point_data)
-  call vizfile%write_temporal_point_data('point-velocity', vector_point_data)
+  call vizfile%write_temporal_cell_data(hcell_radius, scalar_cell_data)
+  call vizfile%write_temporal_cell_data(hcell_velocity, vector_cell_data)
+  call vizfile%write_temporal_point_data(hpoint_radius, scalar_point_data)
+  call vizfile%write_temporal_point_data(hpoint_velocity, vector_point_data)
 
   !!!! Write the data for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   call vizfile%write_time_step(1.0_r8)
 
-  call vizfile%write_temporal_cell_data('cell-radius', scalar_cell_data+1)
-  call vizfile%write_temporal_cell_data('cell-velocity', vector_cell_data+1)
-  call vizfile%write_temporal_point_data('point-radius', scalar_point_data+1)
-  call vizfile%write_temporal_point_data('point-velocity', vector_point_data+1)
+  call vizfile%write_temporal_cell_data(hcell_radius, scalar_cell_data+1)
+  call vizfile%write_temporal_cell_data(hcell_velocity, vector_cell_data+1)
+  call vizfile%write_temporal_point_data(hpoint_radius, scalar_point_data+1)
+  call vizfile%write_temporal_point_data(hpoint_velocity, vector_point_data+1)
 
   !! At any point you can write a data that isn't time dependent, but its name must
   !! be unique from any other data temporal or not of the same type (cell or point).

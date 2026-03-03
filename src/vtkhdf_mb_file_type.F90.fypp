@@ -43,6 +43,7 @@ module vtkhdf_mb_file_type
   private
 
   public :: vtkhdf_version
+  public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle
 
   type, public :: vtkhdf_mb_file
     private
@@ -373,17 +374,18 @@ contains
 #:for s in num_specs
 #:for d in data_specs
 
-  subroutine register_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, b, name, mold)
+  function register_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, b, name, mold) result(handle)
     class(vtkhdf_mb_file), intent(inout) :: this
     type(vtkhdf_block_handle), intent(in) :: b
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: mold${d["mold"]}$
     type(vtkhdf_h5e_context) :: err_ctx
+    type(vtkhdf_${loc}$_data_handle) :: handle
     INSIST(b%index >= 0 .and. b%index < this%next_block_index)
     call err_ctx%capture
-    call this%blocks(b%index)%b%register_temporal_${loc}$_data(name, mold)
+    handle = this%blocks(b%index)%b%register_temporal_${loc}$_data(name, mold)
     call err_ctx%restore(0)
-  end subroutine
+  end function
 #:endfor
 #:endfor
 #:endfor
@@ -422,15 +424,15 @@ contains
 #:for s in num_specs
 #:for d in data_specs
 
-  subroutine write_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, b, name, array)
+  subroutine write_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, b, handle, array)
     class(vtkhdf_mb_file), intent(inout) :: this
     type(vtkhdf_block_handle), intent(in) :: b
-    character(*), intent(in) :: name
+    type(vtkhdf_${loc}$_data_handle), intent(in) :: handle
     ${s["decl"]}$, intent(in) :: array${d["array"]}$
     type(vtkhdf_h5e_context) :: err_ctx
     INSIST(b%index >= 0 .and. b%index < this%next_block_index)
     call err_ctx%capture
-    call this%blocks(b%index)%b%write_temporal_${loc}$_data(name, array)
+    call this%blocks(b%index)%b%write_temporal_${loc}$_data(handle, array)
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -480,7 +482,7 @@ contains
   function unique_block_name(this, name) result(unique_name)
     class(vtkhdf_mb_file), intent(in) :: this
     character(*), intent(in) :: name
-    character(len_trim(name)) :: unique_name
+    character(:), allocatable :: unique_name
     integer :: n , suffix
     character(8) :: string
     n = 0 ! this%blocks uses 0-based indexing
