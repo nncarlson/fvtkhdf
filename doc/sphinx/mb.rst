@@ -27,6 +27,8 @@ returned by ``add_block``.
    use vtkhdf_mb_file_type
    type(vtkhdf_mb_file) :: file
    type(vtkhdf_block_handle) :: block
+   type(vtkhdf_cell_data_handle) :: cell_var
+   type(vtkhdf_point_data_handle) :: point_var
 
 File Creation and Management
 ----------------------------
@@ -95,6 +97,13 @@ Static mesh-centered data
       ``array`` must conform to the same type and shape requirements
       described for ``vtkhdf_ug_file``.
 
+      Within a block, cell datasets share a ``CellData`` namespace and point
+      datasets share a ``PointData`` namespace. Input names are trimmed, empty
+      input is replaced by a default name, the characters ``/``, ``.``, and
+      space are replaced by ``_``, and duplicate internal names are made
+      unique by appending a suffix. The original user-facing name is written
+      to the dataset ``Name`` attribute.
+
 Time-dependent mesh-centered data
 ---------------------------------
 
@@ -108,11 +117,12 @@ or temporal dataset registrations are allowed.
 
 .. glossary::
 
-   ``call file%register_temporal_cell_data(block, name, mold)``
-   ``call file%register_temporal_point_data(block, name, mold)``
+   ``cell_var = file%register_temporal_cell_data(block, name, mold)``
+   ``point_var = file%register_temporal_point_data(block, name, mold)``
       Register ``name`` as a time-dependent dataset on the block identified by
       ``block``. Registration semantics are identical to those of
-      ``vtkhdf_ug_file``.
+      ``vtkhdf_ug_file``. The returned handle is opaque; user code should
+      store it and pass it to later temporal writes for the same block.
 
 ``call file%write_time_step(time)``
    Start a new time step with time value ``time``. The timeline is shared by
@@ -121,8 +131,10 @@ or temporal dataset registrations are allowed.
 
 .. glossary::
 
-   ``call file%write_temporal_cell_data(block, name, array)``
-   ``call file%write_temporal_point_data(block, name, array)``
-      Write ``array`` to the temporal dataset ``name`` on the block identified
-      by ``block``, associating it with the current time step. Write semantics
-      are identical to those of ``vtkhdf_ug_file``.
+   ``call file%write_temporal_cell_data(block, cell_var, array)``
+   ``call file%write_temporal_point_data(block, point_var, array)``
+      Write ``array`` to the temporal dataset identified by the handle on the
+      block identified by ``block``, associating it with the current time
+      step. Write semantics are identical to those of ``vtkhdf_ug_file``.
+
+      The data handle and block handle must match the same block registration.

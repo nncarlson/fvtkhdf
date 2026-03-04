@@ -26,6 +26,8 @@ identical values.
 
    use vtkhdf_ug_file_type
    type(vtkhdf_ug_file) :: file
+   type(vtkhdf_cell_data_handle) :: cell_var
+   type(vtkhdf_point_data_handle) :: point_var
 
 File Creation and Management
 ----------------------------
@@ -84,12 +86,17 @@ any time step.
 
    ``call file%write_cell_data(name, array)``
    ``call file%write_point_data(name, array)``
-      Write the data ``array`` to a new cell or point dataset ``name``;
-      ``name`` must not already be defined for the indicated entity type.
+      Write the data ``array`` to a new cell or point dataset ``name``.
       Scalar data (rank-1 ``array``) and vector data
       (rank-2 ``array``) are supported. The last dimension of ``array``
       indexes the mesh entity and must have extent `ncells` (cell data)
       or `npoints` (point data).
+
+      Cell and point datasets each have their own namespace. Input names are
+      trimmed, empty input is replaced by a default name, the characters
+      ``/``, ``.``, and space are replaced by ``_``, and duplicate internal
+      names are made unique by appending a suffix such as ``_1``. The original
+      user-facing name is still written to the dataset ``Name`` attribute.
 
 .. note::
    VTK only supports scalar and vector-valued mesh-centered data. Other kinds
@@ -104,24 +111,27 @@ step must be started before temporal datasets are written.
 
 .. glossary::
 
-   ``call file%register_temporal_cell_data(name, mold)``
-   ``call file%register_temporal_point_data(name, mold)``
+   ``cell_var = file%register_temporal_cell_data(name, mold)``
+   ``point_var = file%register_temporal_point_data(name, mold)``
       Register ``name`` as a time-dependent cell or point dataset.
       The type and kind of ``mold`` determines the dataset type.
       For scalar data, pass a scalar ``mold``,
       and for vector data, pass a rank-1 ``mold`` whose size equals
       the number of components. The value of ``mold`` is never referenced.
-      ``name`` must not be defined as a static or temporal dataset of the
-      same entity type.
+
+      Naming follows the same sanitation and uniquification rules as
+      ``write_cell_data`` and ``write_point_data``. The returned handle is
+      opaque; user code should store it and pass it to later temporal writes.
 
 
    ``call file%write_time_step(time)``
       Start a new time step with time value ``time``.
 
 
-   ``call file%write_temporal_cell_data(name, array)``
-   ``call file%write_temporal_point_data(name, array)``
-      Write the ``array`` to the temporal dataset ``name``, associating it
+   ``call file%write_temporal_cell_data(cell_var, array)``
+   ``call file%write_temporal_point_data(point_var, array)``
+      Write the ``array`` to the temporal dataset identified by the handle,
+      associating it
       with the current time step.
       ``array`` must conform to the shape and type implied by the
       registered ``mold`` and must have extent `ncells` (cell data) or
