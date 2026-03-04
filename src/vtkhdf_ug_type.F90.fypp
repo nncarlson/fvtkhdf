@@ -397,25 +397,23 @@ contains
     type(vtkhdf_cell_data_handle) :: handle
 
     integer :: var_index
+    character(:), allocatable :: external_name, internal_name
 
     INSIST(this%nsteps >= 0) ! must be configured for temporal
     INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
 
-    block
-      character(:), allocatable :: external_name, internal_name
-      call this%reserve_cell_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
+    call this%reserve_cell_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
 
-      !! Dataset for the cell data
-      associate (chunk_size => int(this%ncell_tot))
-        call h5_create_unlimited_dataset(this%ctx, this%cgrp_id, internal_name, mold, chunk_size)
-      end associate
-      call write_data_name_attr(this%ctx, this%cgrp_id, internal_name, external_name)
+    !! Dataset for the cell data
+    associate (chunk_size => int(this%ncell_tot))
+      call h5_create_unlimited_dataset(this%ctx, this%cgrp_id, internal_name, mold, chunk_size)
+    end associate
+    call write_data_name_attr(this%ctx, this%cgrp_id, internal_name, external_name)
 
-      !! Dataset for its time step offsets
-      associate (mold => 0_int64, chunk_size => 100)
-        call h5_create_unlimited_dataset(this%ctx, this%cogrp_id, internal_name, mold, chunk_size)
-      end associate
-    end block
+    !! Dataset for its time step offsets
+    associate (mold => 0_int64, chunk_size => 100)
+      call h5_create_unlimited_dataset(this%ctx, this%cogrp_id, internal_name, mold, chunk_size)
+    end associate
 
     handle%index = var_index
 
@@ -444,25 +442,23 @@ contains
     type(vtkhdf_point_data_handle) :: handle
 
     integer :: var_index
+    character(:), allocatable :: external_name, internal_name
 
     INSIST(this%nsteps >= 0) ! must be configured for temporal
     INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
 
-    block
-      character(:), allocatable :: external_name, internal_name
-      call this%reserve_point_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
+    call this%reserve_point_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
 
-      !! Dataset for the point data
-      associate (chunk_size => int(this%nnode_tot))
-        call h5_create_unlimited_dataset(this%ctx, this%pgrp_id, internal_name, mold, chunk_size)
-      end associate
-      call write_data_name_attr(this%ctx, this%pgrp_id, internal_name, external_name)
+    !! Dataset for the point data
+    associate (chunk_size => int(this%nnode_tot))
+      call h5_create_unlimited_dataset(this%ctx, this%pgrp_id, internal_name, mold, chunk_size)
+    end associate
+    call write_data_name_attr(this%ctx, this%pgrp_id, internal_name, external_name)
 
-      !! Dataset for its time step offsets
-      associate (mold => 0_int64, chunk_size => 100)
-        call h5_create_unlimited_dataset(this%ctx, this%pogrp_id, internal_name, mold, chunk_size)
-      end associate
-    end block
+    !! Dataset for its time step offsets
+    associate (mold => 0_int64, chunk_size => 100)
+      call h5_create_unlimited_dataset(this%ctx, this%pogrp_id, internal_name, mold, chunk_size)
+    end associate
 
     handle%index = var_index
 

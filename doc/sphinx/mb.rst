@@ -54,12 +54,14 @@ Block definition
 ``block = file%add_block(name [, is_temporal])``
    Define a new UnstructuredGrid block and return its handle.
 
-   ``name`` is the user-facing block name stored in the file metadata.
-   Names that are non-empty, unique, and avoid ``/``, ``.``, and spaces are
-   still recommended. However, ``add_block`` no longer fails for empty,
-   duplicate, or otherwise awkward names. It sanitizes invalid characters,
-   substitutes a default name for empty input, and appends a suffix when
-   needed so the file remains valid.
+   ``name`` is normalized and disambiguated before it is used as the block
+   name seen by the VTKHDF reader and ParaView. Input is trimmed, empty input
+   is replaced by a default name, the characters ``/``, ``.``, and space are
+   replaced by ``_``, and duplicate internal names are made unique by
+   appending a suffix.
+
+   The original user-facing input name is still written to the block group's
+   ``Name`` attribute for informational purposes.
 
    If ``is_temporal`` is present and ``.true.``, the block supports
    time-dependent datasets. Temporal blocks must be defined before the first
@@ -101,8 +103,9 @@ Static mesh-centered data
       datasets share a ``PointData`` namespace. Input names are trimmed, empty
       input is replaced by a default name, the characters ``/``, ``.``, and
       space are replaced by ``_``, and duplicate internal names are made
-      unique by appending a suffix. The original user-facing name is written
-      to the dataset ``Name`` attribute.
+      unique by appending a suffix. The sanitized internal dataset name is
+      what the VTKHDF reader and ParaView use. The original user-facing name
+      is written to the dataset ``Name`` attribute for informational purposes.
 
 Time-dependent mesh-centered data
 ---------------------------------
@@ -133,8 +136,9 @@ or temporal dataset registrations are allowed.
 
    ``call file%write_temporal_cell_data(block, cell_var, array)``
    ``call file%write_temporal_point_data(block, point_var, array)``
-      Write ``array`` to the temporal dataset identified by the handle on the
-      block identified by ``block``, associating it with the current time
-      step. Write semantics are identical to those of ``vtkhdf_ug_file``.
+      Write ``array`` to the temporal dataset identified by ``cell_var`` or
+      ``point_var`` for the specified ``block``, associating it with the
+      current time step.
+      Write semantics are identical to those of ``vtkhdf_ug_file``.
 
       The data handle and block handle must match the same block registration.

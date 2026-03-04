@@ -13,15 +13,6 @@ communicator passed to ``create``. Every rank must call the same method
 in the same order and supply identical values for all non-distributed
 arguments.
 
-Several methods return a status code ``stat`` and an allocatable
-character ``errmsg``.
-
-* ``stat == 0`` indicates success.
-* ``stat /= 0`` indicates failure and ``errmsg`` is allocated.
-
-In the MPI build, these return values are collective: all ranks return
-identical values.
-
 .. code-block:: fortran
 
    use vtkhdf_ug_file_type
@@ -41,6 +32,11 @@ File Creation and Management
      In serial builds ``comm`` is omitted from the interface.
    * ``is_temporal`` (optional): set ``.true.`` to enable time-dependent
      datasets. The default is ``.false.``
+   * ``stat``: status code. ``stat == 0`` indicates success.
+   * ``errmsg``: allocated error message when ``stat /= 0``.
+
+   In the MPI build, ``stat`` and ``errmsg`` are collective outputs:
+   all ranks return identical values.
 
 ``call file%close()``
     Close the file and release internal resources. Users should *always* call
@@ -95,8 +91,10 @@ any time step.
       Cell and point datasets each have their own namespace. Input names are
       trimmed, empty input is replaced by a default name, the characters
       ``/``, ``.``, and space are replaced by ``_``, and duplicate internal
-      names are made unique by appending a suffix such as ``_1``. The original
-      user-facing name is still written to the dataset ``Name`` attribute.
+      names are made unique by appending a suffix such as ``_1``. The
+      sanitized internal dataset name is what the VTKHDF reader and ParaView
+      use. The original user-facing name is still written to the dataset
+      ``Name`` attribute for informational purposes.
 
 .. note::
    VTK only supports scalar and vector-valued mesh-centered data. Other kinds
@@ -119,7 +117,7 @@ step must be started before temporal datasets are written.
       and for vector data, pass a rank-1 ``mold`` whose size equals
       the number of components. The value of ``mold`` is never referenced.
 
-      Naming follows the same sanitation and uniquification rules as
+      Naming follows the same normalization and disambiguation rules as
       ``write_cell_data`` and ``write_point_data``. The returned handle is
       opaque; user code should store it and pass it to later temporal writes.
 
