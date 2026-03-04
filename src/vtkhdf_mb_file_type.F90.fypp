@@ -384,6 +384,7 @@ contains
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
     handle = this%blocks(blk%index)%b%register_temporal_${loc}$_data(name, mold)
+    call set_block_index(handle, blk%index)
     call err_ctx%restore(0)
   end function
 #:endfor
@@ -431,6 +432,7 @@ contains
     ${s["decl"]}$, intent(in) :: array${d["array"]}$
     type(vtkhdf_h5e_context) :: err_ctx
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
+    INSIST(get_block_index(var) == blk%index)
     call err_ctx%capture
     call this%blocks(blk%index)%b%write_temporal_${loc}$_data(var, array)
     call err_ctx%restore(0)

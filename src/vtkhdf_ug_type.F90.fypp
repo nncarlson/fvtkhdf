@@ -37,14 +37,22 @@ module vtkhdf_ug_type
   implicit none
   private
 
+  public :: set_block_index, get_block_index
+
+  !! NB: BLOCK_INDEX is only interpreted by the multiblock front-end.
+  !! Carrying that metadata in these shared handles is not ideal from a
+  !! layering perspective, but it keeps a single public handle type across
+  !! UG and MB while allowing MB to verify block/variable consistency.
   type, public :: vtkhdf_cell_data_handle
     private
     integer :: index = -1
+    integer :: block_index = -1
   end type
 
   type, public :: vtkhdf_point_data_handle
     private
     integer :: index = -1
+    integer :: block_index = -1
   end type
 
   type, public :: vtkhdf_ug
@@ -93,7 +101,41 @@ module vtkhdf_ug_type
     logical :: wrote_this_step = .false.
   end type
 
+  interface set_block_index
+    module procedure set_cell_block_index
+    module procedure set_point_block_index
+  end interface
+
+  interface get_block_index
+    module procedure get_cell_block_index
+    module procedure get_point_block_index
+  end interface
+
 contains
+
+  subroutine set_cell_block_index(handle, block_index)
+    type(vtkhdf_cell_data_handle), intent(inout) :: handle
+    integer, intent(in) :: block_index
+    handle%block_index = block_index
+  end subroutine
+
+  subroutine set_point_block_index(handle, block_index)
+    type(vtkhdf_point_data_handle), intent(inout) :: handle
+    integer, intent(in) :: block_index
+    handle%block_index = block_index
+  end subroutine
+
+  pure function get_cell_block_index(handle) result(block_index)
+    type(vtkhdf_cell_data_handle), intent(in) :: handle
+    integer :: block_index
+    block_index = handle%block_index
+  end function
+
+  pure function get_point_block_index(handle) result(block_index)
+    type(vtkhdf_point_data_handle), intent(in) :: handle
+    integer :: block_index
+    block_index = handle%block_index
+  end function
 
   !! Finalizer for VTKHDF_UG_FILE objects. We free heap memory we own but avoid
   !! doing things that may require syncronization with other ranks (MPI/PHDF5)
