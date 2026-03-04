@@ -15,6 +15,8 @@ program vtkhdf_mb_test
 
   type(vtkhdf_mb_file) :: vizfile
   type(vtkhdf_block_handle) :: bliq, bsol
+  type(vtkhdf_cell_data_handle) :: pressure_handle
+  type(vtkhdf_point_data_handle) :: velocity_handle
 
   !! Create the file
   call vizfile%create('mb_demo.vtkhdf', stat, errmsg)
@@ -47,8 +49,8 @@ program vtkhdf_mb_test
   !! velocity for the liquid block.
   allocate(pressure(ncells), velocity(3,npoints))
   associate (scalar_mold => pressure(1), vector_mold => velocity(:,1))
-    call vizfile%register_temporal_cell_data(bliq, 'pressure', scalar_mold)
-    call vizfile%register_temporal_point_data(bliq, 'velocity', vector_mold)
+    pressure_handle = vizfile%register_temporal_cell_data(bliq, 'pressure', scalar_mold)
+    velocity_handle = vizfile%register_temporal_point_data(bliq, 'velocity', vector_mold)
   end associate
 
   !! Start simulation time stepping
@@ -61,8 +63,8 @@ program vtkhdf_mb_test
     !! Generate some arbitrary time-dependent data and write it.
     pressure = cos(time)
     velocity = spread([cos(time),sin(time),1.0_r8],dim=2,ncopies=npoints)
-    call vizfile%write_temporal_cell_data(bliq, 'pressure', pressure)
-    call vizfile%write_temporal_point_data(bliq, 'velocity', velocity)
+    call vizfile%write_temporal_cell_data(bliq, pressure_handle, pressure)
+    call vizfile%write_temporal_point_data(bliq, velocity_handle, velocity)
   end do
 
   !! We have time-independent (static) point-centered temperature in

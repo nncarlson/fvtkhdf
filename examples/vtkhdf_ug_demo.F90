@@ -16,6 +16,8 @@ program vtkhdf_ug_test
   integer :: nproc, rank
 
   type(vtkhdf_ug_file) :: vizfile
+  type(vtkhdf_cell_data_handle) :: pressure_handle
+  type(vtkhdf_point_data_handle) :: velocity_handle
 
   call MPI_Init(stat)
   call MPI_Comm_size(MPI_COMM_WORLD, nproc, stat)
@@ -42,8 +44,8 @@ program vtkhdf_ug_test
   !! They need to be registered before starting time stepping. (COLLECTIVE)
   allocate(pressure(ncells), velocity(3,npoints))
   associate (scalar_mold => pressure(1), vector_mold => velocity(:,1))
-    call vizfile%register_temporal_cell_data('pressure', scalar_mold)
-    call vizfile%register_temporal_point_data('velocity', vector_mold)
+    pressure_handle = vizfile%register_temporal_cell_data('pressure', scalar_mold)
+    velocity_handle = vizfile%register_temporal_point_data('velocity', vector_mold)
   end associate
 
   !! Start simulation time stepping
@@ -56,8 +58,8 @@ program vtkhdf_ug_test
     !! Generate some arbitrary local time-dependent data and write it (COLLECTIVE)
     pressure = cos(time) + rank
     velocity = spread([cos(time+rank),sin(time+rank),1.0_r8],dim=2,ncopies=npoints)
-    call vizfile%write_temporal_cell_data('pressure', pressure)
-    call vizfile%write_temporal_point_data('velocity', velocity)
+    call vizfile%write_temporal_cell_data(pressure_handle, pressure)
+    call vizfile%write_temporal_point_data(velocity_handle, velocity)
   end do
 
   !! We have time-independent (static) point-centered temperature.

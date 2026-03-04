@@ -21,6 +21,8 @@ program vtkhdf_mb_test
   real(r8), allocatable :: s(:), v(:,:) ! scalar and vector data arrays
   real(r8) :: s0(0), v0(3,0) ! 0-sized scalar and vector arrays; also molds for same
   type(vtkhdf_block_handle), allocatable :: hblk(:)
+  type(vtkhdf_cell_data_handle), allocatable :: hcell_scalar(:), hcell_vector(:)
+  type(vtkhdf_point_data_handle), allocatable :: hpoint_scalar(:), hpoint_vector(:)
 
   call MPI_Init(istat)
   call MPI_Comm_size(MPI_COMM_WORLD, nproc, istat)
@@ -42,7 +44,8 @@ program vtkhdf_mb_test
   !! NB: all VTKHDF_FILE methods are collective and ranks not contributing
   !! any data need to be called with appropriate 0-sized data.
 
-  allocate(name(0:nproc-1), hblk(0:nproc-1))
+  allocate(name(0:nproc-1), hblk(0:nproc-1), hcell_scalar(0:nproc-1), hcell_vector(0:nproc-1), &
+      hpoint_scalar(0:nproc-1), hpoint_vector(0:nproc-1))
   do j = 0, nproc-1! Block names
     write(name(j),'("block",i2.2)') j
   end do
@@ -62,10 +65,10 @@ program vtkhdf_mb_test
 
   associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
     do j = 0, nproc-1
-      call vizfile%register_temporal_cell_data(hblk(j), 'cell-scalar', scalar_mold)
-      call vizfile%register_temporal_cell_data(hblk(j), 'cell-vector', vector_mold)
-      call vizfile%register_temporal_point_data(hblk(j), 'point-scalar', scalar_mold)
-      call vizfile%register_temporal_point_data(hblk(j), 'point-vector', vector_mold)
+      hcell_scalar(j) = vizfile%register_temporal_cell_data(hblk(j), 'cell-scalar', scalar_mold)
+      hcell_vector(j) = vizfile%register_temporal_cell_data(hblk(j), 'cell-vector', vector_mold)
+      hpoint_scalar(j) = vizfile%register_temporal_point_data(hblk(j), 'point-scalar', scalar_mold)
+      hpoint_vector(j) = vizfile%register_temporal_point_data(hblk(j), 'point-vector', vector_mold)
     end do
   end associate
 
@@ -77,18 +80,18 @@ program vtkhdf_mb_test
   do j = 0, nproc-1
     if (abs(rank-j) <= 1) then
       call get_scalar_cell_data(y, cnode, xcnode, s)
-      call vizfile%write_temporal_cell_data(hblk(j), 'cell-scalar', s)
+      call vizfile%write_temporal_cell_data(hblk(j), hcell_scalar(j), s)
       call get_vector_cell_data(y, cnode, xcnode, v)
-      call vizfile%write_temporal_cell_data(hblk(j), 'cell-vector', v)
+      call vizfile%write_temporal_cell_data(hblk(j), hcell_vector(j), v)
       call get_scalar_point_data(y, s)
-      call vizfile%write_temporal_point_data(hblk(j), 'point-scalar', s)
+      call vizfile%write_temporal_point_data(hblk(j), hpoint_scalar(j), s)
       call get_vector_point_data(y, v)
-      call vizfile%write_temporal_point_data(hblk(j), 'point-vector', v)
+      call vizfile%write_temporal_point_data(hblk(j), hpoint_vector(j), v)
     else ! pass 0-sized data
-      call vizfile%write_temporal_cell_data(hblk(j), 'cell-scalar', s0)
-      call vizfile%write_temporal_cell_data(hblk(j), 'cell-vector',  v0)
-      call vizfile%write_temporal_point_data(hblk(j), 'point-scalar', s0)
-      call vizfile%write_temporal_point_data(hblk(j), 'point-vector',  v0)
+      call vizfile%write_temporal_cell_data(hblk(j), hcell_scalar(j), s0)
+      call vizfile%write_temporal_cell_data(hblk(j), hcell_vector(j),  v0)
+      call vizfile%write_temporal_point_data(hblk(j), hpoint_scalar(j), s0)
+      call vizfile%write_temporal_point_data(hblk(j), hpoint_vector(j),  v0)
     end if
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do
@@ -103,18 +106,18 @@ program vtkhdf_mb_test
   do j = 0, nproc-1
     if (abs(rank-j) <= 1) then
       call get_scalar_cell_data(y, cnode, xcnode, s)
-      call vizfile%write_temporal_cell_data(hblk(j), 'cell-scalar', s+1)
+      call vizfile%write_temporal_cell_data(hblk(j), hcell_scalar(j), s+1)
       call get_vector_cell_data(y, cnode, xcnode, v)
-      call vizfile%write_temporal_cell_data(hblk(j), 'cell-vector', v+1)
+      call vizfile%write_temporal_cell_data(hblk(j), hcell_vector(j), v+1)
       call get_scalar_point_data(y, s)
-      call vizfile%write_temporal_point_data(hblk(j), 'point-scalar', s+1)
+      call vizfile%write_temporal_point_data(hblk(j), hpoint_scalar(j), s+1)
       call get_vector_point_data(y, v)
-      call vizfile%write_temporal_point_data(hblk(j), 'point-vector', v+1)
+      call vizfile%write_temporal_point_data(hblk(j), hpoint_vector(j), v+1)
     else ! pass 0-sized data
-      call vizfile%write_temporal_cell_data(hblk(j), 'cell-scalar', s0)
-      call vizfile%write_temporal_cell_data(hblk(j), 'cell-vector',  v0)
-      call vizfile%write_temporal_point_data(hblk(j), 'point-scalar', s0)
-      call vizfile%write_temporal_point_data(hblk(j), 'point-vector',  v0)
+      call vizfile%write_temporal_cell_data(hblk(j), hcell_scalar(j), s0)
+      call vizfile%write_temporal_cell_data(hblk(j), hcell_vector(j),  v0)
+      call vizfile%write_temporal_point_data(hblk(j), hpoint_scalar(j), s0)
+      call vizfile%write_temporal_point_data(hblk(j), hpoint_vector(j),  v0)
     end if
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do

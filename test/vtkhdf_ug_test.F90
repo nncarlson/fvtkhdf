@@ -13,6 +13,8 @@ program vtkhdf_ug_test
   integer,  allocatable :: cnode(:), xcnode(:)
   integer(int8), allocatable :: types(:)
   real(r8), allocatable :: s(:), v(:,:) ! scalar and vector data arrays
+  type(vtkhdf_cell_data_handle) :: hcell_scalar, hcell_vector
+  type(vtkhdf_point_data_handle) :: hpoint_scalar, hpoint_vector
 
   call MPI_Init(istat)
   call MPI_Comm_size(MPI_COMM_WORLD, nproc, istat)
@@ -32,10 +34,10 @@ program vtkhdf_ug_test
   !!!! Register the data arrays that evolve with time.
 
   associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
-    call vizfile%register_temporal_cell_data('cell-scalar', scalar_mold)
-    call vizfile%register_temporal_cell_data('cell-vector', vector_mold)
-    call vizfile%register_temporal_point_data('point-scalar', scalar_mold)
-    call vizfile%register_temporal_point_data('point-vector', vector_mold)
+    hcell_scalar = vizfile%register_temporal_cell_data('cell-scalar', scalar_mold)
+    hcell_vector = vizfile%register_temporal_cell_data('cell-vector', vector_mold)
+    hpoint_scalar = vizfile%register_temporal_point_data('point-scalar', scalar_mold)
+    hpoint_vector = vizfile%register_temporal_point_data('point-vector', vector_mold)
   end associate
 
   !!!! Write the datasets for the first time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -43,16 +45,16 @@ program vtkhdf_ug_test
   call vizfile%write_time_step(0.0_r4)
 
   call get_scalar_cell_data(points, cnode, xcnode, s)
-  call vizfile%write_temporal_cell_data('cell-scalar', s)
+  call vizfile%write_temporal_cell_data(hcell_scalar, s)
 
   call get_vector_cell_data(points, cnode, xcnode, v)
-  call vizfile%write_temporal_cell_data('cell-vector', v)
+  call vizfile%write_temporal_cell_data(hcell_vector, v)
 
   call get_scalar_point_data(points, s)
-  call vizfile%write_temporal_point_data('point-scalar', s)
+  call vizfile%write_temporal_point_data(hpoint_scalar, s)
 
   call get_vector_point_data(points, v)
-  call vizfile%write_temporal_point_data('point-vector', v)
+  call vizfile%write_temporal_point_data(hpoint_vector, v)
 
   call vizfile%flush()
 
@@ -61,16 +63,16 @@ program vtkhdf_ug_test
   call vizfile%write_time_step(1.0_r4)
 
   call get_scalar_cell_data(points, cnode, xcnode, s)
-  call vizfile%write_temporal_cell_data('cell-scalar', s+1)
+  call vizfile%write_temporal_cell_data(hcell_scalar, s+1)
 
   call get_vector_cell_data(points, cnode, xcnode, v)
-  call vizfile%write_temporal_cell_data('cell-vector', v+1)
+  call vizfile%write_temporal_cell_data(hcell_vector, v+1)
 
   call get_scalar_point_data(points, s)
-  call vizfile%write_temporal_point_data('point-scalar', s+1)
+  call vizfile%write_temporal_point_data(hpoint_scalar, s+1)
 
   call get_vector_point_data(points, v)
-  call vizfile%write_temporal_point_data('point-vector', v+1)
+  call vizfile%write_temporal_point_data(hpoint_vector, v+1)
 
   !! Some time-independent cell and point data
 
