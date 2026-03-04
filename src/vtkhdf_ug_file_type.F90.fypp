@@ -294,13 +294,13 @@ contains
 #:for s in num_specs
 #:for r in data_specs
 
-  subroutine write_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$(this, handle, array)
+  subroutine write_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$(this, var, array)
     class(vtkhdf_ug_file), intent(inout) :: this
-    type(vtkhdf_${loc}$_data_handle), intent(in) :: handle
+    type(vtkhdf_${loc}$_data_handle), intent(in) :: var
     ${s["decl"]}$, intent(in) :: array${r["array"]}$
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    call this%ug%write_temporal_${loc}$_data(handle, array)
+    call this%ug%write_temporal_${loc}$_data(var, array)
     call err_ctx%restore(0)
   end subroutine
 #:endfor

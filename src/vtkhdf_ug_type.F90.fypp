@@ -463,10 +463,10 @@ contains
   !  correspond to the local number of cells on this MPI rank.
 #:for s in num_specs
 
-  subroutine write_temporal_cell_data_${s["kind"]}$(this, handle, array)
+  subroutine write_temporal_cell_data_${s["kind"]}$(this, var, array)
 
     class(vtkhdf_ug), intent(inout) :: this
-    type(vtkhdf_cell_data_handle), intent(in) :: handle
+    type(vtkhdf_cell_data_handle), intent(in) :: var
     ${s["decl"]}$, intent(in) :: array(..)
 
     integer, allocatable :: dims(:)
@@ -476,14 +476,14 @@ contains
     dims = shape(array)
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
     INSIST(dims(size(dims)) == this%ncell)
-    INSIST(handle%index >= 1)
+    INSIST(var%index >= 1)
     INSIST(allocated(this%cell_vars))
-    INSIST(handle%index <= size(this%cell_vars))
-    INSIST(this%cell_vars(handle%index)%is_temporal)
-    INSIST(.not.this%cell_vars(handle%index)%wrote_this_step) ! no double writing in a single step
-    call h5_append_to_dataset(this%ctx, this%cgrp_id, this%cell_vars(handle%index)%dataset_name, array)
-    this%cell_vars(handle%index)%next_offset = this%cell_vars(handle%index)%next_offset + this%ncell_tot
-    this%cell_vars(handle%index)%wrote_this_step = .true. ! dataset has been written for this step
+    INSIST(var%index <= size(this%cell_vars))
+    INSIST(this%cell_vars(var%index)%is_temporal)
+    INSIST(.not.this%cell_vars(var%index)%wrote_this_step) ! no double writing in a single step
+    call h5_append_to_dataset(this%ctx, this%cgrp_id, this%cell_vars(var%index)%dataset_name, array)
+    this%cell_vars(var%index)%next_offset = this%cell_vars(var%index)%next_offset + this%ncell_tot
+    this%cell_vars(var%index)%wrote_this_step = .true. ! dataset has been written for this step
 
   end subroutine write_temporal_cell_data_${s["kind"]}$
 #:endfor
@@ -495,10 +495,10 @@ contains
   !  correspond to the local number of points on this MPI rank.
 #:for s in num_specs
 
-  subroutine write_temporal_point_data_${s["kind"]}$(this, handle, array)
+  subroutine write_temporal_point_data_${s["kind"]}$(this, var, array)
 
     class(vtkhdf_ug), intent(inout) :: this
-    type(vtkhdf_point_data_handle), intent(in) :: handle
+    type(vtkhdf_point_data_handle), intent(in) :: var
     ${s["decl"]}$, intent(in) :: array(..)
 
     integer, allocatable :: dims(:)
@@ -508,14 +508,14 @@ contains
     dims = shape(array)
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
     INSIST(dims(size(dims)) == this%nnode)
-    INSIST(handle%index >= 1)
+    INSIST(var%index >= 1)
     INSIST(allocated(this%point_vars))
-    INSIST(handle%index <= size(this%point_vars))
-    INSIST(this%point_vars(handle%index)%is_temporal)
-    INSIST(.not.this%point_vars(handle%index)%wrote_this_step) ! no double writing in a single step
-    call h5_append_to_dataset(this%ctx, this%pgrp_id, this%point_vars(handle%index)%dataset_name, array)
-    this%point_vars(handle%index)%next_offset = this%point_vars(handle%index)%next_offset + this%nnode_tot
-    this%point_vars(handle%index)%wrote_this_step = .true. ! dataset has been written for this step
+    INSIST(var%index <= size(this%point_vars))
+    INSIST(this%point_vars(var%index)%is_temporal)
+    INSIST(.not.this%point_vars(var%index)%wrote_this_step) ! no double writing in a single step
+    call h5_append_to_dataset(this%ctx, this%pgrp_id, this%point_vars(var%index)%dataset_name, array)
+    this%point_vars(var%index)%next_offset = this%point_vars(var%index)%next_offset + this%nnode_tot
+    this%point_vars(var%index)%wrote_this_step = .true. ! dataset has been written for this step
 
   end subroutine write_temporal_point_data_${s["kind"]}$
 #:endfor
