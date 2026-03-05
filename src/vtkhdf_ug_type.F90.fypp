@@ -63,6 +63,7 @@ module vtkhdf_ug_type
     integer :: npart
     logical :: is_temporal = .false.
     integer :: nsteps = -1
+    logical :: step_open = .false.
     integer(hid_t) :: steps_id=H5I_INVALID_HID
     integer(hid_t) :: cogrp_id=H5I_INVALID_HID, pogrp_id=H5I_INVALID_HID
     type(data_var_item), allocatable :: cell_vars(:)
@@ -80,7 +81,8 @@ module vtkhdf_ug_type
     procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
 #:endfor
 #:endfor
-    procedure :: write_time_step
+    procedure :: start_time_step
+    procedure :: finalize_time_step
 #:for s in num_specs
 #:for loc in locations
     generic :: write_${loc}$_data => write_${loc}$_data_${s["kind"]}$
@@ -97,6 +99,7 @@ module vtkhdf_ug_type
   type :: data_var_item
     character(:), allocatable :: dataset_name
     logical :: is_temporal = .false.
+    integer(int64) :: offset = 0
     integer(int64) :: next_offset = 0
     logical :: wrote_this_step = .false.
   end type
@@ -157,6 +160,7 @@ contains
   subroutine close(this)
     class(vtkhdf_ug), intent(inout) :: this
     integer :: ierr
+    if (this%step_open) call this%finalize_time_step()
     if (H5Iis_valid(this%cogrp_id) > 0) ierr = H5Gclose(this%cogrp_id)
     if (H5Iis_valid(this%pogrp_id) > 0) ierr = H5Gclose(this%pogrp_id)
     if (H5Iis_valid(this%steps_id) > 0) ierr = H5Gclose(this%steps_id)
@@ -468,12 +472,13 @@ contains
   !! Mark the start of a new time step with time value TIME. Subsequent output
   !! of time-dependent datasets will be associated with this time step.
 
-  subroutine write_time_step(this, time)
+  subroutine start_time_step(this, time)
 
     class(vtkhdf_ug), intent(inout) :: this
     real(real64), intent(in) :: time
 
     INSIST(this%nsteps >= 0)
+    if (this%step_open) call this%finalize_time_step()
 
     this%nsteps = this%nsteps + 1
     call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps)
@@ -487,12 +492,25 @@ contains
     call h5_append_to_dataset(this%ctx, this%steps_id, 'NumberOfParts', this%npart, root=0)
     call h5_append_to_dataset(this%ctx, this%steps_id, 'PartOffsets', 0_int64, root=0)
 
-    !! Cell and point data offsets for each of the temporal datasets for this timestep
+    call reset_data_step_flags(this%point_vars)
+    call reset_data_step_flags(this%cell_vars)
+    this%step_open = .true.
 
+  end subroutine start_time_step
+
+  subroutine finalize_time_step(this)
+
+    class(vtkhdf_ug), intent(inout) :: this
+
+    INSIST(this%nsteps > 0)
+    INSIST(this%step_open)
+
+    !! Cell and point data offsets for each temporal dataset for this timestep
     call append_data_offsets(this%ctx, this%pogrp_id, this%point_vars)
     call append_data_offsets(this%ctx, this%cogrp_id, this%cell_vars)
+    this%step_open = .false.
 
-  end subroutine write_time_step
+  end subroutine finalize_time_step
 
   !! Write the cell-based ARRAY to the time-dependent CellData group dataset
   !! NAME. The data is associated with the current time step. The type and
@@ -510,6 +528,7 @@ contains
     integer, allocatable :: dims(:)
 
     INSIST(this%nsteps > 0)
+    INSIST(this%step_open)
 
     dims = shape(array)
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
@@ -519,6 +538,7 @@ contains
     INSIST(var%index <= size(this%cell_vars))
     INSIST(this%cell_vars(var%index)%is_temporal)
     INSIST(.not.this%cell_vars(var%index)%wrote_this_step) ! no double writing in a single step
+    this%cell_vars(var%index)%offset = this%cell_vars(var%index)%next_offset
     call h5_append_to_dataset(this%ctx, this%cgrp_id, this%cell_vars(var%index)%dataset_name, array)
     this%cell_vars(var%index)%next_offset = this%cell_vars(var%index)%next_offset + this%ncell_tot
     this%cell_vars(var%index)%wrote_this_step = .true. ! dataset has been written for this step
@@ -542,6 +562,7 @@ contains
     integer, allocatable :: dims(:)
 
     INSIST(this%nsteps > 0)
+    INSIST(this%step_open)
 
     dims = shape(array)
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
@@ -551,6 +572,7 @@ contains
     INSIST(var%index <= size(this%point_vars))
     INSIST(this%point_vars(var%index)%is_temporal)
     INSIST(.not.this%point_vars(var%index)%wrote_this_step) ! no double writing in a single step
+    this%point_vars(var%index)%offset = this%point_vars(var%index)%next_offset
     call h5_append_to_dataset(this%ctx, this%pgrp_id, this%point_vars(var%index)%dataset_name, array)
     this%point_vars(var%index)%next_offset = this%point_vars(var%index)%next_offset + this%nnode_tot
     this%point_vars(var%index)%wrote_this_step = .true. ! dataset has been written for this step
@@ -663,8 +685,19 @@ contains
     end if
     vars(index)%dataset_name = dataset_name
     vars(index)%is_temporal = is_temporal
+    vars(index)%offset = 0
     vars(index)%next_offset = 0
     vars(index)%wrote_this_step = .false.
+  end subroutine
+
+  subroutine reset_data_step_flags(vars)
+    type(data_var_item), allocatable, intent(inout) :: vars(:)
+    integer :: j
+    if (.not.allocated(vars)) return
+    do j = 1, size(vars)
+      if (.not.vars(j)%is_temporal) cycle
+      vars(j)%wrote_this_step = .false.
+    end do
   end subroutine
 
   subroutine append_data_offsets(ctx, grp_id, vars)
@@ -677,7 +710,7 @@ contains
     do j = 1, size(vars)
       if (.not.vars(j)%is_temporal) cycle
       vars(j)%wrote_this_step = .false.
-      call h5_append_to_dataset(ctx, grp_id, vars(j)%dataset_name, vars(j)%next_offset, root=0)
+      call h5_append_to_dataset(ctx, grp_id, vars(j)%dataset_name, vars(j)%offset, root=0)
     end do
   end subroutine
 

@@ -51,7 +51,7 @@ module vtkhdf_mb_file_type
     integer(hid_t) :: file_id=H5I_INVALID_HID, vtk_id=H5I_INVALID_HID, ass_id=H5I_INVALID_HID
     integer :: next_block_index = 0
     type(block_item), allocatable :: blocks(:) ! a 0-indexed array
-    logical :: is_temporal = .false., write_time_step_called = .false.
+    logical :: is_temporal = .false., start_time_step_called = .false.
   contains
 #ifdef USE_MPI
     generic :: create => create_f08, create_int
@@ -69,8 +69,9 @@ module vtkhdf_mb_file_type
     procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
 #:endfor
 #:endfor
-    generic :: write_time_step => write_time_step_real32, write_time_step_real64
-    procedure, private :: write_time_step_real32, write_time_step_real64
+    generic :: start_time_step => start_time_step_real32, start_time_step_real64
+    procedure, private :: start_time_step_real32, start_time_step_real64
+    procedure :: finalize_time_step
 #:for s in num_specs
 #:for loc in locations
 #:for d in data_specs
@@ -254,7 +255,7 @@ contains
     temporal_flag = .false.
     if (present(is_temporal)) temporal_flag = is_temporal
     if (temporal_flag) then
-      INSIST(.not.this%write_time_step_called)
+      INSIST(.not.this%start_time_step_called)
       this%is_temporal = .true.
     end if
 
@@ -394,29 +395,45 @@ contains
   !! Mark the start of a new time step with time value TIME. Subsequent output
   !! of time-dependent datasets will be associated with this time step.
 
-  subroutine write_time_step_real32(this, time)
+  subroutine start_time_step_real32(this, time)
     class(vtkhdf_mb_file), intent(inout) :: this
     real(real32), intent(in) :: time
-    call this%write_time_step(real(time, real64))
-  end subroutine write_time_step_real32
+    call this%start_time_step(real(time, real64))
+  end subroutine start_time_step_real32
 
-  subroutine write_time_step_real64(this, time)
+  subroutine start_time_step_real64(this, time)
     class(vtkhdf_mb_file), intent(inout) :: this
     real(real64), intent(in) :: time
     type(vtkhdf_h5e_context) :: err_ctx
     integer :: j
     call err_ctx%capture
     INSIST(this%is_temporal)
-    this%write_time_step_called = .true.
+    this%start_time_step_called = .true.
     if (allocated(this%blocks)) then
       do j = 0, ubound(this%blocks,dim=1)
         associate (b => this%blocks(j)%b)
-          if (b%nsteps >= 0) call b%write_time_step(time)
+          if (b%nsteps >= 0) call b%start_time_step(time)
         end associate
       end do
     end if
     call err_ctx%restore(0)
-  end subroutine write_time_step_real64
+  end subroutine start_time_step_real64
+
+  subroutine finalize_time_step(this)
+    class(vtkhdf_mb_file), intent(inout) :: this
+    type(vtkhdf_h5e_context) :: err_ctx
+    integer :: j
+    call err_ctx%capture
+    INSIST(this%is_temporal)
+    if (allocated(this%blocks)) then
+      do j = 0, ubound(this%blocks,dim=1)
+        associate (b => this%blocks(j)%b)
+          if (b%nsteps >= 0 .and. b%step_open) call b%finalize_time_step()
+        end associate
+      end do
+    end if
+    call err_ctx%restore(0)
+  end subroutine finalize_time_step
 
   !! Writes the cell/point-based data ARRAY to the named time-dependent
   !! dataset for the specified mesh block. The data is associated with the

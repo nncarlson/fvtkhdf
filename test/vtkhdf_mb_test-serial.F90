@@ -51,21 +51,23 @@ program vtkhdf_mb_test
 
   !!!! Write the data for the first time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  call vizfile%write_time_step(0.0_r8)
+  call vizfile%start_time_step(0.0_r8)
 
   call vizfile%write_temporal_cell_data(hblk_a, hcell_radius, scalar_cell_data)
   call vizfile%write_temporal_cell_data(hblk_a, hcell_velocity, vector_cell_data)
   call vizfile%write_temporal_point_data(hblk_b, hpoint_radius, scalar_point_data)
   call vizfile%write_temporal_point_data(hblk_b, hpoint_velocity, vector_point_data)
+  call vizfile%finalize_time_step()
 
   !!!! Write the data for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  call vizfile%write_time_step(1.0_r8)
+  call vizfile%start_time_step(1.0_r8)
 
   call vizfile%write_temporal_cell_data(hblk_a, hcell_radius, scalar_cell_data+1)
   call vizfile%write_temporal_cell_data(hblk_a, hcell_velocity, vector_cell_data+1)
   call vizfile%write_temporal_point_data(hblk_b, hpoint_radius, scalar_point_data+1)
   call vizfile%write_temporal_point_data(hblk_b, hpoint_velocity, vector_point_data+1)
+  call vizfile%finalize_time_step()
 
   !! At any point you can write a data that isn't time dependent, but its name must
   !! be unique from any other data temporal or not of the same type (cell or point).
