@@ -103,7 +103,7 @@ any time step.
 Time-dependent mesh-centered data
 ---------------------------------
 Temporal files support time-dependent datasets. Temporal datasets must be
-registered before the first call to ``write_time_step``. After the first
+registered before the first call to ``start_time_step``. After the first
 time step is started, no further registrations are allowed. The first time
 step must be started before temporal datasets are written.
 
@@ -122,8 +122,11 @@ step must be started before temporal datasets are written.
       opaque; user code should store it and pass it to later temporal writes.
 
 
-   ``call file%write_time_step(time)``
+   ``call file%start_time_step(time)``
       Start a new time step with time value ``time``.
+
+      After ``start_time_step`` is called for the first time step, every
+      registered temporal dataset must be written once for that step.
 
 
    ``call file%write_temporal_cell_data(cell_var, array)``
@@ -134,7 +137,17 @@ step must be started before temporal datasets are written.
       ``array`` must conform to the shape and type implied by the
       registered ``mold`` and must have extent `ncells` (cell data) or
       `npoints` (point data) in its last dimension.
-      
-      A temporal dataset need not be written at every time step; if omitted,
+
+      After the first time step, a temporal dataset need not be written at
+      every time step; if omitted,
       its most recently written value is used. Writing the same temporal
       dataset more than once within a single time step is an error.
+
+   ``call file%finalize_time_step()``
+      Finalize the current time step. Until this call, the file is in an
+      in-progress state for that step.
+      Best practice is to call ``finalize_time_step`` immediately after all
+      temporal writes for the step are complete.
+
+      ``finalize_time_step`` is called implicitly when ``start_time_step``
+      begins a new step while one is still open, and when ``close`` is called.
