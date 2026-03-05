@@ -118,10 +118,15 @@ contains
   !! Cleanly closes H5 identifiers and the file, and default initializes.
   subroutine close(this)
     class(vtkhdf_mb_file), intent(inout) :: this
-    integer :: ierr
+    integer :: ierr, j
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    if (allocated(this%blocks)) deallocate(this%blocks)
+    if (allocated(this%blocks)) then
+      do j = 0, ubound(this%blocks,dim=1)
+        if (allocated(this%blocks(j)%b)) call this%blocks(j)%b%close
+      end do
+      deallocate(this%blocks)
+    end if
     if (H5Iis_valid(this%ass_id) > 0) ierr = H5Gclose(this%ass_id)
     if (H5Iis_valid(this%vtk_id) > 0) ierr = H5Gclose(this%vtk_id)
     if (H5Iis_valid(this%file_id) > 0) ierr = H5Fclose(this%file_id)
