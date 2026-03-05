@@ -4,7 +4,8 @@
 !! This module defines a derived type for exporting mesh-based solution data
 !! to a VTKHDF file readable by the ParaView visualization tool. The type
 !! produces a MultiBlockDataSet (MB) dataset, and supports static and
-!! time-dependent cell and point data, assuming a static mesh for each block.
+!! time-dependent cell, point, and field data, assuming a static mesh for each
+!! block.
 !!
 !! The output is limited to a flat collection of UnstructuredGrid blocks;
 !! hierarchical nesting of MultiBlockDataSets is not supported.
@@ -29,6 +30,7 @@
 #:set num_specs = int_specs + real_specs
 #:set locations = ["cell", "point"]
 #:set data_specs = [ {"suffix":"scalar", "mold":"", "array":"(:)"}, {"suffix":"vector", "mold":"(:)", "array":"(:,:)"} ]
+#:set field_data_specs = [ {"suffix":"value", "array":""}, {"suffix":"scalar", "array":"(:)"}, {"suffix":"vector", "array":"(:,:)"} ]
 
 module vtkhdf_mb_file_type
 
@@ -43,7 +45,7 @@ module vtkhdf_mb_file_type
   private
 
   public :: vtkhdf_version
-  public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle
+  public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
 
   type, public :: vtkhdf_mb_file
     private
@@ -83,6 +85,16 @@ module vtkhdf_mb_file_type
     procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
 #:endfor
 #:endfor
+#:endfor
+#:for s in num_specs
+#:for d in field_data_specs
+    generic :: write_field_data => write_field_data_${s["kind"]}$_${d["suffix"]}$
+    procedure, private :: write_field_data_${s["kind"]}$_${d["suffix"]}$
+    generic :: write_temporal_field_data => write_temporal_field_data_${s["kind"]}$_${d["suffix"]}$
+    procedure, private :: write_temporal_field_data_${s["kind"]}$_${d["suffix"]}$
+#:endfor
+    generic :: register_temporal_field_data => register_temporal_field_data_${s["kind"]}$
+    procedure, private :: register_temporal_field_data_${s["kind"]}$
 #:endfor
     procedure, private :: unique_block_name
     final :: vtkhdf_mb_file_delete
@@ -357,6 +369,23 @@ contains
 #:endfor
 #:endfor
 #:endfor
+#:for s in num_specs
+#:for d in field_data_specs
+
+  subroutine write_field_data_${s["kind"]}$_${d["suffix"]}$(this, blk, name, array, as_vector)
+    class(vtkhdf_mb_file), intent(inout) :: this
+    type(vtkhdf_block_handle), intent(in) :: blk
+    character(*), intent(in) :: name
+    ${s["decl"]}$, intent(in) :: array${d["array"]}$
+    logical, intent(in), optional :: as_vector
+    type(vtkhdf_h5e_context) :: err_ctx
+    INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
+    call err_ctx%capture
+    call this%blocks(blk%index)%b%write_field_data(name, array, as_vector)
+    call err_ctx%restore(0)
+  end subroutine
+#:endfor
+#:endfor
 
   !! Register NAME as a time-dependent Cell/PointData dataset for the specified
   !! mesh block. This prepares the file to receive cell/point-centered data at
@@ -394,6 +423,22 @@ contains
   end function
 #:endfor
 #:endfor
+#:endfor
+#:for s in num_specs
+
+  function register_temporal_field_data_${s["kind"]}$(this, blk, name, mold) result(handle)
+    class(vtkhdf_mb_file), intent(inout) :: this
+    type(vtkhdf_block_handle), intent(in) :: blk
+    character(*), intent(in) :: name
+    ${s["decl"]}$, intent(in) :: mold
+    type(vtkhdf_h5e_context) :: err_ctx
+    type(vtkhdf_field_data_handle) :: handle
+    INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
+    call err_ctx%capture
+    handle = this%blocks(blk%index)%b%register_temporal_field_data(name, mold)
+    call set_block_index(handle, blk%index)
+    call err_ctx%restore(0)
+  end function
 #:endfor
 
   !! Mark the start of a new time step with time value TIME. Subsequent output
@@ -459,6 +504,24 @@ contains
     call err_ctx%restore(0)
   end subroutine
 #:endfor
+#:endfor
+#:endfor
+#:for s in num_specs
+#:for d in field_data_specs
+
+  subroutine write_temporal_field_data_${s["kind"]}$_${d["suffix"]}$(this, blk, var, array, as_vector)
+    class(vtkhdf_mb_file), intent(inout) :: this
+    type(vtkhdf_block_handle), intent(in) :: blk
+    type(vtkhdf_field_data_handle), intent(in) :: var
+    ${s["decl"]}$, intent(in) :: array${d["array"]}$
+    logical, intent(in), optional :: as_vector
+    type(vtkhdf_h5e_context) :: err_ctx
+    INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
+    INSIST(get_block_index(var) == blk%index)
+    call err_ctx%capture
+    call this%blocks(blk%index)%b%write_temporal_field_data(var, array, as_vector)
+    call err_ctx%restore(0)
+  end subroutine
 #:endfor
 #:endfor
 

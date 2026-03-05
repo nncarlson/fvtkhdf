@@ -13,8 +13,10 @@ program vtkhdf_ug_test
   integer,  allocatable :: cnode(:), xcnode(:)
   integer(int8), allocatable :: types(:)
   real(r8), allocatable :: s(:), v(:,:) ! scalar and vector data arrays
+  real(r8), allocatable :: fs(:), fv(:,:) ! scalar and vector field arrays
   type(vtkhdf_cell_data_handle) :: hcell_scalar, hcell_vector
   type(vtkhdf_point_data_handle) :: hpoint_scalar, hpoint_vector
+  type(vtkhdf_field_data_handle) :: hfield_value, hfield_scalar, hfield_vector
 
   call MPI_Init(istat)
   call MPI_Comm_size(MPI_COMM_WORLD, nproc, istat)
@@ -38,6 +40,9 @@ program vtkhdf_ug_test
     hcell_vector = vizfile%register_temporal_cell_data('cell-vector', vector_mold)
     hpoint_scalar = vizfile%register_temporal_point_data('point-scalar', scalar_mold)
     hpoint_vector = vizfile%register_temporal_point_data('point-vector', vector_mold)
+    hfield_value = vizfile%register_temporal_field_data('field-value', scalar_mold)
+    hfield_scalar = vizfile%register_temporal_field_data('field-scalar', scalar_mold)
+    hfield_vector = vizfile%register_temporal_field_data('field-vector', scalar_mold)
   end associate
 
   !!!! Write the datasets for the first time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -55,6 +60,12 @@ program vtkhdf_ug_test
 
   call get_vector_point_data(points, v)
   call vizfile%write_temporal_point_data(hpoint_vector, v)
+
+  fs = [1.0_r8, 2.0_r8]
+  fv = reshape([1.0_r8, 2.0_r8, 3.0_r8, 11.0_r8, 12.0_r8, 13.0_r8], [3,2])
+  call vizfile%write_temporal_field_data(hfield_value, 42.0_r8)
+  call vizfile%write_temporal_field_data(hfield_scalar, fs, as_vector=.true.)
+  call vizfile%write_temporal_field_data(hfield_vector, fv)
   call vizfile%finalize_time_step()
 
   call vizfile%flush()
@@ -72,6 +83,9 @@ program vtkhdf_ug_test
   call get_scalar_point_data(points, s)
   call vizfile%write_temporal_point_data(hpoint_scalar, s+1)
 
+  fs = [10.0_r8, 20.0_r8, 30.0_r8]
+  call vizfile%write_temporal_field_data(hfield_scalar, fs)
+
   !! Skip one temporal dataset write; offset should repeat the last written value.
   call vizfile%finalize_time_step()
 
@@ -88,6 +102,12 @@ program vtkhdf_ug_test
 
   call get_vector_point_data(points, v)
   call vizfile%write_point_data('static-point-vector', -v)
+
+  fs = [-1.0_r8, -2.0_r8, -3.0_r8, -4.0_r8]
+  fv = reshape([-1.0_r8, -2.0_r8, -3.0_r8, -11.0_r8, -12.0_r8, -13.0_r8], [3,2])
+  call vizfile%write_field_data('static-field-scalar', fs, as_vector=.true.)
+  call vizfile%write_field_data('static-field-vector', fv)
+  call vizfile%write_field_data('static-field-value', -9.0_r8)
 
   call vizfile%close
   call MPI_Finalize(istat)

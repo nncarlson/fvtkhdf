@@ -19,10 +19,12 @@ program vtkhdf_mb_test
   integer,  allocatable :: cnode(:), xcnode(:)
   integer(int8), allocatable :: types(:)
   real(r8), allocatable :: s(:), v(:,:) ! scalar and vector data arrays
+  real(r8), allocatable :: fs(:), fv(:,:) ! scalar and vector field arrays
   real(r8) :: s0(0), v0(3,0) ! 0-sized scalar and vector arrays; also molds for same
   type(vtkhdf_block_handle), allocatable :: hblk(:)
   type(vtkhdf_cell_data_handle), allocatable :: hcell_scalar(:), hcell_vector(:)
   type(vtkhdf_point_data_handle), allocatable :: hpoint_scalar(:), hpoint_vector(:)
+  type(vtkhdf_field_data_handle), allocatable :: hfield_value(:), hfield_scalar(:), hfield_vector(:)
 
   call MPI_Init(istat)
   call MPI_Comm_size(MPI_COMM_WORLD, nproc, istat)
@@ -45,7 +47,8 @@ program vtkhdf_mb_test
   !! any data need to be called with appropriate 0-sized data.
 
   allocate(name(0:nproc-1), hblk(0:nproc-1), hcell_scalar(0:nproc-1), hcell_vector(0:nproc-1), &
-      hpoint_scalar(0:nproc-1), hpoint_vector(0:nproc-1))
+      hpoint_scalar(0:nproc-1), hpoint_vector(0:nproc-1), hfield_value(0:nproc-1), &
+      hfield_scalar(0:nproc-1), hfield_vector(0:nproc-1))
   do j = 0, nproc-1! Block names
     write(name(j),'("block",i2.2)') j
   end do
@@ -69,6 +72,9 @@ program vtkhdf_mb_test
       hcell_vector(j) = vizfile%register_temporal_cell_data(hblk(j), 'cell-vector', vector_mold)
       hpoint_scalar(j) = vizfile%register_temporal_point_data(hblk(j), 'point-scalar', scalar_mold)
       hpoint_vector(j) = vizfile%register_temporal_point_data(hblk(j), 'point-vector', vector_mold)
+      hfield_value(j) = vizfile%register_temporal_field_data(hblk(j), 'field-value', scalar_mold)
+      hfield_scalar(j) = vizfile%register_temporal_field_data(hblk(j), 'field-scalar', scalar_mold)
+      hfield_vector(j) = vizfile%register_temporal_field_data(hblk(j), 'field-vector', scalar_mold)
     end do
   end associate
 
@@ -93,6 +99,12 @@ program vtkhdf_mb_test
       call vizfile%write_temporal_point_data(hblk(j), hpoint_scalar(j), s0)
       call vizfile%write_temporal_point_data(hblk(j), hpoint_vector(j),  v0)
     end if
+    fs = [real(j+1, r8), real(j+2, r8)]
+    fv = reshape([real(j+1, r8), real(j+2, r8), real(j+3, r8), &
+        real(j+11, r8), real(j+12, r8), real(j+13, r8)], [3,2])
+    call vizfile%write_temporal_field_data(hblk(j), hfield_value(j), real(100+j, r8))
+    call vizfile%write_temporal_field_data(hblk(j), hfield_scalar(j), fs, as_vector=.true.)
+    call vizfile%write_temporal_field_data(hblk(j), hfield_vector(j), fv)
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do
   call vizfile%finalize_time_step()
@@ -120,6 +132,8 @@ program vtkhdf_mb_test
       call vizfile%write_temporal_point_data(hblk(j), hpoint_scalar(j), s0)
       call vizfile%write_temporal_point_data(hblk(j), hpoint_vector(j),  v0)
     end if
+    fs = [real(10+j, r8), real(20+j, r8), real(30+j, r8)]
+    call vizfile%write_temporal_field_data(hblk(j), hfield_scalar(j), fs)
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do
   call vizfile%finalize_time_step()
@@ -144,6 +158,12 @@ program vtkhdf_mb_test
       call vizfile%write_point_data(hblk(j), 'static-point-scalar', s0)
       call vizfile%write_point_data(hblk(j), 'static-point-vector',  v0)
     end if
+    fs = [real(-j-1, r8), real(-j-2, r8), real(-j-3, r8), real(-j-4, r8)]
+    fv = reshape([real(-j-1, r8), real(-j-2, r8), real(-j-3, r8), &
+        real(-j-11, r8), real(-j-12, r8), real(-j-13, r8)], [3,2])
+    call vizfile%write_field_data(hblk(j), 'static-field-value', real(-100-j, r8))
+    call vizfile%write_field_data(hblk(j), 'static-field-scalar', fs, as_vector=.true.)
+    call vizfile%write_field_data(hblk(j), 'static-field-vector', fv)
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do
 

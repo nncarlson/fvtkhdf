@@ -4,8 +4,8 @@
 !! This module defines an internal derived type used to manage an HDF5 tree
 !! storing an UnstructuredGrid VTKHDF dataset. It serves as a core component of
 !! the VTKHDF_MB_FILE and VTKHDF_UG_file types. This implementation supports
-!! static and time-dependent point and cell data, but assumes a single static
-!! mesh.
+!! static and time-dependent point, cell, and field data, but assumes a single
+!! static mesh.
 !!
 !! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
@@ -55,11 +55,17 @@ module vtkhdf_ug_type
     integer :: block_index = -1
   end type
 
+  type, public :: vtkhdf_field_data_handle
+    private
+    integer :: index = -1
+    integer :: block_index = -1
+  end type
+
   type, public :: vtkhdf_ug
     private
     type(vtkhdf_ctx) :: ctx ! unowned copy
     integer(hid_t) :: root_id=H5I_INVALID_HID
-    integer(hid_t) :: cgrp_id=H5I_INVALID_HID, pgrp_id=H5I_INVALID_HID
+    integer(hid_t) :: cgrp_id=H5I_INVALID_HID, pgrp_id=H5I_INVALID_HID, fgrp_id=H5I_INVALID_HID
     integer(int64) :: nnode, ncell, nnode_tot, ncell_tot
     integer :: npart
     logical :: is_temporal = .false.
@@ -67,15 +73,19 @@ module vtkhdf_ug_type
     logical :: step_open = .false.
     integer(hid_t) :: steps_id=H5I_INVALID_HID
     integer(hid_t) :: cogrp_id=H5I_INVALID_HID, pogrp_id=H5I_INVALID_HID
+    integer(hid_t) :: fogrp_id=H5I_INVALID_HID, fsgrp_id=H5I_INVALID_HID
     type(data_var_item), allocatable :: cell_vars(:)
     type(data_var_item), allocatable :: point_vars(:)
+    type(data_var_item), allocatable :: field_vars(:)
   contains
     procedure :: init
     procedure :: close
     procedure, private :: reserve_cell_data_name
     procedure, private :: reserve_point_data_name
+    procedure, private :: reserve_field_data_name
     procedure, private :: unique_cell_data_name
     procedure, private :: unique_point_data_name
+    procedure, private :: unique_field_data_name
 #:for r in real_specs
 #:for i in int_specs
     generic :: write_mesh => write_mesh_${r["kind"]}$_${i["kind"]}$
@@ -97,6 +107,14 @@ module vtkhdf_ug_type
     procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$
 #:endfor
 #:endfor
+#:for s in num_specs
+    generic :: write_field_data => write_field_data_${s["kind"]}$
+    procedure, private :: write_field_data_${s["kind"]}$
+    generic :: register_temporal_field_data => register_temporal_field_data_${s["kind"]}$
+    procedure, private :: register_temporal_field_data_${s["kind"]}$
+    generic :: write_temporal_field_data => write_temporal_field_data_${s["kind"]}$
+    procedure, private :: write_temporal_field_data_${s["kind"]}$
+#:endfor
     final :: vtkhdf_ug_delete
   end type
 
@@ -105,17 +123,21 @@ module vtkhdf_ug_type
     logical :: is_temporal = .false.
     integer(int64) :: offset = 0
     integer(int64) :: next_offset = 0
+    integer(int32) :: ncomp = 1
+    integer(int32) :: tuples = 0
     logical :: wrote_this_step = .false.
   end type
 
   interface set_block_index
     module procedure set_cell_block_index
     module procedure set_point_block_index
+    module procedure set_field_block_index
   end interface
 
   interface get_block_index
     module procedure get_cell_block_index
     module procedure get_point_block_index
+    module procedure get_field_block_index
   end interface
 
 contains
@@ -132,6 +154,12 @@ contains
     handle%block_index = block_index
   end subroutine
 
+  subroutine set_field_block_index(handle, block_index)
+    type(vtkhdf_field_data_handle), intent(inout) :: handle
+    integer, intent(in) :: block_index
+    handle%block_index = block_index
+  end subroutine
+
   pure function get_cell_block_index(handle) result(block_index)
     type(vtkhdf_cell_data_handle), intent(in) :: handle
     integer :: block_index
@@ -140,6 +168,12 @@ contains
 
   pure function get_point_block_index(handle) result(block_index)
     type(vtkhdf_point_data_handle), intent(in) :: handle
+    integer :: block_index
+    block_index = handle%block_index
+  end function
+
+  pure function get_field_block_index(handle) result(block_index)
+    type(vtkhdf_field_data_handle), intent(in) :: handle
     integer :: block_index
     block_index = handle%block_index
   end function
@@ -167,9 +201,12 @@ contains
     type(vtkhdf_ug), intent(inout) :: this
     this%cogrp_id = H5I_INVALID_HID
     this%pogrp_id = H5I_INVALID_HID
+    this%fogrp_id = H5I_INVALID_HID
+    this%fsgrp_id = H5I_INVALID_HID
     this%steps_id = H5I_INVALID_HID
     this%cgrp_id  = H5I_INVALID_HID
     this%pgrp_id  = H5I_INVALID_HID
+    this%fgrp_id  = H5I_INVALID_HID
     this%root_id  = H5I_INVALID_HID
   end subroutine
 
@@ -179,9 +216,12 @@ contains
     if (this%step_open) call this%finalize_time_step()
     if (H5Iis_valid(this%cogrp_id) > 0) ierr = H5Gclose(this%cogrp_id)
     if (H5Iis_valid(this%pogrp_id) > 0) ierr = H5Gclose(this%pogrp_id)
+    if (H5Iis_valid(this%fogrp_id) > 0) ierr = H5Gclose(this%fogrp_id)
+    if (H5Iis_valid(this%fsgrp_id) > 0) ierr = H5Gclose(this%fsgrp_id)
     if (H5Iis_valid(this%steps_id) > 0) ierr = H5Gclose(this%steps_id)
     if (H5Iis_valid(this%cgrp_id) > 0) ierr = H5Gclose(this%cgrp_id)
     if (H5Iis_valid(this%pgrp_id) > 0) ierr = H5Gclose(this%pgrp_id)
+    if (H5Iis_valid(this%fgrp_id) > 0) ierr = H5Gclose(this%fgrp_id)
     if (H5Iis_valid(this%root_id) > 0) ierr = H5Gclose(this%root_id)
     call finalization(this) ! free local memory
   contains
@@ -222,6 +262,9 @@ contains
     this%pgrp_id = H5Gcreate(this%root_id, 'PointData')
     INSIST(this%ctx%global_all(this%pgrp_id >= 0))
 
+    this%fgrp_id = H5Gcreate(this%root_id, 'FieldData')
+    INSIST(this%ctx%global_all(this%fgrp_id >= 0))
+
     if (present(temporal)) this%is_temporal = temporal
     if (this%is_temporal) then
       this%steps_id = H5Gcreate(this%root_id, 'Steps')
@@ -232,6 +275,12 @@ contains
 
       this%pogrp_id = H5Gcreate(this%steps_id, 'PointDataOffsets')
       INSIST(this%ctx%global_all(this%pogrp_id >= 0))
+
+      this%fogrp_id = H5Gcreate(this%steps_id, 'FieldDataOffsets')
+      INSIST(this%ctx%global_all(this%fogrp_id >= 0))
+
+      this%fsgrp_id = H5Gcreate(this%steps_id, 'FieldDataSizes')
+      INSIST(this%ctx%global_all(this%fsgrp_id >= 0))
 
       this%nsteps = 0
       call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps)
@@ -403,6 +452,45 @@ contains
   end subroutine
 #:endfor
 
+  !! Writes the field data ARRAY to a new FieldData group dataset NAME. In the
+  !! case of a temporal file supporting time-dependent datasets, this dataset
+  !! is static and not associated with any time step.
+#:for s in num_specs
+
+  subroutine write_field_data_${s["kind"]}$(this, name, array, as_vector)
+    class(vtkhdf_ug), intent(inout) :: this
+    character(*), intent(in) :: name
+    ${s["decl"]}$, intent(in) :: array(..)
+    logical, intent(in), optional :: as_vector
+    integer, allocatable :: dims(:)
+    integer :: var_index
+    logical :: as_vector_
+    character(:), allocatable :: external_name, internal_name
+    as_vector_ = .false.
+    if (present(as_vector)) as_vector_ = as_vector
+    dims = shape(array)
+    INSIST(size(dims) <= 2)
+    call this%reserve_field_data_name(name, external_name, internal_name, var_index)
+    select rank (array)
+    rank (0)
+      INSIST(.not.as_vector_)
+      call h5_write_dataset(this%ctx, this%fgrp_id, internal_name, [array], root=0)
+    rank (1)
+      if (as_vector_) then
+        call h5_write_dataset(this%ctx, this%fgrp_id, internal_name, reshape(array, [size(array), 1]), root=0)
+      else
+        call h5_write_dataset(this%ctx, this%fgrp_id, internal_name, array, root=0)
+      end if
+    rank (2)
+      INSIST(.not.as_vector_)
+      call h5_write_dataset(this%ctx, this%fgrp_id, internal_name, array, root=0)
+    rank default
+      INSIST(.false.)
+    end select
+    call write_data_name_attr(this%ctx, this%fgrp_id, internal_name, external_name)
+  end subroutine
+#:endfor
+
   !! Register NAME as a time-dependent Cell/PointData group dataset. This
   !! writes no data, but configures a new extendable HDF5 dataset for future
   !! writing.
@@ -494,6 +582,39 @@ contains
   end function register_temporal_point_data_${s["kind"]}$
 #:endfor
 
+  !! Register NAME as a time-dependent FieldData group dataset. This writes no
+  !! data, but configures a new extendable HDF5 dataset and step metadata
+  !! datasets for future writing.
+#:for s in num_specs
+
+  function register_temporal_field_data_${s["kind"]}$(this, name, mold) result(handle)
+
+    class(vtkhdf_ug), intent(inout) :: this
+    character(*), intent(in) :: name
+    ${s["decl"]}$, intent(in) :: mold
+    type(vtkhdf_field_data_handle) :: handle
+
+    integer :: var_index
+    character(:), allocatable :: external_name, internal_name
+
+    INSIST(this%nsteps >= 0) ! must be configured for temporal
+    INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
+
+    call this%reserve_field_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
+
+    !! Flattened temporal field data stream and per-step metadata
+    associate (chunk_size => 100)
+      call h5_create_unlimited_dataset(this%ctx, this%fgrp_id, internal_name, mold, chunk_size)
+      call h5_create_unlimited_dataset(this%ctx, this%fogrp_id, internal_name, 0_int64, chunk_size)
+      call h5_create_unlimited_dataset(this%ctx, this%fsgrp_id, internal_name, [0_int32, 0_int32], chunk_size)
+    end associate
+    call write_data_name_attr(this%ctx, this%fgrp_id, internal_name, external_name)
+
+    handle%index = var_index
+
+  end function register_temporal_field_data_${s["kind"]}$
+#:endfor
+
   !! Mark the start of a new time step with time value TIME. Subsequent output
   !! of time-dependent datasets will be associated with this time step.
 
@@ -519,6 +640,7 @@ contains
 
     call reset_data_step_flags(this%point_vars)
     call reset_data_step_flags(this%cell_vars)
+    call reset_data_step_flags(this%field_vars)
     this%step_open = .true.
 
   end subroutine start_time_step
@@ -533,6 +655,7 @@ contains
     !! Cell and point data offsets for each temporal dataset for this timestep
     call append_data_offsets(this%ctx, this%pogrp_id, this%point_vars)
     call append_data_offsets(this%ctx, this%cogrp_id, this%cell_vars)
+    call append_field_data_metadata(this%ctx, this%fogrp_id, this%fsgrp_id, this%field_vars)
     this%step_open = .false.
 
   end subroutine finalize_time_step
@@ -605,6 +728,64 @@ contains
   end subroutine write_temporal_point_data_${s["kind"]}$
 #:endfor
 
+#:for s in num_specs
+  subroutine write_temporal_field_data_${s["kind"]}$(this, var, array, as_vector)
+
+    class(vtkhdf_ug), intent(inout) :: this
+    type(vtkhdf_field_data_handle), intent(in) :: var
+    ${s["decl"]}$, intent(in) :: array(..)
+    logical, intent(in), optional :: as_vector
+
+    integer, allocatable :: dims(:)
+    integer(int64) :: block_len
+    logical :: as_vector_
+
+    as_vector_ = .false.
+    if (present(as_vector)) as_vector_ = as_vector
+    INSIST(this%nsteps > 0)
+    INSIST(this%step_open)
+
+    dims = shape(array)
+    INSIST(size(dims) <= 2)
+    INSIST(var%index >= 1)
+    INSIST(allocated(this%field_vars))
+    INSIST(var%index <= size(this%field_vars))
+    INSIST(this%field_vars(var%index)%is_temporal)
+    INSIST(.not.this%field_vars(var%index)%wrote_this_step) ! no double writing in a single step
+
+    select rank (array)
+    rank (0)
+      INSIST(.not.as_vector_)
+      this%field_vars(var%index)%ncomp = 1
+      this%field_vars(var%index)%tuples = 1
+      call h5_append_to_dataset(this%ctx, this%fgrp_id, this%field_vars(var%index)%dataset_name, [array], root=0)
+    rank (1)
+      if (as_vector_) then
+        this%field_vars(var%index)%ncomp = size(array, kind=int32)
+        this%field_vars(var%index)%tuples = 1
+      else
+        this%field_vars(var%index)%ncomp = 1
+        this%field_vars(var%index)%tuples = size(array, kind=int32)
+      end if
+      call h5_append_to_dataset(this%ctx, this%fgrp_id, this%field_vars(var%index)%dataset_name, array, root=0)
+    rank (2)
+      INSIST(.not.as_vector_)
+      this%field_vars(var%index)%ncomp = size(array, dim=1, kind=int32)
+      this%field_vars(var%index)%tuples = size(array, dim=2, kind=int32)
+      call h5_append_to_dataset(this%ctx, this%fgrp_id, this%field_vars(var%index)%dataset_name, &
+          reshape(array, [size(array)]), root=0)
+    rank default
+      INSIST(.false.)
+    end select
+
+    this%field_vars(var%index)%offset = this%field_vars(var%index)%next_offset
+    block_len = int(this%field_vars(var%index)%ncomp, int64) * int(this%field_vars(var%index)%tuples, int64)
+    this%field_vars(var%index)%next_offset = this%field_vars(var%index)%next_offset + block_len
+    this%field_vars(var%index)%wrote_this_step = .true.
+
+  end subroutine write_temporal_field_data_${s["kind"]}$
+#:endfor
+
   subroutine reserve_cell_data_name(this, name, external_name, internal_name, index, is_temporal)
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
@@ -635,6 +816,21 @@ contains
     call append_data_var(this%point_vars, internal_name, temporal_flag, index)
   end subroutine
 
+  subroutine reserve_field_data_name(this, name, external_name, internal_name, index, is_temporal)
+    class(vtkhdf_ug), intent(inout) :: this
+    character(*), intent(in) :: name
+    character(:), allocatable, intent(out) :: external_name, internal_name
+    integer, intent(out) :: index
+    logical, intent(in), optional :: is_temporal
+    logical :: temporal_flag
+    temporal_flag = .false.
+    if (present(is_temporal)) temporal_flag = is_temporal
+    external_name = trim(name)
+    if (external_name == '') external_name = 'Unnamed_FieldData'
+    internal_name = this%unique_field_data_name(sanitized_name(external_name))
+    call append_data_var(this%field_vars, internal_name, temporal_flag, index)
+  end subroutine
+
   !! Replace blacklisted characters in NAME with underscore.
   !! This version replicates the behavior of vtkHDFWriter.
   pure function sanitized_name(name) result(clean_name)
@@ -662,6 +858,13 @@ contains
     character(*), intent(in) :: name
     character(:), allocatable :: unique_name
     unique_name = unique_data_name(this%point_vars, name)
+  end function
+
+  function unique_field_data_name(this, name) result(unique_name)
+    class(vtkhdf_ug), intent(in) :: this
+    character(*), intent(in) :: name
+    character(:), allocatable :: unique_name
+    unique_name = unique_data_name(this%field_vars, name)
   end function
 
   !! Return a name that is distinct from the existing data names.
@@ -712,6 +915,9 @@ contains
     vars(index)%is_temporal = is_temporal
     vars(index)%offset = 0
     vars(index)%next_offset = 0
+    ! Initial temporal field state represents an empty value.
+    vars(index)%ncomp = 1
+    vars(index)%tuples = 0
     vars(index)%wrote_this_step = .false.
   end subroutine
 
@@ -736,6 +942,24 @@ contains
       if (.not.vars(j)%is_temporal) cycle
       vars(j)%wrote_this_step = .false.
       call h5_append_to_dataset(ctx, grp_id, vars(j)%dataset_name, vars(j)%offset, root=0)
+    end do
+  end subroutine
+
+  subroutine append_field_data_metadata(ctx, offset_grp_id, size_grp_id, vars)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    integer(hid_t), intent(in) :: offset_grp_id, size_grp_id
+    type(data_var_item), allocatable, intent(inout) :: vars(:)
+    integer :: j
+    integer(int32) :: sizes(2,1)
+    if (offset_grp_id < 0 .or. size_grp_id < 0) return
+    if (.not.allocated(vars)) return
+    do j = 1, size(vars)
+      if (.not.vars(j)%is_temporal) cycle
+      ! If not written this step, repeat current offset/size (initially empty).
+      vars(j)%wrote_this_step = .false.
+      sizes(:,1) = [vars(j)%ncomp, vars(j)%tuples]
+      call h5_append_to_dataset(ctx, offset_grp_id, vars(j)%dataset_name, vars(j)%offset, root=0)
+      call h5_append_to_dataset(ctx, size_grp_id, vars(j)%dataset_name, sizes, root=0)
     end do
   end subroutine
 

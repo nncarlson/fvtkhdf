@@ -4,7 +4,8 @@
 !! This module defines a derived type for exporting mesh-based solution data
 !! to a VTKHDF file readable by the ParaView visualization tool. The type
 !! produces a UnstructuredGrid-type file (UG) dataset, and supports static
-!! and time-dependent cell and point data, assuming a single static mesh.
+!! and time-dependent cell, point, and field data, assuming a single static
+!! mesh.
 !!
 !! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
@@ -26,6 +27,7 @@
 #:set num_specs = int_specs + real_specs
 #:set locations = ["cell", "point"]
 #:set data_specs = [ {"suffix":"scalar", "mold":"", "array":"(:)"}, {"suffix":"vector", "mold":"(:)", "array":"(:,:)"} ]
+#:set field_data_specs = [ {"suffix":"value", "array":""}, {"suffix":"scalar", "array":"(:)"}, {"suffix":"vector", "array":"(:,:)"} ]
 
 module vtkhdf_ug_file_type
 
@@ -40,7 +42,7 @@ module vtkhdf_ug_file_type
   private
 
   public :: vtkhdf_version
-  public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle
+  public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
 
   type, public :: vtkhdf_ug_file
     private
@@ -77,6 +79,16 @@ module vtkhdf_ug_file_type
     procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$
 #:endfor
 #:endfor
+#:endfor
+#:for s in num_specs
+#:for r in field_data_specs
+    generic :: write_field_data => write_field_data_${s["kind"]}$_${r["suffix"]}$
+    procedure, private :: write_field_data_${s["kind"]}$_${r["suffix"]}$
+    generic :: write_temporal_field_data => write_temporal_field_data_${s["kind"]}$_${r["suffix"]}$
+    procedure, private :: write_temporal_field_data_${s["kind"]}$_${r["suffix"]}$
+#:endfor
+    generic :: register_temporal_field_data => register_temporal_field_data_${s["kind"]}$
+    procedure, private :: register_temporal_field_data_${s["kind"]}$
 #:endfor
     final :: vtkhdf_ug_file_delete
   end type
@@ -235,6 +247,21 @@ contains
 #:endfor
 #:endfor
 #:endfor
+#:for s in num_specs
+#:for d in field_data_specs
+
+  subroutine write_field_data_${s["kind"]}$_${d["suffix"]}$(this, name, array, as_vector)
+    class(vtkhdf_ug_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    ${s["decl"]}$, intent(in) :: array${d["array"]}$
+    logical, intent(in), optional :: as_vector
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%ug%write_field_data(name, array, as_vector)
+    call err_ctx%restore(0)
+  end subroutine
+#:endfor
+#:endfor
 
   !! Register NAME as a time-dependent Cell/PointData dataset. This prepares
   !! the file to receive cell/point-centered data at each time step but
@@ -269,6 +296,19 @@ contains
   end function
 #:endfor
 #:endfor
+#:endfor
+#:for s in num_specs
+
+  function register_temporal_field_data_${s["kind"]}$(this, name, mold) result(handle)
+    class(vtkhdf_ug_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    ${s["decl"]}$, intent(in) :: mold
+    type(vtkhdf_h5e_context) :: err_ctx
+    type(vtkhdf_field_data_handle) :: handle
+    call err_ctx%capture
+    handle = this%ug%register_temporal_field_data(name, mold)
+    call err_ctx%restore(0)
+  end function
 #:endfor
 
   !! Mark the start of a new time step with time value TIME. Subsequent output
@@ -313,6 +353,21 @@ contains
     call err_ctx%restore(0)
   end subroutine
 #:endfor
+#:endfor
+#:endfor
+#:for s in num_specs
+#:for d in field_data_specs
+
+  subroutine write_temporal_field_data_${s["kind"]}$_${d["suffix"]}$(this, var, array, as_vector)
+    class(vtkhdf_ug_file), intent(inout) :: this
+    type(vtkhdf_field_data_handle), intent(in) :: var
+    ${s["decl"]}$, intent(in) :: array${d["array"]}$
+    logical, intent(in), optional :: as_vector
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%ug%write_temporal_field_data(var, array, as_vector)
+    call err_ctx%restore(0)
+  end subroutine
 #:endfor
 #:endfor
 
