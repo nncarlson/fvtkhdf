@@ -289,8 +289,7 @@ contains
     associate (new_block => this%blocks(this%next_block_index)%b)
       write(group_name,'(a,i0)') 'Group_', this%next_block_index
       call new_block%init(this%vtk_id, trim(group_name), this%ctx, is_temporal)
-      call h5_write_attr(this%ctx, new_block%root_id, 'Index', this%next_block_index)
-      call h5_write_attr(this%ctx, new_block%root_id, 'Name', external_name)
+      call new_block%set_block_metadata(this%next_block_index, external_name)
       handle%index = this%next_block_index
       this%next_block_index = this%next_block_index + 1
     end associate
@@ -412,7 +411,7 @@ contains
     if (allocated(this%blocks)) then
       do j = 0, ubound(this%blocks,dim=1)
         associate (b => this%blocks(j)%b)
-          if (b%nsteps >= 0) call b%start_time_step(time)
+          if (b%temporal_enabled()) call b%start_time_step(time)
         end associate
       end do
     end if
@@ -428,7 +427,7 @@ contains
     if (allocated(this%blocks)) then
       do j = 0, ubound(this%blocks,dim=1)
         associate (b => this%blocks(j)%b)
-          if (b%nsteps >= 0 .and. b%step_open) call b%finalize_time_step()
+          if (b%temporal_enabled() .and. b%step_is_open()) call b%finalize_time_step()
         end associate
       end do
     end if

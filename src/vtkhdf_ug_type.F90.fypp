@@ -56,6 +56,7 @@ module vtkhdf_ug_type
   end type
 
   type, public :: vtkhdf_ug
+    private
     type(vtkhdf_ctx) :: ctx ! unowned copy
     integer(hid_t) :: root_id=H5I_INVALID_HID
     integer(hid_t) :: cgrp_id=H5I_INVALID_HID, pgrp_id=H5I_INVALID_HID
@@ -83,6 +84,9 @@ module vtkhdf_ug_type
 #:endfor
     procedure :: start_time_step
     procedure :: finalize_time_step
+    procedure :: set_block_metadata
+    procedure :: temporal_enabled
+    procedure :: step_is_open
 #:for s in num_specs
 #:for loc in locations
     generic :: write_${loc}$_data => write_${loc}$_data_${s["kind"]}$
@@ -138,6 +142,18 @@ contains
     type(vtkhdf_point_data_handle), intent(in) :: handle
     integer :: block_index
     block_index = handle%block_index
+  end function
+
+  pure function temporal_enabled(this) result(enabled)
+    class(vtkhdf_ug), intent(in) :: this
+    logical :: enabled
+    enabled = this%is_temporal
+  end function
+
+  pure function step_is_open(this) result(is_open)
+    class(vtkhdf_ug), intent(in) :: this
+    logical :: is_open
+    is_open = this%step_open
   end function
 
   !! Finalizer for VTKHDF_UG_FILE objects. We free heap memory we own but avoid
@@ -243,6 +259,15 @@ contains
     end if
 
   end subroutine init
+
+  subroutine set_block_metadata(this, index, name)
+    class(vtkhdf_ug), intent(inout) :: this
+    integer, intent(in) :: index
+    character(*), intent(in) :: name
+    INSIST(this%root_id >= 0)
+    call h5_write_attr(this%ctx, this%root_id, 'Index', index)
+    call h5_write_attr(this%ctx, this%root_id, 'Name', name)
+  end subroutine set_block_metadata
 
   !! Write the unstructured mesh to the file. The mesh is described in the
   !! conventional manner by the POINTS, CNODE, and XCNODE arrays. The
