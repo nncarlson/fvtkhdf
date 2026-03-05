@@ -65,7 +65,7 @@ Block definition
 
    If ``is_temporal`` is present and ``.true.``, the block supports
    time-dependent datasets. Temporal blocks must be defined before the first
-   call to ``write_time_step``. Non-temporal blocks may be defined at any time.
+   call to ``start_time_step``. Non-temporal blocks may be defined at any time.
 
    The returned ``vtkhdf_block_handle`` is opaque. Its components are private,
    so user code cannot inspect or construct handles directly; only store the
@@ -73,7 +73,7 @@ Block definition
 
 The file is considered temporal if at least one block is temporal.
 All temporal blocks share a common timeline defined by calls to
-``write_time_step``.
+``start_time_step``.
 
 Mesh Data
 ---------
@@ -114,7 +114,7 @@ MultiBlockDataSet files support time-dependent point and cell datasets on
 a per-block basis. A block is temporal if it was defined with
 ``is_temporal = .true.`` in ``add_block``.
 
-Temporal blocks must be defined before the first call to ``write_time_step``.
+Temporal blocks must be defined before the first call to ``start_time_step``.
 After the first time step is started, no further temporal block definitions
 or temporal dataset registrations are allowed.
 
@@ -127,10 +127,13 @@ or temporal dataset registrations are allowed.
       ``vtkhdf_ug_file``. The returned handle is opaque; user code should
       store it and pass it to later temporal writes for the same block.
 
-``call file%write_time_step(time)``
+``call file%start_time_step(time)``
    Start a new time step with time value ``time``. The timeline is shared by
-   all temporal blocks in the file. A call to ``write_time_step`` is required
+   all temporal blocks in the file. A call to ``start_time_step`` is required
    before writing any temporal dataset in any block.
+
+   For the first time step, each temporal dataset registered on each temporal
+   block must be written once for that block.
 
 .. glossary::
 
@@ -140,5 +143,16 @@ or temporal dataset registrations are allowed.
       ``point_var`` for the specified ``block``, associating it with the
       current time step.
       Write semantics are identical to those of ``vtkhdf_ug_file``.
+      After the first time step, writes may be skipped on later time steps; if
+      omitted, the most recently written value is used.
 
       The data handle and block handle must match the same block registration.
+
+``call file%finalize_time_step()``
+   Finalize the current shared time step for all temporal blocks. Until this
+   call, the file is in an in-progress state for that step. Best practice is
+   to call ``finalize_time_step`` immediately after all temporal writes are
+   complete.
+
+   ``finalize_time_step`` is called implicitly when ``start_time_step`` begins
+   a new step while one is still open, and when ``close`` is called.

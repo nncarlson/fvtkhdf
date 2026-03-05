@@ -18,7 +18,9 @@ A minimal usage pattern for writing an UnstructuredGrid file is:
 This illustrates the required ordering of calls: create the file,
 write the mesh, write any static or temporal datasets, and finally close.
 For temporal datasets, first capture the returned cell or point data handle
-and then use that handle for each temporal write.
+and then use that handle for each temporal write. For each step, call
+``start_time_step(time)``, write temporal datasets, then call
+``finalize_time_step()``.
 
 For MultiBlock output, first capture the handle returned by ``add_block`` and
 use that handle for subsequent block operations:

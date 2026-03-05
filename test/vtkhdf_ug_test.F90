@@ -42,7 +42,7 @@ program vtkhdf_ug_test
 
   !!!! Write the datasets for the first time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  call vizfile%write_time_step(0.0_r4)
+  call vizfile%start_time_step(0.0_r4)
 
   call get_scalar_cell_data(points, cnode, xcnode, s)
   call vizfile%write_temporal_cell_data(hcell_scalar, s)
@@ -55,12 +55,13 @@ program vtkhdf_ug_test
 
   call get_vector_point_data(points, v)
   call vizfile%write_temporal_point_data(hpoint_vector, v)
+  call vizfile%finalize_time_step()
 
   call vizfile%flush()
 
   !!!! Write the datasets for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  call vizfile%write_time_step(1.0_r4)
+  call vizfile%start_time_step(1.0_r4)
 
   call get_scalar_cell_data(points, cnode, xcnode, s)
   call vizfile%write_temporal_cell_data(hcell_scalar, s+1)
@@ -71,8 +72,8 @@ program vtkhdf_ug_test
   call get_scalar_point_data(points, s)
   call vizfile%write_temporal_point_data(hpoint_scalar, s+1)
 
-  call get_vector_point_data(points, v)
-  call vizfile%write_temporal_point_data(hpoint_vector, v+1)
+  !! Skip one temporal dataset write; offset should repeat the last written value.
+  call vizfile%finalize_time_step()
 
   !! Some time-independent cell and point data
 

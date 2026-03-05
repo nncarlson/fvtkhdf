@@ -41,13 +41,14 @@ program vtkhdf_ug_demo
     time = j*0.1_r8
 
     !! Start the time step
-    call vizfile%write_time_step(time)
+    call vizfile%start_time_step(time)
 
     !! Generate some arbitrary time-dependent data and write it.
     pressure = cos(time)
     velocity = spread([cos(time),sin(time),1.0_r8],dim=2,ncopies=npoints)
     call vizfile%write_temporal_cell_data(pressure_handle, pressure)
     call vizfile%write_temporal_point_data(velocity_handle, velocity)
+    call vizfile%finalize_time_step()
   end do
 
   !! We have time-independent (static) point-centered temperature.

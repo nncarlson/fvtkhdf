@@ -79,13 +79,14 @@ program vtkhdf_mb_test
     time = j*0.1_r8
 
     !! Start the time step
-    call vizfile%write_time_step(time) ! COLLECTIVE!
+    call vizfile%start_time_step(time) ! COLLECTIVE!
 
     !! Generate some arbitrary time-dependent data and write it. (COLLECTIVE!)
     pressure = cos(time) + rank
     velocity = spread([cos(time+rank),sin(time+rank),1.0_r8],dim=2,ncopies=npoints_liquid)
     call vizfile%write_temporal_cell_data(bliq, pressure_handle, pressure)
     call vizfile%write_temporal_point_data(bliq, velocity_handle, velocity)
+    call vizfile%finalize_time_step() ! COLLECTIVE!
   end do
 
   !! Write the time-independent point-centered temperature for both blocks

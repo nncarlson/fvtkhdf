@@ -74,7 +74,7 @@ program vtkhdf_mb_test
 
   !!!! Write the datasets for the first time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  call vizfile%write_time_step(0.0_r8)
+  call vizfile%start_time_step(0.0_r8)
 
   y = points ! restore initial node coordinates
   do j = 0, nproc-1
@@ -95,12 +95,13 @@ program vtkhdf_mb_test
     end if
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do
+  call vizfile%finalize_time_step()
 
   call vizfile%flush()
 
   !!!! Write the datasets for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  call vizfile%write_time_step(1.0_r8)
+  call vizfile%start_time_step(1.0_r8)
 
   y = points ! restore initial node coordinates
   do j = 0, nproc-1
@@ -121,6 +122,7 @@ program vtkhdf_mb_test
     end if
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do
+  call vizfile%finalize_time_step()
 
   !! At any point you can write a dataset that isn't time dependent, but its name must
   !! be unique from any other dataset, temporal or not, of the same type (cell or point).
