@@ -26,7 +26,7 @@ ASCII or XML formats.
    * Supports a static mesh (fixed geometry and topology) with both
      static and temporal data.
 
-   * Supports point-centered and cell-centered data.
+   * Supports point-centered, cell-centered, and field data.
 
 * **MultiBlockDataSet (MB):** Supports a flat assembly/collection of
   UnstructuredGrid blocks (leaf nodes).
@@ -129,8 +129,6 @@ Planned and prospective features include:
 
 * Completing UnstructuredGrid (UG) feature coverage
 
-  - Add support for `FieldData` datasets (data NOT associated with mesh entities)
-    ([issue #24](https://github.com/nncarlson/fvtkhdf/issues/24))
   - Add support for temporal mesh:
     - geometry only
     - geometry and topology

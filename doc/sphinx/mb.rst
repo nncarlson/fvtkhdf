@@ -9,7 +9,7 @@ UnstructuredGrid blocks; hierarchical nesting of
 MultiBlockDataSet objects is not supported.
 
 Each block behaves semantically like a ``vtkhdf_ug_file`` mesh: it has
-its own static mesh and associated point and cell datasets.
+its own static mesh and associated point, cell, and field datasets.
 
 As in ``vtkhdf_ug_file``, partitions correspond 1:1 with MPI ranks.
 Each MPI rank contributes one VTKHDF partition for every block.
@@ -29,6 +29,7 @@ returned by ``add_block``.
    type(vtkhdf_block_handle) :: block
    type(vtkhdf_cell_data_handle) :: cell_var
    type(vtkhdf_point_data_handle) :: point_var
+   type(vtkhdf_field_data_handle) :: field_var
 
 File Creation and Management
 ----------------------------
@@ -107,6 +108,19 @@ Static mesh-centered data
       what the VTKHDF reader and ParaView use. The original user-facing name
       is written to the dataset ``Name`` attribute for informational purposes.
 
+Static field data
+-----------------
+
+``call file%write_field_data(block, name, array [, as_vector])``
+   Write static field data for ``block``.
+
+   Semantics are identical to ``vtkhdf_ug_file%write_field_data``:
+   scalar, rank-1, and rank-2 arrays are supported. For rank-1 arrays,
+   ``as_vector=.true.`` marks the data as one tuple with ``n`` components;
+   otherwise rank-1 is interpreted as ``n`` tuples of one component.
+   In MPI builds, calls are collective and only rank 0 contributes the payload;
+   all ranks must still pass matching array type/rank/shape.
+
 Time-dependent mesh-centered data
 ---------------------------------
 
@@ -156,3 +170,20 @@ or temporal dataset registrations are allowed.
 
    ``finalize_time_step`` is called implicitly when ``start_time_step`` begins
    a new step while one is still open, and when ``close`` is called.
+
+Time-dependent field data
+-------------------------
+
+.. glossary::
+
+   ``field_var = file%register_temporal_field_data(block, name, mold)``
+      Register time-dependent field data for ``block``. Semantics match
+      ``vtkhdf_ug_file%register_temporal_field_data``.
+
+   ``call file%write_temporal_field_data(block, field_var, array [, as_vector])``
+      Write time-dependent field data for the current shared time step.
+      Semantics match ``vtkhdf_ug_file%write_temporal_field_data``.
+      In MPI builds, calls are collective and only rank 0 contributes the
+      payload; all ranks must still pass matching array type/rank/shape.
+
+      The data handle and block handle must match the same block registration.

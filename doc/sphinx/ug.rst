@@ -5,8 +5,8 @@ This module defines the ``vtkhdf_ug_file`` derived type for writing
 VTKHDF UnstructuredGrid files. It supports:
 
 * A static mesh
-* Static point and cell datasets
-* Optional time-dependent point and cell datasets
+* Static point, cell, and field datasets
+* Optional time-dependent point, cell, and field datasets
 
 In the MPI build, all type-bound procedures are collective over the
 communicator passed to ``create``. Every rank must call the same method
@@ -19,6 +19,7 @@ arguments.
    type(vtkhdf_ug_file) :: file
    type(vtkhdf_cell_data_handle) :: cell_var
    type(vtkhdf_point_data_handle) :: point_var
+   type(vtkhdf_field_data_handle) :: field_var
 
 File Creation and Management
 ----------------------------
@@ -151,3 +152,59 @@ step must be started before temporal datasets are written.
 
       ``finalize_time_step`` is called implicitly when ``start_time_step``
       begins a new step while one is still open, and when ``close`` is called.
+
+Field data
+----------
+Field data is not tied to mesh entities. Scalars, rank-1 arrays, and rank-2
+arrays are supported.
+
+Supported field-data types and kinds are:
+
+* ``integer(int32)``
+* ``integer(int64)``
+* ``real(real32)``
+* ``real(real64)``
+
+In MPI builds, all field-data calls remain collective. For field-data arrays,
+only rank 0 contributes the written payload, but all ranks must still call the
+same method in the same order and pass array arguments with matching type,
+kind, rank, and shape. On non-root ranks, array values are ignored and are not
+referenced.
+
+.. glossary::
+
+   ``call file%write_field_data(name, array [, as_vector])``
+      Write static field data.
+
+      By default, a rank-1 ``array`` with ``n`` entries is interpreted as
+      ``n`` tuples of one component. If ``as_vector=.true.``, a rank-1 array is
+      interpreted as one tuple with ``n`` components.
+
+      Scalar and rank-2 arrays are supported; ``as_vector`` is only valid for
+      rank-1 arrays.
+
+      Naming follows the same normalization and disambiguation rules as mesh
+      data names.
+
+   ``field_var = file%register_temporal_field_data(name, mold)``
+      Register ``name`` as a time-dependent field dataset and return an opaque
+      handle. The type and kind of scalar ``mold`` determine the dataset type;
+      its value is ignored.
+
+      Temporal field registration must occur before the first time step is
+      started.
+
+   ``call file%write_temporal_field_data(field_var, array [, as_vector])``
+      Write field data for the current time step.
+
+      ``as_vector`` has the same meaning as in ``write_field_data`` for rank-1
+      arrays.
+
+      Temporal field shape may vary by time step. If a registered temporal
+      field is omitted on a later step, its most recently written value is
+      repeated. Before the first write, omission yields an empty field for that
+      step.
+
+.. note::
+   String-valued field data is not currently supported by the VTKHDF
+   reader/ParaView path. Use numeric field-data arrays.
