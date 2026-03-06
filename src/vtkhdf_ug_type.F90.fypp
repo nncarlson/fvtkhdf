@@ -30,6 +30,7 @@
 module vtkhdf_ug_type
 
   use,intrinsic :: iso_fortran_env
+  use,intrinsic :: iso_c_binding, only: c_sizeof
   use vtkhdf_h5_c_binding
   use vtkhdf_h5
   use vtkhdf_ctx_type
@@ -139,6 +140,9 @@ module vtkhdf_ug_type
     module procedure get_point_block_index
     module procedure get_field_block_index
   end interface
+
+  integer(int64), parameter :: DATA_CHUNK_BYTES = 8*1024*1024
+  integer(int64), parameter :: STEPS_CHUNK_SIZE = 512
 
 contains
 
@@ -285,7 +289,7 @@ contains
       this%nsteps = 0
       call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps)
 
-      associate (mold => 1.0_real64, chunk_size => 100)
+      associate (mold => 1.0_real64, chunk_size => STEPS_CHUNK_SIZE)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'Values', mold, chunk_size)
       end associate
 
@@ -296,13 +300,13 @@ contains
       ! NB: These are no longer needed in ParaView 6.1 when StaticMesh=1, but
       ! we retain them for compatibility with earlier versions. They will be
       ! filled with 0 offsets and the constant number of parts.
-      associate (mold => 0_int64, chunk_size => 100)
+      associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'PointOffsets', mold, chunk_size)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'CellOffsets', mold, chunk_size)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'ConnectivityIdOffsets', mold, chunk_size)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'PartOffsets', mold, chunk_size)
       end associate
-      associate (mold => 0, chunk_size => 100)
+      associate (mold => 0, chunk_size => STEPS_CHUNK_SIZE)
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'NumberOfParts', mold, chunk_size)
       end associate
     end if
@@ -522,13 +526,13 @@ contains
     call this%reserve_cell_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
 
     !! Dataset for the cell data
-    associate (chunk_size => int(this%ncell_tot))
+    associate (chunk_size => data_chunk_size(c_sizeof(mold)))
       call h5_create_unlimited_dataset(this%ctx, this%cgrp_id, internal_name, mold, chunk_size)
     end associate
     call write_data_name_attr(this%ctx, this%cgrp_id, internal_name, external_name)
 
     !! Dataset for its time step offsets
-    associate (mold => 0_int64, chunk_size => 100)
+    associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
       call h5_create_unlimited_dataset(this%ctx, this%cogrp_id, internal_name, mold, chunk_size)
     end associate
 
@@ -567,13 +571,13 @@ contains
     call this%reserve_point_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
 
     !! Dataset for the point data
-    associate (chunk_size => int(this%nnode_tot))
+    associate (chunk_size => data_chunk_size(c_sizeof(mold)))
       call h5_create_unlimited_dataset(this%ctx, this%pgrp_id, internal_name, mold, chunk_size)
     end associate
     call write_data_name_attr(this%ctx, this%pgrp_id, internal_name, external_name)
 
     !! Dataset for its time step offsets
-    associate (mold => 0_int64, chunk_size => 100)
+    associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
       call h5_create_unlimited_dataset(this%ctx, this%pogrp_id, internal_name, mold, chunk_size)
     end associate
 
@@ -603,8 +607,10 @@ contains
     call this%reserve_field_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
 
     !! Flattened temporal field data stream and per-step metadata
-    associate (chunk_size => 100)
-      call h5_create_unlimited_dataset(this%ctx, this%fgrp_id, internal_name, mold, chunk_size)
+    associate (chunk_size_data => data_chunk_size(c_sizeof(mold)))
+      call h5_create_unlimited_dataset(this%ctx, this%fgrp_id, internal_name, mold, chunk_size_data)
+    end associate
+    associate (chunk_size => STEPS_CHUNK_SIZE)
       call h5_create_unlimited_dataset(this%ctx, this%fogrp_id, internal_name, 0_int64, chunk_size)
       call h5_create_unlimited_dataset(this%ctx, this%fsgrp_id, internal_name, [0_int32, 0_int32], chunk_size)
     end associate
@@ -975,5 +981,13 @@ contains
     ierr = H5Dclose(dset_id)
     INSIST(ctx%global_all(ierr >= 0))
   end subroutine
+
+  !!!! CHUNK SIZE HELPER !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  pure function data_chunk_size(value_bytes) result(chunk_size)
+    integer(int64), intent(in) :: value_bytes
+    integer(int64) :: chunk_size
+    chunk_size = max(1_int64, DATA_CHUNK_BYTES / value_bytes)
+  end function
 
 end module vtkhdf_ug_type
