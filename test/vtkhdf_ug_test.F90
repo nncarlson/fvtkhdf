@@ -3,6 +3,7 @@ program vtkhdf_ug_test
   use,intrinsic :: iso_fortran_env, only: r8 => real64, r4 => real32, int8
   use vtkhdf_ug_file_type
   use vtkhdf_vtk_cell_types
+  use vtkhdf_temporal_level
   use mpi_f08
   implicit none
 
@@ -10,7 +11,7 @@ program vtkhdf_ug_test
   integer :: istat, nproc, rank, stat
   character(:), allocatable :: errmsg
   real(r8), allocatable :: points(:,:)
-  integer,  allocatable :: cnode(:), xcnode(:)
+  integer, allocatable :: cnode(:), xcnode(:)
   integer(int8), allocatable :: types(:)
   real(r8), allocatable :: s(:), v(:,:) ! scalar and vector data arrays
 
@@ -18,7 +19,7 @@ program vtkhdf_ug_test
   call MPI_Comm_size(MPI_COMM_WORLD, nproc, istat)
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, istat)
 
-  call vizfile%create('ug_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, is_temporal=.true.)
+  call vizfile%create('ug_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, temporal_level=VTKHDF_STATIC_MESH)
   if (stat /= 0) error stop errmsg
 
   !! The unstructured mesh data for a basic mesh unit. The full mesh will

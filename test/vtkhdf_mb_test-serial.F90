@@ -3,6 +3,7 @@ program vtkhdf_mb_test
   use,intrinsic :: iso_fortran_env, only: r8 => real64, int8
   use vtkhdf_mb_file_type
   use vtkhdf_vtk_cell_types
+  use vtkhdf_temporal_level
   implicit none
 
   real(r8), allocatable :: points(:,:), scalar_cell_data(:), vector_cell_data(:,:)
@@ -21,12 +22,12 @@ program vtkhdf_mb_test
   !! consist of two non-overlapping shifts of this basic unit.
   call get_mesh_data(points, cnode, xcnode, types)
 
-  call vizfile%add_block('Block-A', stat, errmsg, is_temporal=.true.)
+  call vizfile%add_block('Block-A', stat, errmsg, temporal_level=VTKHDF_STATIC_MESH)
   if (stat /= 0) error stop errmsg
 
   call vizfile%write_mesh('Block-A', points, cnode, xcnode, types)
 
-  call vizfile%add_block('Block-B', stat, errmsg, is_temporal=.true.)
+  call vizfile%add_block('Block-B', stat, errmsg, temporal_level=VTKHDF_STATIC_MESH)
   if (stat /= 0) error stop errmsg
 
   call vizfile%write_mesh('Block-B', points+1, cnode, xcnode, types)

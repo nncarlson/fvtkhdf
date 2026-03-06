@@ -3,6 +3,7 @@ program vtkhdf_ug_test
   use,intrinsic :: iso_fortran_env, only: r8 => real64, int8
   use vtkhdf_ug_file_type
   use vtkhdf_vtk_cell_types
+  use vtkhdf_temporal_level
   implicit none
 
   real(r8), allocatable :: points(:,:), scalar_cell_data(:), vector_cell_data(:,:)
@@ -14,7 +15,7 @@ program vtkhdf_ug_test
 
   type(vtkhdf_ug_file) :: vizfile
 
-  call vizfile%create('ug_test.vtkhdf', stat, errmsg, is_temporal=.true.)
+  call vizfile%create('ug_test.vtkhdf', stat, errmsg, temporal_level=VTKHDF_STATIC_MESH)
   if (stat /= 0) error stop errmsg
 
   call get_mesh_data(points, cnode, xcnode, types)

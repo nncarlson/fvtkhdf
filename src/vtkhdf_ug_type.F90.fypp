@@ -34,6 +34,7 @@ module vtkhdf_ug_type
   use vtkhdf_h5
   use vtkhdf_ctx_type
   use vtkhdf_h5e_context_type
+  use vtkhdf_temporal_level
   implicit none
   private
 
@@ -43,8 +44,7 @@ module vtkhdf_ug_type
     integer(hid_t) :: cgrp_id=H5I_INVALID_HID, pgrp_id=H5I_INVALID_HID
     integer(int64) :: nnode, ncell, nnode_tot, ncell_tot
     integer :: npart
-    logical :: is_temporal = .false.
-    logical :: is_deformed = .false.
+    integer(int8) :: temporal_level = 0_int8
     integer :: nsteps = -1
     integer(hid_t) :: steps_id=H5I_INVALID_HID
     integer(hid_t) :: cogrp_id=H5I_INVALID_HID, pogrp_id=H5I_INVALID_HID
@@ -137,10 +137,12 @@ contains
   end subroutine
 
   !! Create a new VTKHDF UnstructuredGrid type group. To create a group
-  !! supporting time-dependent data, specify the optional argument
-  !! TEMPORAL to true; otherwise a static group is created by default.
+  !! supporting time-dependent data, specify TEMPORAL_LEVEL parameter:
+  !! - VTKHDF_STATIC_MESH: static mesh with temporal data (default)
+  !! - VTKHDF_DEFORMED_MESH: fixed topology with temporal geometry
+  !! - VTKHDF_TEMPORAL_MESH: fully temporal mesh (geometry and topology)
 
-  subroutine init(this, loc_id, name, ctx, temporal, deformed)
+  subroutine init(this, loc_id, name, ctx, temporal_level)
 
     use vtkhdf_version_param
 
@@ -148,7 +150,7 @@ contains
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     type(vtkhdf_ctx), intent(in) :: ctx
-    logical, intent(in), optional :: temporal, deformed
+    integer(int8), intent(in), optional :: temporal_level
 
     integer :: ierr
 
@@ -168,9 +170,13 @@ contains
     this%pgrp_id = H5Gcreate(this%root_id, 'PointData')
     INSIST(this%ctx%global_all(this%pgrp_id >= 0))
 
-    if (present(temporal)) this%is_temporal = temporal
-    if (present(deformed)) this%is_deformed = deformed
-    if (this%is_temporal) then
+    if (present(temporal_level)) then
+      this%temporal_level = temporal_level
+    else
+      this%temporal_level = VTKHDF_STATIC_MESH
+    end if
+
+    if (this%temporal_level >= VTKHDF_STATIC_MESH) then
       this%steps_id = H5Gcreate(this%root_id, 'Steps')
       INSIST(this%ctx%global_all(this%steps_id >= 0))
 
@@ -187,9 +193,9 @@ contains
         call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'Values', mold, chunk_size)
       end associate
 
-      ! NB: For deformed meshes, StaticMesh should be 0 to indicate the mesh changes over time
+      ! NB: For deformed/temporal meshes, StaticMesh should be 0 to indicate the mesh changes over time
       ! For static meshes, StaticMesh should be 1 to enable mesh caching in ParaView
-      call h5_write_attr(this%ctx, this%steps_id, 'StaticMesh', merge(0, 1, this%is_deformed))
+      call h5_write_attr(this%ctx, this%steps_id, 'StaticMesh', merge(0, 1, this%temporal_level >= VTKHDF_DEFORMED_MESH))
 
       ! NB: These are no longer needed in ParaView 6.1 when StaticMesh=1, but
       ! we retain them for compatibility with earlier versions. They will be
@@ -494,7 +500,7 @@ contains
     call h5_append_to_dataset(this%ctx, this%steps_id, 'PartOffsets', 0_int64, root=0)
     
     !! Cell and point data offsets for each of the temporal datasets for this timestep
-    if (this%is_deformed) then
+    if (this%temporal_level >= VTKHDF_DEFORMED_MESH) then
       tmp => this%temporal_points
       do while (associated(tmp))
         tmp%flag = .false.  ! dataset not yet written for this time step

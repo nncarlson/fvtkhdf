@@ -39,6 +39,7 @@ module vtkhdf_mb_file_type
   use vtkhdf_ctx_type
   use vtkhdf_h5e_context_type
   use vtkhdf_version_param
+  use vtkhdf_temporal_level
   implicit none
   private
 
@@ -245,18 +246,18 @@ contains
   end subroutine create_impl
 
 
-  subroutine add_block(this, block_name, stat, errmsg, is_temporal)
+  subroutine add_block(this, block_name, stat, errmsg, temporal_level)
 
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: block_name
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    logical, intent(in), optional :: is_temporal
+    integer(int8), intent(in), optional :: temporal_level
 
     integer :: n, ierr
     type(pdc_block), pointer :: b, new
     type(vtkhdf_h5e_context) :: err_ctx
-    logical :: temporal_flag
+    integer(int8) :: level
 
     INSIST(this%file_id >= 0)
 
@@ -292,9 +293,13 @@ contains
 
     ! If a block is temporal, it must be added before the
     ! timeline starts to ensure step-count consistency.
-    temporal_flag = .false.
-    if (present(is_temporal)) temporal_flag = is_temporal
-    if (temporal_flag) then
+    if (present(temporal_level)) then
+      level = temporal_level
+    else
+      level = VTKHDF_STATIC_MESH
+    end if
+
+    if (level >= VTKHDF_STATIC_MESH) then
       INSIST(.not.this%write_time_step_called)
       this%is_temporal = .true.
     end if
@@ -307,7 +312,7 @@ contains
 
     call err_ctx%capture ! begin HDF5 calls
 
-    call new%b%init(this%vtk_id, block_name, this%ctx, is_temporal)
+    call new%b%init(this%vtk_id, block_name, this%ctx, level)
 
     !NB: Unused for MultiBlockDataSet, but required for PartitionedDataSetCollection.
     call h5_write_attr(this%ctx, new%b%root_id, 'Index', this%next_bid)

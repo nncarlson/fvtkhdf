@@ -3,6 +3,7 @@ program vtkhdf_mb_test
   use,intrinsic :: iso_fortran_env, only: r8 => real64, int8
   use vtkhdf_mb_file_type
   use vtkhdf_vtk_cell_types
+  use vtkhdf_temporal_level
   use mpi_f08
   implicit none
 
@@ -48,7 +49,7 @@ program vtkhdf_mb_test
 
   y = points ! initial node coordinates
   do j = 0, nproc-1 ! block loop
-    call vizfile%add_block(name(j), stat, errmsg, is_temporal=.true.)
+    call vizfile%add_block(name(j), stat, errmsg, temporal_level=VTKHDF_STATIC_MESH)
     if (stat /= 0) error stop errmsg
     if (abs(rank-j) <= 1) then
       call vizfile%write_mesh(name(j), y, cnode, xcnode, types)

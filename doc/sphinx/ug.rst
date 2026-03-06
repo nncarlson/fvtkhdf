@@ -1,15 +1,19 @@
 The vtkhdf_ug_file_type module
 ==============================
 
-This module defines the ``vtkhdf_ug_file`` derived type for writing
-VTKHDF UnstructuredGrid files. It supports:
+This module defines a ``vtkhdf_ug_file`` derived type for writing
+VTKHDF UnstructuredGrid files. It supports three temporal mesh levels:
 
-* A static mesh (fixed geometry and topology) with static and temporal data
-* A deformed mesh (varying geometry but fixed topology) with temporal data
+* **VTKHDF_STATIC_MESH**: Static mesh (fixed geometry and topology) with temporal data
+* **VTKHDF_DEFORMED_MESH**: Deformed mesh (varying geometry but fixed topology) with temporal data
+* **VTKHDF_TEMPORAL_MESH**: Fully temporal mesh (geometry and topology vary over time) - *not yet implemented*
+
+Additionally supports:
+
 * Static point and cell datasets
 * Optional time-dependent point and cell datasets
 
-In the MPI build, all type-bound procedures are collective over the
+In MPI build, all type-bound procedures are collective over the
 communicator passed to ``create``. Every rank must call the same method
 in the same order and supply identical values for all non-distributed
 arguments.
@@ -20,29 +24,30 @@ character ``errmsg``.
 * ``stat == 0`` indicates success.
 * ``stat /= 0`` indicates failure and ``errmsg`` is allocated.
 
-In the MPI build, these return values are collective: all ranks return
+In MPI build, these return values are collective: all ranks return
 identical values.
 
 .. code-block:: fortran
 
    use vtkhdf_ug_file_type
+   use vtkhdf_temporal_level
    type(vtkhdf_ug_file) :: file
 
 File Creation and Management
 ----------------------------
 
-``call file%create(filename, [comm,] stat, errmsg [,is_temporal] [,is_deformed])``
+``call file%create(filename, [comm,] stat, errmsg [,temporal_level])``
    Create a new VTKHDF "UnstructuredGrid" file.
    
    * ``filename``: path to the file to create. The recommended file extension
      is ``.vtkhdf``.
-   * ``comm``: the MPI communicator: either ``integer`` or ``type(MPI_Comm)``.
+   * ``comm``: MPI communicator: either ``integer`` or ``type(MPI_Comm)``.
      In serial builds ``comm`` is omitted from the interface.
-   * ``is_temporal`` (optional): set ``.true.`` to enable time-dependent
-     datasets. The default is ``.false.``
-   * ``is_deformed`` (optional): set ``.true.`` to enable deformed mesh mode
-     where the mesh geometry changes over time but topology remains fixed.
-     Requires ``is_temporal=.true.``. The default is ``.false.``
+   * ``temporal_level`` (optional): specifies the temporal mesh level:
+     
+     - ``VTKHDF_STATIC_MESH``: static mesh with temporal data (default)
+     - ``VTKHDF_DEFORMED_MESH``: deformed mesh with temporal geometry
+     - ``VTKHDF_TEMPORAL_MESH``: fully temporal mesh (not yet implemented)
 
 ``call file%close()``
     Close the file and release internal resources. Users should *always* call
@@ -81,12 +86,12 @@ The mesh must be written before any mesh-centered data is written.
     are provided by ``vtkhdf_vtk_cell_types``.
 
 ``call file%write_mesh_topology(mold, cnode, xcnode, types)``
-  Write the mesh topology only (for deformed meshes). Use this together with
+  Write mesh topology only (for deformed and temporal meshes). Use this together with
   ``write_temporal_points`` for meshes where geometry changes over time but
-  topology remains fixed. Requires ``is_deformed=.true.`` at file creation.
-  
+  topology remains fixed. Requires ``temporal_level=VTKHDF_DEFORMED_MESH``
+  or ``temporal_level=VTKHDF_TEMPORAL_MESH`` at file creation.  
   * ``mold``: ``real32`` or ``real64`` array of shape (3, `npoints`) used
-    to determine the data type and shape for the temporal Points dataset.
+    to determine data type and shape for the temporal Points dataset.
     The actual coordinate values are written later via ``write_temporal_points``.
   * ``cnode``, ``xcnode``, ``types``: same as for ``write_mesh``.
 
@@ -135,13 +140,14 @@ step must be started before temporal datasets are written.
       Start a new time step with time value ``time``.
 
    ``call file%write_temporal_points(points)``
-      Write the mesh geometry for the current time step (deformed meshes only).
+      Write mesh geometry for the current time step (deformed and temporal meshes).
       This procedure is used together with ``write_mesh_topology`` for meshes
-      where geometry changes over time. Must be called after ``write_time_step``
-      for each time step. Requires ``is_deformed=.true.`` at file creation.
+      where geometry changes over time but topology remains fixed. Must be called after
+      ``write_time_step`` for each time step. Requires ``temporal_level=VTKHDF_DEFORMED_MESH``
+      or ``temporal_level=VTKHDF_TEMPORAL_MESH`` at file creation.
       
       * ``points``: ``real32`` or ``real64`` array of shape (3, `npoints`)
-        containing the node coordinates for this time step.
+        containing node coordinates for this time step.
 
    ``call file%write_temporal_cell_data(name, array)``
    ``call file%write_temporal_point_data(name, array)``
