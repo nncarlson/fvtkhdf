@@ -55,7 +55,7 @@ program vtkhdf_mb_test
 
   y = points ! initial node coordinates
   do j = 0, nproc-1 ! block loop
-    hblk(j) = vizfile%add_block(name(j), is_temporal=.true.)
+    hblk(j) = vizfile%add_block(name(j), mode=UG_STATIC_MESH)
     if (abs(rank-j) <= 1) then
       call vizfile%write_mesh(hblk(j), y, cnode, xcnode, types)
     else ! pass a 0-sized mesh

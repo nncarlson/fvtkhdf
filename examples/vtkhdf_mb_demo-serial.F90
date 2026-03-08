@@ -35,14 +35,14 @@ program vtkhdf_mb_test
   ncells  = size(xcnode) - 1
 
   !! Add the blocks to the file and write their meshes.
-  bliq = vizfile%add_block('liquid', is_temporal=.true.)
+  bliq = vizfile%add_block('liquid', mode=UG_STATIC_MESH)
   call vizfile%write_mesh(bliq, points, cnode, xcnode, types)
 
   !! Shift the points right to get the solid block mesh
   points(1,:) = points(1,:) + 1.2_r8
   !NB: A bug in the current reader that requires it to be temporal.
   !bsol = vizfile%add_block('solid')
-  bsol = vizfile%add_block('solid', is_temporal=.true.)
+  bsol = vizfile%add_block('solid', mode=UG_STATIC_MESH)
   call vizfile%write_mesh(bsol, points, cnode, xcnode, types)
 
   !! Register the time-dependent cell-centered pressure and point-centered

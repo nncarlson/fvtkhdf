@@ -44,7 +44,7 @@ program vtkhdf_mb_test
   call get_liquid_mesh_data(points, cnode, xcnode, types)
 
   !! Add the liquid block and write the local mesh piece (COLLECTIVE!)
-  bliq = vizfile%add_block('liquid', is_temporal=.true.)
+  bliq = vizfile%add_block('liquid', mode=UG_STATIC_MESH)
   call vizfile%write_mesh(bliq, points, cnode, xcnode, types)
 
   !! local mesh sizes
@@ -59,7 +59,7 @@ program vtkhdf_mb_test
   !! Rank 0 must participate with its 0-sized mesh!
   !NB: A bug in the current reader requires it to be temporal.
   !bsol = vizfile%add_block('solid')
-  bsol = vizfile%add_block('solid', is_temporal=.true.)
+  bsol = vizfile%add_block('solid', mode=UG_STATIC_MESH)
   call vizfile%write_mesh(bsol, points, cnode, xcnode, types)
 
   !! local mesh sizes

@@ -18,7 +18,7 @@ program vtkhdf_ug_demo
   type(vtkhdf_point_data_handle) :: velocity_handle
 
   !! Create the file with support for time-dependent data
-  call vizfile%create('ug_demo.vtkhdf', stat, errmsg, is_temporal=.true.)
+  call vizfile%create('ug_demo.vtkhdf', stat, errmsg, mode=UG_STATIC_MESH)
   if (stat /= 0) error stop errmsg
 
   !! Generate the demo mesh and write it.

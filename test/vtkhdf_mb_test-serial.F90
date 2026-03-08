@@ -26,10 +26,10 @@ program vtkhdf_mb_test
   !! consist of two non-overlapping shifts of this basic unit.
   call get_mesh_data(points, cnode, xcnode, types)
 
-  hblk_a = vizfile%add_block('Block-A', is_temporal=.true.)
+  hblk_a = vizfile%add_block('Block-A', mode=UG_STATIC_MESH)
   call vizfile%write_mesh(hblk_a, points, cnode, xcnode, types)
 
-  hblk_b = vizfile%add_block('Block-B', is_temporal=.true.)
+  hblk_b = vizfile%add_block('Block-B', mode=UG_STATIC_MESH)
   call vizfile%write_mesh(hblk_b, points+1, cnode, xcnode, types)
 
   !! Register the datasets that evolve with time. At this stage the data arrays
