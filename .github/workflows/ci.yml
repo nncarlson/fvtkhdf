@@ -79,3 +79,91 @@ jobs:
           echo "CTest failed"
           exit 1
         fi
+
+  build-test-gcc14:
+    name: Build & Test (Ubuntu/GFortran-14 experimental)
+    runs-on: ubuntu-latest
+    container: ghcr.io/${{ github.repository }}/fvtkhdf-ci:latest
+    continue-on-error: true
+
+    strategy:
+      fail-fast: false
+      matrix:
+        mpi: [ON, OFF]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install GCC 14 toolchain
+      run: |
+        apt-get update
+        apt-get install -y gcc-14 g++-14 gfortran-14
+
+    - name: Configure CMake
+      run: |
+        if [ "${{ matrix.mpi }}" == "ON" ]; then
+          export CC=mpicc
+          export FC=mpif90
+          export OMPI_CC=gcc-14
+          export OMPI_FC=gfortran-14
+        else
+          export CC=gcc-14
+          export FC=gfortran-14
+        fi
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DENABLE_MPI=${{ matrix.mpi }}
+
+    - name: Build
+      run: cmake --build build --parallel 2
+
+    - name: Run Tests
+      id: ctest
+      continue-on-error: true
+      working-directory: build
+      env:
+        # Allow running 4 processes on a 2-core machine
+        OMPI_MCA_rmaps_base_oversubscribe: 1
+      run: ctest --output-on-failure
+
+    # --- Installed-package consumer check (runs even if ctest fails) ---
+
+    - name: Install to staging prefix
+      if: always()
+      run: cmake --install build --prefix "${{ runner.temp }}/fvtkhdf-stage"
+
+    - name: Configure consumer against installed package
+      if: always()
+      run: |
+        cmake -S test/packaging -B build-consumer \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DENABLE_MPI=${{ matrix.mpi }} \
+          -DCMAKE_PREFIX_PATH="${{ runner.temp }}/fvtkhdf-stage"
+
+    - name: Build consumer
+      id: consumer_build
+      if: always()
+      run: cmake --build build-consumer --parallel 2
+
+    # Optional: run a consumer executable if you have one
+    # - name: Run consumer smoke
+    #   if: always()
+    #   run: ./build-consumer/consumer_smoke
+
+    # --- Gate: fail job if either ctest failed or consumer build failed ---
+    - name: Gate results
+      if: always()
+      run: |
+        echo "ctest outcome: ${{ steps.ctest.outcome }}"
+        echo "consumer_build outcome: ${{ steps.consumer_build.outcome }}"
+
+        if [ "${{ steps.consumer_build.outcome }}" != "success" ]; then
+          echo "Consumer build failed"
+          exit 1
+        fi
+
+        if [ "${{ steps.ctest.outcome }}" != "success" ]; then
+          echo "CTest failed"
+          exit 1
+        fi
