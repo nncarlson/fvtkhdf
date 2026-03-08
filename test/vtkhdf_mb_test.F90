@@ -55,7 +55,7 @@ program vtkhdf_mb_test
 
   y = points ! initial node coordinates
   do j = 0, nproc-1 ! block loop
-    hblk(j) = vizfile%add_block(name(j), is_temporal=.true.)
+    hblk(j) = vizfile%add_block(name(j), mode=UG_FIXED_MESH)
     if (abs(rank-j) <= 1) then
       call vizfile%write_mesh(hblk(j), y, cnode, xcnode, types)
     else ! pass a 0-sized mesh
@@ -86,25 +86,25 @@ program vtkhdf_mb_test
   do j = 0, nproc-1
     if (abs(rank-j) <= 1) then
       call get_scalar_cell_data(y, cnode, xcnode, s)
-      call vizfile%write_temporal_cell_data(hblk(j), hcell_scalar(j), s)
+      call vizfile%write_cell_data(hblk(j), hcell_scalar(j), s)
       call get_vector_cell_data(y, cnode, xcnode, v)
-      call vizfile%write_temporal_cell_data(hblk(j), hcell_vector(j), v)
+      call vizfile%write_cell_data(hblk(j), hcell_vector(j), v)
       call get_scalar_point_data(y, s)
-      call vizfile%write_temporal_point_data(hblk(j), hpoint_scalar(j), s)
+      call vizfile%write_point_data(hblk(j), hpoint_scalar(j), s)
       call get_vector_point_data(y, v)
-      call vizfile%write_temporal_point_data(hblk(j), hpoint_vector(j), v)
+      call vizfile%write_point_data(hblk(j), hpoint_vector(j), v)
     else ! pass 0-sized data
-      call vizfile%write_temporal_cell_data(hblk(j), hcell_scalar(j), s0)
-      call vizfile%write_temporal_cell_data(hblk(j), hcell_vector(j),  v0)
-      call vizfile%write_temporal_point_data(hblk(j), hpoint_scalar(j), s0)
-      call vizfile%write_temporal_point_data(hblk(j), hpoint_vector(j),  v0)
+      call vizfile%write_cell_data(hblk(j), hcell_scalar(j), s0)
+      call vizfile%write_cell_data(hblk(j), hcell_vector(j),  v0)
+      call vizfile%write_point_data(hblk(j), hpoint_scalar(j), s0)
+      call vizfile%write_point_data(hblk(j), hpoint_vector(j),  v0)
     end if
     fs = [real(j+1, r8), real(j+2, r8)]
     fv = reshape([real(j+1, r8), real(j+2, r8), real(j+3, r8), &
         real(j+11, r8), real(j+12, r8), real(j+13, r8)], [3,2])
-    call vizfile%write_temporal_field_data(hblk(j), hfield_value(j), real(100+j, r8))
-    call vizfile%write_temporal_field_data(hblk(j), hfield_scalar(j), fs, as_vector=.true.)
-    call vizfile%write_temporal_field_data(hblk(j), hfield_vector(j), fv)
+    call vizfile%write_field_data(hblk(j), hfield_value(j), real(100+j, r8))
+    call vizfile%write_field_data(hblk(j), hfield_scalar(j), fs, as_vector=.true.)
+    call vizfile%write_field_data(hblk(j), hfield_vector(j), fv)
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do
   call vizfile%finalize_time_step()
@@ -119,21 +119,21 @@ program vtkhdf_mb_test
   do j = 0, nproc-1
     if (abs(rank-j) <= 1) then
       call get_scalar_cell_data(y, cnode, xcnode, s)
-      call vizfile%write_temporal_cell_data(hblk(j), hcell_scalar(j), s+1)
+      call vizfile%write_cell_data(hblk(j), hcell_scalar(j), s+1)
       call get_vector_cell_data(y, cnode, xcnode, v)
-      call vizfile%write_temporal_cell_data(hblk(j), hcell_vector(j), v+1)
+      call vizfile%write_cell_data(hblk(j), hcell_vector(j), v+1)
       call get_scalar_point_data(y, s)
-      call vizfile%write_temporal_point_data(hblk(j), hpoint_scalar(j), s+1)
+      call vizfile%write_point_data(hblk(j), hpoint_scalar(j), s+1)
       call get_vector_point_data(y, v)
-      call vizfile%write_temporal_point_data(hblk(j), hpoint_vector(j), v+1)
+      call vizfile%write_point_data(hblk(j), hpoint_vector(j), v+1)
     else ! pass 0-sized data
-      call vizfile%write_temporal_cell_data(hblk(j), hcell_scalar(j), s0)
-      call vizfile%write_temporal_cell_data(hblk(j), hcell_vector(j),  v0)
-      call vizfile%write_temporal_point_data(hblk(j), hpoint_scalar(j), s0)
-      call vizfile%write_temporal_point_data(hblk(j), hpoint_vector(j),  v0)
+      call vizfile%write_cell_data(hblk(j), hcell_scalar(j), s0)
+      call vizfile%write_cell_data(hblk(j), hcell_vector(j),  v0)
+      call vizfile%write_point_data(hblk(j), hpoint_scalar(j), s0)
+      call vizfile%write_point_data(hblk(j), hpoint_vector(j),  v0)
     end if
     fs = [real(10+j, r8), real(20+j, r8), real(30+j, r8)]
-    call vizfile%write_temporal_field_data(hblk(j), hfield_scalar(j), fs)
+    call vizfile%write_field_data(hblk(j), hfield_scalar(j), fs)
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do
   call vizfile%finalize_time_step()
@@ -161,9 +161,6 @@ program vtkhdf_mb_test
     fs = [real(-j-1, r8), real(-j-2, r8), real(-j-3, r8), real(-j-4, r8)]
     fv = reshape([real(-j-1, r8), real(-j-2, r8), real(-j-3, r8), &
         real(-j-11, r8), real(-j-12, r8), real(-j-13, r8)], [3,2])
-    call vizfile%write_field_data(hblk(j), 'static-field-value', real(-100-j, r8))
-    call vizfile%write_field_data(hblk(j), 'static-field-scalar', fs, as_vector=.true.)
-    call vizfile%write_field_data(hblk(j), 'static-field-vector', fv)
     y(2,:) = y(2,:) + 2 ! everyone shifts up
   end do
 

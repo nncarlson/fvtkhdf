@@ -18,7 +18,7 @@ program vtkhdf_ug_demo
   type(vtkhdf_point_data_handle) :: velocity_handle
 
   !! Create the file with support for time-dependent data
-  call vizfile%create('ug_demo.vtkhdf', stat, errmsg, is_temporal=.true.)
+  call vizfile%create('ug_demo.vtkhdf', stat, errmsg, mode=UG_FIXED_MESH)
   if (stat /= 0) error stop errmsg
 
   !! Generate the demo mesh and write it.
@@ -46,8 +46,8 @@ program vtkhdf_ug_demo
     !! Generate some arbitrary time-dependent data and write it.
     pressure = cos(time)
     velocity = spread([cos(time),sin(time),1.0_r8],dim=2,ncopies=npoints)
-    call vizfile%write_temporal_cell_data(pressure_handle, pressure)
-    call vizfile%write_temporal_point_data(velocity_handle, velocity)
+    call vizfile%write_cell_data(pressure_handle, pressure)
+    call vizfile%write_point_data(velocity_handle, velocity)
     call vizfile%finalize_time_step()
   end do
 

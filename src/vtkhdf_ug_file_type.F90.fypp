@@ -20,11 +20,14 @@
 
 #include "vtkhdf_assert.inc"
 
-#:set int_specs  = [ {"kind":"int32",  "decl":"integer(int32)"}, &
+#:set int_specs  = [ {"kind":"int8",   "decl":"integer(int8)"}, &
+                   & {"kind":"int32",  "decl":"integer(int32)"}, &
                    & {"kind":"int64",  "decl":"integer(int64)"} ]
 #:set real_specs = [ {"kind":"real32", "decl":"real(real32)"}, &
                    & {"kind":"real64", "decl":"real(real64)"} ]
 #:set num_specs = int_specs + real_specs
+#:set int_specs_no_int8 = [s for s in int_specs if s["kind"] != "int8"]
+#:set num_specs_no_int8 = [s for s in num_specs if s["kind"] != "int8"]
 #:set locations = ["cell", "point"]
 #:set data_specs = [ {"suffix":"scalar", "mold":"", "array":"(:)"}, {"suffix":"vector", "mold":"(:)", "array":"(:,:)"} ]
 #:set field_data_specs = [ {"suffix":"value", "array":""}, {"suffix":"scalar", "array":"(:)"}, {"suffix":"vector", "array":"(:,:)"} ]
@@ -43,6 +46,7 @@ module vtkhdf_ug_file_type
 
   public :: vtkhdf_version
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
+  public :: UG_STATIC, UG_FIXED_MESH, UG_MOVING_MESH, UG_DYNAMIC_MESH
 
   type, public :: vtkhdf_ug_file
     private
@@ -60,10 +64,18 @@ module vtkhdf_ug_file_type
     procedure :: close
     procedure :: flush
 #:for r in real_specs
-#:for i in int_specs
+#:for i in int_specs_no_int8
     generic :: write_mesh => write_mesh_${r["kind"]}$_${i["kind"]}$
     procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
 #:endfor
+#:endfor
+#:for i in int_specs_no_int8
+    generic :: write_mesh_topology => write_mesh_topology_${i["kind"]}$
+    procedure, private :: write_mesh_topology_${i["kind"]}$
+#:endfor
+#:for r in real_specs
+    generic :: write_mesh_geometry => write_mesh_geometry_${r["kind"]}$
+    procedure, private :: write_mesh_geometry_${r["kind"]}$
 #:endfor
     generic :: start_time_step => start_time_step_real32, start_time_step_real64
     procedure, private :: start_time_step_real32, start_time_step_real64
@@ -73,18 +85,18 @@ module vtkhdf_ug_file_type
 #:for r in data_specs
     generic :: write_${loc}$_data => write_${loc}$_data_${s["kind"]}$_${r["suffix"]}$
     procedure, private :: write_${loc}$_data_${s["kind"]}$_${r["suffix"]}$
+    generic :: write_${loc}$_data => write_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$
+    procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$
     generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$
     procedure, private :: register_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$
-    generic :: write_temporal_${loc}$_data => write_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$
-    procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$
 #:endfor
 #:endfor
 #:endfor
-#:for s in num_specs
+#:for s in num_specs_no_int8
 #:for r in field_data_specs
     generic :: write_field_data => write_field_data_${s["kind"]}$_${r["suffix"]}$
     procedure, private :: write_field_data_${s["kind"]}$_${r["suffix"]}$
-    generic :: write_temporal_field_data => write_temporal_field_data_${s["kind"]}$_${r["suffix"]}$
+    generic :: write_field_data => write_temporal_field_data_${s["kind"]}$_${r["suffix"]}$
     procedure, private :: write_temporal_field_data_${s["kind"]}$_${r["suffix"]}$
 #:endfor
     generic :: register_temporal_field_data => register_temporal_field_data_${s["kind"]}$
@@ -135,49 +147,53 @@ contains
   end subroutine
 
 #ifdef USE_MPI
-  subroutine create_f08(this, filename, comm, stat, errmsg, is_temporal)
+  subroutine create_f08(this, filename, comm, stat, errmsg, mode, data_chunk_bytes)
     use mpi_f08, only: MPI_Comm
     class(vtkhdf_ug_file), intent(out) :: this
     character(*), intent(in) :: filename
     type(MPI_Comm), intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    logical, intent(in), optional :: is_temporal
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
     call this%ctx%init(comm)
-    call this%create_impl(filename, stat, errmsg, is_temporal)
+    call this%create_impl(filename, stat, errmsg, mode, data_chunk_bytes)
   end subroutine create_f08
 
-  subroutine create_int(this, filename, comm, stat, errmsg, is_temporal)
+  subroutine create_int(this, filename, comm, stat, errmsg, mode, data_chunk_bytes)
     use mpi_f08, only: MPI_Comm
     class(vtkhdf_ug_file), intent(out) :: this
     character(*), intent(in) :: filename
     integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    logical, intent(in), optional :: is_temporal
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
     type(MPI_Comm) :: f08_comm
     f08_comm%mpi_val = comm
-    call this%create(filename, f08_comm, stat, errmsg, is_temporal)
+    call this%create(filename, f08_comm, stat, errmsg, mode, data_chunk_bytes)
   end subroutine create_int
 #else
-  subroutine create(this, filename, stat, errmsg, is_temporal)
+  subroutine create(this, filename, stat, errmsg, mode, data_chunk_bytes)
     class(vtkhdf_ug_file), intent(out) :: this
     character(*), intent(in) :: filename
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    logical, intent(in), optional :: is_temporal
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
     call this%ctx%init()
-    call this%create_impl(filename, stat, errmsg, is_temporal)
+    call this%create_impl(filename, stat, errmsg, mode, data_chunk_bytes)
   end subroutine create
 #endif
 
-  subroutine create_impl(this, filename, stat, errmsg, is_temporal)
+  subroutine create_impl(this, filename, stat, errmsg, mode, data_chunk_bytes)
 
     class(vtkhdf_ug_file), intent(inout) :: this
     character(*), intent(in) :: filename
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
-    logical, intent(in), optional :: is_temporal
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
 
     integer(hid_t) :: fapl
     integer :: ierr
@@ -200,7 +216,7 @@ contains
       return
     end if
 
-    call this%ug%init(this%file_id, 'VTKHDF', this%ctx, is_temporal)
+    call this%ug%init(this%file_id, 'VTKHDF', this%ctx, mode, data_chunk_bytes)
 
     stat = 0
     call err_ctx%restore(stat)
@@ -212,7 +228,7 @@ contains
   !! additional array TYPES specifies the VTK cell types. This procedure
   !! must be called before any of the following procedures.
 #:for r in real_specs
-#:for i in int_specs
+#:for i in int_specs_no_int8
 
   subroutine write_mesh_${r["kind"]}$_${i["kind"]}$(this, points, cnode, xcnode, types)
     class(vtkhdf_ug_file), intent(inout) :: this
@@ -226,6 +242,30 @@ contains
     call err_ctx%restore(0)
   end subroutine
 #:endfor
+#:endfor
+#:for i in int_specs_no_int8
+
+  subroutine write_mesh_topology_${i["kind"]}$(this, cnode, xcnode, types)
+    class(vtkhdf_ug_file), intent(inout) :: this
+    ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
+    integer(int8), intent(in) :: types(:)
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%ug%write_mesh_topology(cnode, xcnode, types)
+    call err_ctx%restore(0)
+  end subroutine
+#:endfor
+#:for r in real_specs
+
+  subroutine write_mesh_geometry_${r["kind"]}$(this, points)
+    class(vtkhdf_ug_file), intent(inout) :: this
+    ${r["decl"]}$, intent(in) :: points(:,:)
+    type(vtkhdf_h5e_context) :: err_ctx
+    INSIST(size(points,dim=1) == 3)
+    call err_ctx%capture
+    call this%ug%write_mesh_geometry(points)
+    call err_ctx%restore(0)
+  end subroutine
 #:endfor
 
   !! Writes the cell-based data ARRAY to a new named cell dataset. Scalar,
@@ -247,7 +287,7 @@ contains
 #:endfor
 #:endfor
 #:endfor
-#:for s in num_specs
+#:for s in num_specs_no_int8
 #:for d in field_data_specs
 
   subroutine write_field_data_${s["kind"]}$_${d["suffix"]}$(this, name, array, as_vector)
@@ -297,7 +337,7 @@ contains
 #:endfor
 #:endfor
 #:endfor
-#:for s in num_specs
+#:for s in num_specs_no_int8
 
   function register_temporal_field_data_${s["kind"]}$(this, name, mold) result(handle)
     class(vtkhdf_ug_file), intent(inout) :: this
@@ -349,13 +389,13 @@ contains
     ${s["decl"]}$, intent(in) :: array${r["array"]}$
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    call this%ug%write_temporal_${loc}$_data(var, array)
+    call this%ug%write_${loc}$_data(var, array)
     call err_ctx%restore(0)
   end subroutine
 #:endfor
 #:endfor
 #:endfor
-#:for s in num_specs
+#:for s in num_specs_no_int8
 #:for d in field_data_specs
 
   subroutine write_temporal_field_data_${s["kind"]}$_${d["suffix"]}$(this, var, array, as_vector)
@@ -365,7 +405,7 @@ contains
     logical, intent(in), optional :: as_vector
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    call this%ug%write_temporal_field_data(var, array, as_vector)
+    call this%ug%write_field_data(var, array, as_vector)
     call err_ctx%restore(0)
   end subroutine
 #:endfor

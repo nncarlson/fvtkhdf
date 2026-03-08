@@ -28,7 +28,6 @@
 & {"kind":"real32", "decl":"real(real32)",   "h5type":"H5T_NATIVE_FLOAT"}, &
 & {"kind":"real64", "decl":"real(real64)",   "h5type":"H5T_NATIVE_DOUBLE"}, &
 &]
-#:set num_specs_no_int8 = [s for s in num_specs if s["kind"] != "int8"]
 
 module vtkhdf_h5
 
@@ -54,13 +53,13 @@ module vtkhdf_h5
   end interface
 
   interface h5_create_unlimited_dataset
-#:for s in num_specs_no_int8
+#:for s in num_specs
     procedure create_unlimited_dataset_${s["kind"]}$
 #:endfor
   end interface
 
   interface h5_append_to_dataset
-#:for s in num_specs_no_int8
+#:for s in num_specs
     procedure append_to_dataset_${s["kind"]}$
 #:endfor
   end interface
@@ -249,7 +248,7 @@ contains
     rank default
       INSIST(.false.)
     end select
-    INSIST(ctx%global_any(ierr >= 0))
+    INSIST(ctx%global_all(ierr >= 0))
 
     !! Cleanup
     ierr = H5Pclose(dxpl_id)
@@ -292,10 +291,10 @@ contains
       if (size(dims) > 1) mem_dims = dims(size(dims):1:-1) ! reverse order for the C shape
     end if
 
-    ASSERT(all(mem_dims(2:) > 0))
+    INSIST(ctx%global_all(all(mem_dims(2:) > 0)))
 
     if (present(root)) then
-      ASSERT((root >= 0) .and. (root < ctx%size))
+      INSIST(ctx%global_all((root >= 0) .and. (root < ctx%size)))
       rank_writes = (root == ctx%rank)
     else
       rank_writes = .true.
@@ -347,7 +346,7 @@ contains
   !! extendable dimension. All MPI ranks must specify the same values for
   !! MOLD and CHUNK_SIZE. The dataset's initial extent in the last dimension
   !! is 0.
-#:for s in num_specs_no_int8
+#:for s in num_specs
 
   subroutine create_unlimited_dataset_${s["kind"]}$(ctx, loc_id, name, mold, chunk_size)
     type(vtkhdf_ctx), intent(in) :: ctx
@@ -379,8 +378,8 @@ contains
 
     c_dims = [0_hsize_t, dims(size(dims):1:-1)] ! first dimension is unlimited
 
-    ASSERT(all(c_dims(2:) > 0))
-    ASSERT(chunk_size > 0)
+    INSIST(ctx%global_all(all(c_dims(2:) > 0)))
+    INSIST(ctx%global_all(chunk_size > 0))
 
     maxdims = c_dims
     maxdims(1) = H5S_UNLIMITED
@@ -416,7 +415,7 @@ contains
   !! If the optional argument ROOT is present, only the specified MPI rank
   !! writes its data; the dataset is extended solely by the extent of ARRAY
   !! on ROOT. This procedure must still be called collectively.
-#:for s in num_specs_no_int8
+#:for s in num_specs
 
   subroutine append_to_dataset_${s["kind"]}$(ctx, loc_id, name, array, root)
 
@@ -500,7 +499,7 @@ contains
     INSIST(ndims > 0)
     ierr = H5Sclose(data_space_id)
 
-    ASSERT(all(mem_dims(2:) > 0))
+    INSIST(ctx%global_all(all(mem_dims(2:) > 0)))
 
     !! Ensure the data rank and fixed extents match the dataset
     INSIST(ctx%global_all(size(mem_dims) == size(data_dims)))
@@ -513,7 +512,7 @@ contains
     ierr = H5Tclose(dset_type_id)
 
     if (present(root)) then
-      ASSERT((root >= 0) .and. (root < ctx%size))
+      INSIST(ctx%global_all((root >= 0) .and. (root < ctx%size)))
       rank_writes = (root == ctx%rank)
     else
       rank_writes = .true.

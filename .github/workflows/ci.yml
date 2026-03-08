@@ -1,9 +1,12 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
 
 jobs:
   build-test:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     name: Build & Test (Ubuntu/GFortran)
     runs-on: ubuntu-latest
     container: ghcr.io/${{ github.repository }}/fvtkhdf-ci:latest

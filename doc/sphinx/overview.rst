@@ -16,14 +16,14 @@ the same high-level API.
 
 Currently supported VTKHDF dataset types:
 
-* **UnstructuredGrid (UG)**  
-  - Static mesh  
-  - Static or time-dependent point, cell, and field data
+* **UnstructuredGrid (UG)**: four writer modes
+  (``UG_STATIC``, ``UG_FIXED_MESH``, ``UG_MOVING_MESH``,
+  ``UG_DYNAMIC_MESH``) covering static, moving-mesh, and dynamic-mesh
+  workflows for point, cell, and field data.
 
-* **MultiBlockDataSet (MB)**  
-  - Static mesh  
-  - Flat collection of UnstructuredGrid blocks  
-  - Static or time-dependent point, cell, and field data per block
+* **MultiBlockDataSet (MB)**: a flat collection of UnstructuredGrid blocks
+  with per-block UG writer modes and static or temporal point, cell, and
+  field data.
 
 This library targets VTKHDF Version 2.5.
 While basic files may open in ParaView 5.10, ParaView 5.13 or newer is

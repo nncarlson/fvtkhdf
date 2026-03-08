@@ -15,5 +15,3 @@ A serial build is also available.
    mb
    vtk_cell_types
    stitching
-   examples
-

@@ -18,7 +18,7 @@ program vtkhdf_ug_test
   type(vtkhdf_point_data_handle) :: hpoint_radius, hpoint_velocity
   type(vtkhdf_field_data_handle) :: hfield_value, hfield_scalar, hfield_vector
 
-  call vizfile%create('ug_test.vtkhdf', stat, errmsg, is_temporal=.true.)
+  call vizfile%create('ug_test.vtkhdf', stat, errmsg, mode=UG_FIXED_MESH)
   if (stat /= 0) error stop errmsg
 
   call get_mesh_data(points, cnode, xcnode, types)
@@ -50,23 +50,23 @@ program vtkhdf_ug_test
 
   call vizfile%start_time_step(0.0_r8)
 
-  call vizfile%write_temporal_cell_data(hcell_radius, scalar_cell_data)
-  call vizfile%write_temporal_cell_data(hcell_velocity, vector_cell_data)
-  call vizfile%write_temporal_point_data(hpoint_radius, scalar_point_data)
-  call vizfile%write_temporal_point_data(hpoint_velocity, vector_point_data)
-  call vizfile%write_temporal_field_data(hfield_value, 42.0_r8)
-  call vizfile%write_temporal_field_data(hfield_scalar, scalar_field_data, as_vector=.true.)
-  call vizfile%write_temporal_field_data(hfield_vector, vector_field_data)
+  call vizfile%write_cell_data(hcell_radius, scalar_cell_data)
+  call vizfile%write_cell_data(hcell_velocity, vector_cell_data)
+  call vizfile%write_point_data(hpoint_radius, scalar_point_data)
+  call vizfile%write_point_data(hpoint_velocity, vector_point_data)
+  call vizfile%write_field_data(hfield_value, 42.0_r8)
+  call vizfile%write_field_data(hfield_scalar, scalar_field_data, as_vector=.true.)
+  call vizfile%write_field_data(hfield_vector, vector_field_data)
   call vizfile%finalize_time_step()
 
   !!!! Write the data for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   call vizfile%start_time_step(1.0_r8)
 
-  call vizfile%write_temporal_cell_data(hcell_radius, scalar_cell_data+1)
-  call vizfile%write_temporal_cell_data(hcell_velocity, vector_cell_data+1)
-  call vizfile%write_temporal_point_data(hpoint_radius, scalar_point_data+1)
-  call vizfile%write_temporal_field_data(hfield_scalar, [10.0_r8, 20.0_r8, 30.0_r8])
+  call vizfile%write_cell_data(hcell_radius, scalar_cell_data+1)
+  call vizfile%write_cell_data(hcell_velocity, vector_cell_data+1)
+  call vizfile%write_point_data(hpoint_radius, scalar_point_data+1)
+  call vizfile%write_field_data(hfield_scalar, [10.0_r8, 20.0_r8, 30.0_r8])
   !! Skip one temporal dataset write; offset should repeat the last written value.
   call vizfile%finalize_time_step()
 
@@ -77,9 +77,6 @@ program vtkhdf_ug_test
   call vizfile%write_cell_data('static-cell-vector', -vector_cell_data)
   call vizfile%write_point_data('static-point-scalar', -scalar_point_data)
   call vizfile%write_point_data('static-point-vector', -vector_point_data)
-  call vizfile%write_field_data('static-field-scalar', [-1.0_r8, -2.0_r8, -3.0_r8, -4.0_r8], as_vector=.true.)
-  call vizfile%write_field_data('static-field-vector', -vector_field_data)
-  call vizfile%write_field_data('static-field-value', -9.0_r8)
 
   call vizfile%close
 
