@@ -578,7 +578,14 @@ contains
       if (this%nnode > 0) then ! see 0-sized part NB above
         call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfPoints', this%nnode)
       else
+#ifdef GNU_PR123899
+        block
+          integer(int64) :: idum(0)
+          call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfPoints', idum)
+        end block
+#else
         call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfPoints', [integer(int64)::])
+#endif
       end if
       call h5_${mode}$_dataset(this%ctx, this%root_id, 'Points', points)
       this%points_offset = this%points_next_offset
