@@ -326,7 +326,7 @@ contains
 
       ! NB: Only static meshes are supported. ParaView 6.1 uses this attribute
       ! setting to signal it should use mesh caching -- read once and reuse.
-      call h5_write_attr(this%ctx, this%steps_id, 'StaticMesh', 1)
+      call h5_write_attr(this%ctx, this%steps_id, 'StaticMesh', merge(0, 1, this%allow_geometry_change))
 
       ! NB: These are no longer needed in ParaView 6.1 when StaticMesh=1, but
       ! we retain them for compatibility with earlier versions. They will be
@@ -426,7 +426,7 @@ contains
 
     if (this%is_temporal) then ! topology datasets are extendable
       if (define_datasets) then
-        associate (mold => cnode(1), chunk_size => data_chunk_size(c_sizeof(cnode(1))))
+        associate (mold => int(0,kind(cnode)), chunk_size => data_chunk_size(c_sizeof(int(0,kind(cnode)))))
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Connectivity', mold, chunk_size)
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Offsets', mold, chunk_size)
         end associate
@@ -434,7 +434,7 @@ contains
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'NumberOfConnectivityIds', mold, chunk_size)
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'NumberOfCells', mold, chunk_size)
         end associate
-        associate (mold => types(1), chunk_size => data_chunk_size(c_sizeof(types(1))))
+        associate (mold => 0_int8, chunk_size => data_chunk_size(c_sizeof(0_int8)))
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Types', mold, chunk_size)
         end associate
       end if
@@ -524,6 +524,7 @@ contains
     ${r["decl"]}$, intent(in) :: points(:,:)
 
     logical :: define_datasets
+    ${r["decl"]}$ :: point(size(points,dim=1))
 
     INSIST(this%root_id >= 0)
     INSIST(.not.this%mesh_locked)
@@ -550,7 +551,7 @@ contains
 
     if (this%is_temporal) then ! geometry datasets are extendable
       if (define_datasets) then
-        associate (mold => points(:,1), chunk_size => data_chunk_size(c_sizeof(points(:,1))))
+        associate (mold => point, chunk_size => data_chunk_size(c_sizeof(point)))
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Points', mold, chunk_size)
         end associate
         associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
