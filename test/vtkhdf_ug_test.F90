@@ -22,7 +22,7 @@ program vtkhdf_ug_test
   call MPI_Comm_size(MPI_COMM_WORLD, nproc, istat)
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, istat)
 
-  call vizfile%create('ug_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, is_temporal=.true.)
+  call vizfile%create('ug_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_STATIC_MESH)
   if (stat /= 0) error stop errmsg
 
   !! The unstructured mesh data for a basic mesh unit. The full mesh will

@@ -24,7 +24,7 @@ program vtkhdf_ug_test
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, stat)
 
   !! Create the file with support for time-dependent data (COLLECTIVE)
-  call vizfile%create('ug_demo.vtkhdf', MPI_COMM_WORLD, stat, errmsg, is_temporal=.true.)
+  call vizfile%create('ug_demo.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_STATIC_MESH)
   if (stat /= 0) error stop errmsg
 
   !! Generate unstructured mesh data for a basic mesh unit.

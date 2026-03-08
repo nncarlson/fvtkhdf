@@ -17,6 +17,12 @@ else()
   add_test(vtkhdf_ug_file_type ./vtkhdf_ug_test)
   set_tests_properties(vtkhdf_ug_file_type PROPERTIES PROCESSORS 1)
 
+  add_executable(vtkhdf_moving_ug_test vtkhdf_moving_ug_test-serial.F90)
+  target_link_libraries(vtkhdf_moving_ug_test PRIVATE fvtkhdf)
+
+  add_test(vtkhdf_moving_ug_file_type ./vtkhdf_moving_ug_test)
+  set_tests_properties(vtkhdf_moving_ug_file_type PROPERTIES PROCESSORS 1)
+
   add_executable(vtkhdf_mb_test vtkhdf_mb_test-serial.F90)
   target_link_libraries(vtkhdf_mb_test PRIVATE fvtkhdf)
 

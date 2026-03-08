@@ -46,6 +46,7 @@ module vtkhdf_mb_file_type
 
   public :: vtkhdf_version
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
+  public :: UG_STATIC, UG_STATIC_MESH, UG_MOVING_MESH, UG_DYNAMIC_MESH
 
   type, public :: vtkhdf_mb_file
     private
@@ -70,6 +71,14 @@ module vtkhdf_mb_file_type
     generic :: write_mesh => write_mesh_${r["kind"]}$_${i["kind"]}$
     procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
 #:endfor
+#:endfor
+#:for i in int_specs
+    generic :: write_mesh_topology => write_mesh_topology_${i["kind"]}$
+    procedure, private :: write_mesh_topology_${i["kind"]}$
+#:endfor
+#:for r in real_specs
+    generic :: write_mesh_geometry => write_mesh_geometry_${r["kind"]}$
+    procedure, private :: write_mesh_geometry_${r["kind"]}$
 #:endfor
     generic :: start_time_step => start_time_step_real32, start_time_step_real64
     procedure, private :: start_time_step_real32, start_time_step_real64
@@ -252,16 +261,15 @@ contains
 
   end subroutine create_impl
 
-  function add_block(this, name, is_temporal) result(handle)
+  function add_block(this, name, mode) result(handle)
 
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: name
-    logical, intent(in), optional :: is_temporal
+    integer, intent(in), optional :: mode
     type(vtkhdf_block_handle) :: handle
 
-    integer :: n, ierr
+    integer :: ierr
     type(vtkhdf_h5e_context) :: err_ctx
-    logical :: temporal_flag
     character(16) :: group_name
     character(:), allocatable :: external_name, internal_name
 
@@ -269,11 +277,12 @@ contains
 
     ! If a block is temporal, it must be added before the
     ! timeline starts to ensure step-count consistency.
-    temporal_flag = .false.
-    if (present(is_temporal)) temporal_flag = is_temporal
-    if (temporal_flag) then
-      INSIST(.not.this%start_time_step_called)
-      this%is_temporal = .true.
+    ! NB: Fragile; assumes default is UG_STATIC (non-temporal)
+    if (present(mode)) then
+      if (mode > UG_STATIC) then
+        INSIST(.not.this%start_time_step_called)
+        this%is_temporal = .true.
+      end if
     end if
 
     external_name = trim(name)
@@ -305,7 +314,7 @@ contains
     !! Initialize the UG block group and its HDF5 hierarchy.
     associate (new_block => this%blocks(this%next_block_index)%b)
       write(group_name,'(a,i0)') 'Group_', this%next_block_index
-      call new_block%init(this%vtk_id, trim(group_name), this%ctx, is_temporal)
+      call new_block%init(this%vtk_id, trim(group_name), this%ctx, mode)
       call new_block%set_block_metadata(this%next_block_index, external_name)
       handle%index = this%next_block_index
       this%next_block_index = this%next_block_index + 1
@@ -346,6 +355,44 @@ contains
   end subroutine write_mesh_${r["kind"]}$_${i["kind"]}$
 
 #:endfor
+#:endfor
+#:for i in int_specs
+
+  subroutine write_mesh_topology_${i["kind"]}$(this, blk, cnode, xcnode, types)
+
+    class(vtkhdf_mb_file), intent(inout) :: this
+    type(vtkhdf_block_handle), intent(in) :: blk
+    ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
+    integer(int8), intent(in) :: types(:)
+
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
+    call err_ctx%capture
+    call this%blocks(blk%index)%b%write_mesh_topology(cnode, xcnode, types)
+    call err_ctx%restore(0)
+
+  end subroutine write_mesh_topology_${i["kind"]}$
+
+#:endfor
+#:for r in real_specs
+
+  subroutine write_mesh_geometry_${r["kind"]}$(this, blk, points)
+
+    class(vtkhdf_mb_file), intent(inout) :: this
+    type(vtkhdf_block_handle), intent(in) :: blk
+    ${r["decl"]}$, intent(in) :: points(:,:)
+
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    INSIST(size(points,dim=1) == 3)
+    INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
+    call err_ctx%capture
+    call this%blocks(blk%index)%b%write_mesh_geometry(points)
+    call err_ctx%restore(0)
+
+  end subroutine write_mesh_geometry_${r["kind"]}$
+
 #:endfor
   !! Writes the cell/point-based data ARRAY to a new named cell/point dataset
   !! for the specified mesh block. Scalar, vector, and tensor data are
