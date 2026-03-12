@@ -9,6 +9,8 @@ subroutine vtkhdf_assert(file, line)
   character(10) :: rank_str
   integer :: ierr
 
+  rank_str = ''
+
 #ifdef USE_MPI
   block
     use mpi_f08
@@ -18,8 +20,6 @@ subroutine vtkhdf_assert(file, line)
     if (mpi_is_init) then
       call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
       write(rank_str,'(a,i0,a)') '[R', rank, '] '
-    else
-      rank_str = ''
     end if
   end block
 #endif

@@ -44,7 +44,7 @@ program vtkhdf_mb_test
   call get_liquid_mesh_data(points, cnode, xcnode, types)
 
   !! Add the liquid block and write the local mesh piece (COLLECTIVE!)
-  bliq = vizfile%add_block('liquid', is_temporal=.true.)
+  bliq = vizfile%add_block('liquid', mode=UG_FIXED_MESH)
   call vizfile%write_mesh(bliq, points, cnode, xcnode, types)
 
   !! local mesh sizes
@@ -59,7 +59,7 @@ program vtkhdf_mb_test
   !! Rank 0 must participate with its 0-sized mesh!
   !NB: A bug in the current reader requires it to be temporal.
   !bsol = vizfile%add_block('solid')
-  bsol = vizfile%add_block('solid', is_temporal=.true.)
+  bsol = vizfile%add_block('solid', mode=UG_FIXED_MESH)
   call vizfile%write_mesh(bsol, points, cnode, xcnode, types)
 
   !! local mesh sizes
@@ -84,8 +84,8 @@ program vtkhdf_mb_test
     !! Generate some arbitrary time-dependent data and write it. (COLLECTIVE!)
     pressure = cos(time) + rank
     velocity = spread([cos(time+rank),sin(time+rank),1.0_r8],dim=2,ncopies=npoints_liquid)
-    call vizfile%write_temporal_cell_data(bliq, pressure_handle, pressure)
-    call vizfile%write_temporal_point_data(bliq, velocity_handle, velocity)
+    call vizfile%write_cell_data(bliq, pressure_handle, pressure)
+    call vizfile%write_point_data(bliq, velocity_handle, velocity)
     call vizfile%finalize_time_step() ! COLLECTIVE!
   end do
 

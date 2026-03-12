@@ -6,12 +6,12 @@
 A modern Fortran library for writing **VTKHDF** format files.
 
 This library provides a high-level, object-oriented Fortran interface for
-generating **VTKHDF** files, a relatively new HDF5-based VTK file format used
-by ParaView. The library is designed for high-performance computing (HPC)
-applications, offering robust MPI-parallel output via HDF5, while also
-supporting serial workflows. By utilizing HDF5 as the underlying storage
-mechanism, **fVTKHDF** provides a more scalable alternative to older VTK
-ASCII or XML formats.
+generating **VTKHDF** files, a relatively new and evolving HDF5-based VTK
+file format used by ParaView. The library is designed for high-performance
+computing (HPC) applications, offering robust MPI-parallel output via HDF5,
+while also supporting serial workflows. By utilizing HDF5 as the underlying
+storage mechanism, **fVTKHDF** provides a more scalable alternative to older
+VTK ASCII or XML formats.
 
 * Targets version 2.5 of the [VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html).
 * ParaView 5.13+ recommended for full support of the generated files.
@@ -21,21 +21,26 @@ ASCII or XML formats.
 **fVTKHDF** currently supports the following VTK data models:
 
 * **UnstructuredGrid (UG):** For meshes with arbitrary cell types
-  (tetrahedrons, hexahedrons, etc.).
+  (tetrahedra, hexahedra, etc.).
 
-   * Supports a static mesh (fixed geometry and topology) with both
-     static and temporal data.
+  * Supports a **static** workflow and three **transient** workflows:
+    fixed, moving, and dynamic mesh.
 
-   * Supports point-centered, cell-centered, and field data.
+  * Supports point-centered, cell-centered, and field data.
 
 * **MultiBlockDataSet (MB):** Supports a flat assembly/collection of
-  UnstructuredGrid blocks (leaf nodes).
+  UnstructuredGrid blocks.
+
+  * Mixed-Mode Support: Each block can independently utilize any of the
+    UG workflows within the same file.
+
+  * All transient blocks share a common set of time steps.
+
+  * Useful for a logical decomposition of a model into distinct components
+    (e.g., piston, cylinder, valves), independent of any parallel domain
+    decomposition.
 
   * Hierarchical assembly of MultiBlock datasets is not supported.
-
-  * Ideal for a logical decomposition of a model into distinct components
-  (e.g., piston, cylinder, valves), independent of any parallel domain
-  decomposition.
 
 
 ## Documentation
@@ -46,7 +51,7 @@ See the [Reference Manual](https://nncarlson.github.io/fvtkhdf/).
 ### Prerequisites
 * Fortran 2018 Compiler (GCC 13+, Intel oneAPI, etc.)
 * CMake (3.28+)
-* HDF5 Library (1.10+)
+* HDF5 Library (1.10+) (Parallel HDF5 for MPI-enabled build)
 * Python 3 + `fypp` (`pip install fypp`)
 * MPI (Optional)
 
@@ -109,7 +114,7 @@ program quick_start
   temperature = [100.0, 200.0, 300.0, 400.0] ! Point data
 
   ! 3. Create and Write
-  call myfile%create("simple.vtkhdf", stat, errmsg)
+  call myfile%create("simple.vtkhdf", stat, errmsg, mode=UG_STATIC)
   if (stat /= 0) error stop errmsg
 
   ! Write the mesh topology (Static Mesh)
@@ -129,13 +134,10 @@ Planned and prospective features include:
 
 * Completing UnstructuredGrid (UG) feature coverage
 
-  - Add support for temporal mesh:
-    - geometry only
-    - geometry and topology
   - Add support for [polyhedron cells](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#polyhedron-support)
 
 * Composite VTK datasets
-  - Replace MB with PartitionedDataSetCollection (PDC) ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26))
+  - Replace the legacy MB with PartitionedDataSetCollection (PDC) ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26))
   - Implement a general `Assembly` tree for PDC to replace the existing flat tree.
 
 * New features added in VTKHDF version 2.6
@@ -158,6 +160,6 @@ dataset types, please open an issue to discuss design and implementation
 details.
 
 
-### License
+## License
 **fVTKHDF** is distributed under the 2-clause BSD license.
 See [LICENSE.md](./LICENSE.md) for details.

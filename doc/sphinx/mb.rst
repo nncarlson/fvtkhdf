@@ -5,11 +5,11 @@ This module defines the ``vtkhdf_mb_file`` derived type for writing
 VTKHDF MultiBlockDataSet files.
 
 A MultiBlockDataSet file contains a flat collection of named
-UnstructuredGrid blocks; hierarchical nesting of
-MultiBlockDataSet objects is not supported.
+UnstructuredGrid blocks; hierarchical nesting is not supported.
 
-Each block behaves semantically like a ``vtkhdf_ug_file`` mesh: it has
-its own static mesh and associated point, cell, and field datasets.
+Each block behaves semantically like a ``vtkhdf_ug_file`` dataset; each with
+its own selected mode, mesh and associated cell, point and field datasets.
+However, all temporal blocks share a common timeline.
 
 As in ``vtkhdf_ug_file``, partitions correspond 1:1 with MPI ranks.
 Each MPI rank contributes one VTKHDF partition for every block.
@@ -19,26 +19,21 @@ communicator passed to ``create`` and must be called in the same order
 on all ranks.
 
 Most methods of ``vtkhdf_mb_file`` correspond directly to those of
-``vtkhdf_ug_file``, but operate on an opaque ``vtkhdf_block_handle``
-returned by ``add_block``.
+``vtkhdf_ug_file``, but operate on the block identified by an opaque
+handle returned by ``add_block``.
 
+File Creation and Management
+----------------------------
 .. code-block:: fortran
 
    use vtkhdf_mb_file_type
    type(vtkhdf_mb_file) :: file
-   type(vtkhdf_block_handle) :: block
-   type(vtkhdf_cell_data_handle) :: cell_var
-   type(vtkhdf_point_data_handle) :: point_var
-   type(vtkhdf_field_data_handle) :: field_var
 
-File Creation and Management
-----------------------------
-
-``call file%create(filename, [comm,] stat, errmsg)``
+``call file%create(filename, [comm,] stat, errmsg [, data_chunk_bytes])``
    Create a new VTKHDF MultiBlockDataSet file.
 
    Arguments are identical to those of ``vtkhdf_ug_file%create``,
-   except that there is no ``is_temporal`` argument.
+   except that there is no file-level ``mode`` argument.
 
 ``call file%flush()``
    Collectively flush the file's HDF5 buffers and request the operating
@@ -49,141 +44,132 @@ File Creation and Management
    call this to "finalize" the object; automatic finalization
    cannot perform a proper collective cleanup.
 
-Block definition
+Block Definition
 ----------------
+.. code-block:: fortran
 
-``block = file%add_block(name [, is_temporal])``
+   use vtkhdf_mb_file_type
+   type(vtkhdf_mb_file) :: file
+   type(vtkhdf_block_handle) :: block
+
+``block = file%add_block(name [, mode])``
    Define a new UnstructuredGrid block and return its handle.
 
-   ``name`` is normalized and disambiguated before it is used as the block
-   name seen by the VTKHDF reader and ParaView. Input is trimmed, empty input
-   is replaced by a default name, the characters ``/``, ``.``, and space are
-   replaced by ``_``, and duplicate internal names are made unique by
-   appending a suffix.
+   ``mode`` is one of ``UG_STATIC``, ``UG_FIXED_MESH``,
+   ``UG_MOVING_MESH``, or ``UG_DYNAMIC_MESH`` and defaults to
+   ``UG_STATIC``.
 
-   The original user-facing input name is still written to the block group's
-   ``Name`` attribute for informational purposes.
+   The block name is normalized in the same way as ``vtkhdf_ug_file`` dataset
+   names. The original name is preserved as the value of the block group
+   ``Name`` attribute for user reference.
 
-   If ``is_temporal`` is present and ``.true.``, the block supports
-   time-dependent datasets. Temporal blocks must be defined before the first
-   call to ``start_time_step``. Non-temporal blocks may be defined at any time.
+   The returned ``vtkhdf_block_handle`` is opaque. Store it and reuse it for
+   later block-scoped calls.
 
-   The returned ``vtkhdf_block_handle`` is opaque. Its components are private,
-   so user code cannot inspect or construct handles directly; only store the
-   returned value and pass it to later block-scoped operations.
-
-The file is considered temporal if at least one block is temporal.
-All temporal blocks share a common timeline defined by calls to
-``start_time_step``.
+The file is temporal if at least one block uses a temporal UG mode
+(``UG_FIXED_MESH``, ``UG_MOVING_MESH``, or ``UG_DYNAMIC_MESH``). All
+temporal blocks share calls to ``start_time_step`` and ``finalize_time_step``.
 
 Mesh Data
 ---------
+.. code-block:: fortran
+
+   use vtkhdf_mb_file_type
+   type(vtkhdf_mb_file) :: file
+   type(vtkhdf_block_handle) :: block
 
 ``call file%write_mesh(block, points, cnode, xcnode, types)``
    Write the mesh geometry and topology for the block identified by ``block``.
 
-   Mesh arguments and semantics are identical to those of
-   ``vtkhdf_ug_file``. The mesh for each block must be written
-   exactly once and before writing any data for that block.
+``call file%write_mesh_topology(block, cnode, xcnode, types)``
+   Write only mesh topology for the block identified by ``block``. This is
+   mainly used with ``UG_MOVING_MESH`` or ``UG_DYNAMIC_MESH`` when geometry
+   is written separately.
 
-Static mesh-centered data
--------------------------
+``call file%write_mesh_geometry(block, points)``
+   Write only mesh geometry for the block identified by ``block``.
+
+Mesh arguments and semantics are identical to those of ``vtkhdf_ug_file``.
+The mesh for each block must be written before writing any associated
+mesh-centered data for that block.
+
+
+Cell, Point, and Field Data
+---------------------------
+Except for the added block handle, all arguments and semantics are the
+same as for ``vtkhdf_ug_file``; see its description for details omitted
+here.
+
+Within each block, cell data, point data, and field data have their
+own namespaces. Names are normalized and deduplicated exactly as in
+``vtkhdf_ug_file``.
+
+If multiple blocks contain mesh-centered datasets with the same name and
+association (cell or point), ParaView treats them as a single variable across
+the composite dataset. Selecting that variable uses the dataset from each
+block that contains it. Datasets with the same name and association should
+therefore represent the same quantity and have compatible structure (e.g.,
+same type and number of components).
+
+.. code-block:: fortran
+
+   use vtkhdf_mb_file_type
+   type(vtkhdf_mb_file) :: file
+   type(vtkhdf_block_handle) :: block
+   type(vtkhdf_cell_data_handle) :: cell_var
+   type(vtkhdf_point_data_handle) :: point_var
+   type(vtkhdf_field_data_handle) :: field_var
+
+Static Data
+~~~~~~~~~~~
+These by-name writes are allowed only where the selected ``mode`` for the
+block permits static data of that category (mesh-centered or field).
 
 .. glossary::
 
    ``call file%write_cell_data(block, name, array)``
    ``call file%write_point_data(block, name, array)``
-      Write static cell or point datasets for the block identified by
-      ``block``.
+   ``call file%write_field_data(block, name, array [, as_vector])``
+      Write ``array`` to a new cell, point, or field dataset ``name``
+      for the block identified by ``block``.
 
-      Dataset semantics are identical to those of ``vtkhdf_ug_file``.
-      ``array`` must conform to the same type and shape requirements
-      described for ``vtkhdf_ug_file``.
+Temporal Data
+~~~~~~~~~~~~~
+All temporal blocks share a common timeline created by ``start_time_step``.
 
-      Within a block, cell datasets share a ``CellData`` namespace and point
-      datasets share a ``PointData`` namespace. Input names are trimmed, empty
-      input is replaced by a default name, the characters ``/``, ``.``, and
-      space are replaced by ``_``, and duplicate internal names are made
-      unique by appending a suffix. The sanitized internal dataset name is
-      what the VTKHDF reader and ParaView use. The original user-facing name
-      is written to the dataset ``Name`` attribute for informational purposes.
-
-Static field data
------------------
-
-``call file%write_field_data(block, name, array [, as_vector])``
-   Write static field data for ``block``.
-
-   Semantics are identical to ``vtkhdf_ug_file%write_field_data``:
-   scalar, rank-1, and rank-2 arrays are supported. For rank-1 arrays,
-   ``as_vector=.true.`` marks the data as one tuple with ``n`` components;
-   otherwise rank-1 is interpreted as ``n`` tuples of one component.
-   In MPI builds, calls are collective and only rank 0 contributes the payload;
-   all ranks must still pass matching array type/rank/shape.
-
-Time-dependent mesh-centered data
----------------------------------
-
-MultiBlockDataSet files support time-dependent point and cell datasets on
-a per-block basis. A block is temporal if it was defined with
-``is_temporal = .true.`` in ``add_block``.
-
-Temporal blocks must be defined before the first call to ``start_time_step``.
-After the first time step is started, no further temporal block definitions
-or temporal dataset registrations are allowed.
+* Temporal blocks must be added before the first time step starts.
+* Temporal data registration is block-scoped, and registrations for all
+  temporal blocks must occur before the first time step starts.
+* Temporal variable handles are tied to the block for which they were
+  registered and must not be used with a different block.
 
 .. glossary::
 
-   ``cell_var = file%register_temporal_cell_data(block, name, mold)``
+   ``cell_var  = file%register_temporal_cell_data(block, name, mold)``
    ``point_var = file%register_temporal_point_data(block, name, mold)``
-      Register ``name`` as a time-dependent dataset on the block identified by
-      ``block``. Registration semantics are identical to those of
-      ``vtkhdf_ug_file``. The returned handle is opaque; user code should
-      store it and pass it to later temporal writes for the same block.
+   ``field_var = file%register_temporal_field_data(block, name, mold)``
+      Register ``name`` as a time-dependent cell, point, or field dataset
+      for the block identified by ``block``, and return an opaque handle
+      to it.
 
 ``call file%start_time_step(time)``
-   Start a new time step with time value ``time``. The timeline is shared by
-   all temporal blocks in the file. A call to ``start_time_step`` is required
-   before writing any temporal dataset in any block.
-
-   For the first time step, each temporal dataset registered on each temporal
-   block must be written once for that block.
+   Start a new shared time step with time value ``time`` for every
+   temporal block in the file.
 
 .. glossary::
 
-   ``call file%write_temporal_cell_data(block, cell_var, array)``
-   ``call file%write_temporal_point_data(block, point_var, array)``
-      Write ``array`` to the temporal dataset identified by ``cell_var`` or
-      ``point_var`` for the specified ``block``, associating it with the
-      current time step.
-      Write semantics are identical to those of ``vtkhdf_ug_file``.
-      After the first time step, writes may be skipped on later time steps; if
-      omitted, the most recently written value is used.
-
-      The data handle and block handle must match the same block registration.
+   ``call file%write_cell_data(block, cell_var, array)``
+   ``call file%write_point_data(block, point_var, array)``
+   ``call file%write_field_data(block, field_var, array [, as_vector])``
+      Write ``array`` to the temporal dataset identified by the variable
+      handle for the block identified by ``block``, associating it with
+      the current time step.
 
 ``call file%finalize_time_step()``
-   Finalize the current shared time step for all temporal blocks. Until this
-   call, the file is in an in-progress state for that step. Best practice is
-   to call ``finalize_time_step`` immediately after all temporal writes are
-   complete.
+   Finalize the current shared time step. Until this call, the file
+   is in an in-progress state for that step. Best practice is to call
+   ``finalize_time_step`` immediately after all temporal writes for
+   the step are complete.
 
-   ``finalize_time_step`` is called implicitly when ``start_time_step`` begins
-   a new step while one is still open, and when ``close`` is called.
-
-Time-dependent field data
--------------------------
-
-.. glossary::
-
-   ``field_var = file%register_temporal_field_data(block, name, mold)``
-      Register time-dependent field data for ``block``. Semantics match
-      ``vtkhdf_ug_file%register_temporal_field_data``.
-
-   ``call file%write_temporal_field_data(block, field_var, array [, as_vector])``
-      Write time-dependent field data for the current shared time step.
-      Semantics match ``vtkhdf_ug_file%write_temporal_field_data``.
-      In MPI builds, calls are collective and only rank 0 contributes the
-      payload; all ranks must still pass matching array type/rank/shape.
-
-      The data handle and block handle must match the same block registration.
+Static blocks may coexist with temporal blocks and are unaffected by
+``start_time_step``.

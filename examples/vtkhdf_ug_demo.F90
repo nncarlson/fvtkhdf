@@ -24,7 +24,7 @@ program vtkhdf_ug_test
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, stat)
 
   !! Create the file with support for time-dependent data (COLLECTIVE)
-  call vizfile%create('ug_demo.vtkhdf', MPI_COMM_WORLD, stat, errmsg, is_temporal=.true.)
+  call vizfile%create('ug_demo.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_FIXED_MESH)
   if (stat /= 0) error stop errmsg
 
   !! Generate unstructured mesh data for a basic mesh unit.
@@ -58,8 +58,8 @@ program vtkhdf_ug_test
     !! Generate some arbitrary local time-dependent data and write it (COLLECTIVE)
     pressure = cos(time) + rank
     velocity = spread([cos(time+rank),sin(time+rank),1.0_r8],dim=2,ncopies=npoints)
-    call vizfile%write_temporal_cell_data(pressure_handle, pressure)
-    call vizfile%write_temporal_point_data(velocity_handle, velocity)
+    call vizfile%write_cell_data(pressure_handle, pressure)
+    call vizfile%write_point_data(velocity_handle, velocity)
     call vizfile%finalize_time_step()
   end do
 

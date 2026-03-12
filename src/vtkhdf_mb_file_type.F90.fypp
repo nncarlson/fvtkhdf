@@ -23,11 +23,14 @@
 
 #include "vtkhdf_assert.inc"
 
-#:set int_specs  = [ {"kind":"int32",  "decl":"integer(int32)"}, &
+#:set int_specs  = [ {"kind":"int8",   "decl":"integer(int8)"}, &
+                   & {"kind":"int32",  "decl":"integer(int32)"}, &
                    & {"kind":"int64",  "decl":"integer(int64)"} ]
 #:set real_specs = [ {"kind":"real32", "decl":"real(real32)"}, &
                    & {"kind":"real64", "decl":"real(real64)"} ]
 #:set num_specs = int_specs + real_specs
+#:set int_specs_no_int8 = [s for s in int_specs if s["kind"] != "int8"]
+#:set num_specs_no_int8 = [s for s in num_specs if s["kind"] != "int8"]
 #:set locations = ["cell", "point"]
 #:set data_specs = [ {"suffix":"scalar", "mold":"", "array":"(:)"}, {"suffix":"vector", "mold":"(:)", "array":"(:,:)"} ]
 #:set field_data_specs = [ {"suffix":"value", "array":""}, {"suffix":"scalar", "array":"(:)"}, {"suffix":"vector", "array":"(:,:)"} ]
@@ -46,11 +49,13 @@ module vtkhdf_mb_file_type
 
   public :: vtkhdf_version
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
+  public :: UG_STATIC, UG_FIXED_MESH, UG_MOVING_MESH, UG_DYNAMIC_MESH
 
   type, public :: vtkhdf_mb_file
     private
     type(vtkhdf_ctx) :: ctx
     integer(hid_t) :: file_id=H5I_INVALID_HID, vtk_id=H5I_INVALID_HID, ass_id=H5I_INVALID_HID
+    integer(int64) :: data_chunk_bytes = 128_int64*1024
     integer :: next_block_index = 0
     type(block_item), allocatable :: blocks(:) ! a 0-indexed array
     logical :: is_temporal = .false., start_time_step_called = .false.
@@ -66,10 +71,18 @@ module vtkhdf_mb_file_type
     procedure :: flush
     procedure :: add_block
 #:for r in real_specs
-#:for i in int_specs
+#:for i in int_specs_no_int8
     generic :: write_mesh => write_mesh_${r["kind"]}$_${i["kind"]}$
     procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
 #:endfor
+#:endfor
+#:for i in int_specs_no_int8
+    generic :: write_mesh_topology => write_mesh_topology_${i["kind"]}$
+    procedure, private :: write_mesh_topology_${i["kind"]}$
+#:endfor
+#:for r in real_specs
+    generic :: write_mesh_geometry => write_mesh_geometry_${r["kind"]}$
+    procedure, private :: write_mesh_geometry_${r["kind"]}$
 #:endfor
     generic :: start_time_step => start_time_step_real32, start_time_step_real64
     procedure, private :: start_time_step_real32, start_time_step_real64
@@ -79,18 +92,18 @@ module vtkhdf_mb_file_type
 #:for d in data_specs
     generic :: write_${loc}$_data => write_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
     procedure, private :: write_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
+    generic :: write_${loc}$_data => write_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
+    procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
     generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
     procedure, private :: register_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
-    generic :: write_temporal_${loc}$_data => write_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
-    procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$
 #:endfor
 #:endfor
 #:endfor
-#:for s in num_specs
+#:for s in num_specs_no_int8
 #:for d in field_data_specs
     generic :: write_field_data => write_field_data_${s["kind"]}$_${d["suffix"]}$
     procedure, private :: write_field_data_${s["kind"]}$_${d["suffix"]}$
-    generic :: write_temporal_field_data => write_temporal_field_data_${s["kind"]}$_${d["suffix"]}$
+    generic :: write_field_data => write_temporal_field_data_${s["kind"]}$_${d["suffix"]}$
     procedure, private :: write_temporal_field_data_${s["kind"]}$_${d["suffix"]}$
 #:endfor
     generic :: register_temporal_field_data => register_temporal_field_data_${s["kind"]}$
@@ -162,45 +175,49 @@ contains
   end subroutine
 
 #ifdef USE_MPI
-  subroutine create_f08(this, filename, comm, stat, errmsg)
+  subroutine create_f08(this, filename, comm, stat, errmsg, data_chunk_bytes)
     use mpi_f08, only: MPI_Comm
     class(vtkhdf_mb_file), intent(out) :: this
     character(*), intent(in) :: filename
     type(MPI_Comm), intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
+    integer(int64), intent(in), optional :: data_chunk_bytes
     call this%ctx%init(comm)
-    call this%create_impl(filename, stat, errmsg)
+    call this%create_impl(filename, stat, errmsg, data_chunk_bytes)
   end subroutine create_f08
 
-  subroutine create_int(this, filename, comm, stat, errmsg)
+  subroutine create_int(this, filename, comm, stat, errmsg, data_chunk_bytes)
     use mpi_f08, only: MPI_Comm
     class(vtkhdf_mb_file), intent(out) :: this
     character(*), intent(in) :: filename
     integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
+    integer(int64), intent(in), optional :: data_chunk_bytes
     type(MPI_Comm) :: f08_comm
     f08_comm%mpi_val = comm
-    call this%create(filename, f08_comm, stat, errmsg)
+    call this%create(filename, f08_comm, stat, errmsg, data_chunk_bytes)
   end subroutine create_int
 #else
-  subroutine create(this, filename, stat, errmsg)
+  subroutine create(this, filename, stat, errmsg, data_chunk_bytes)
     class(vtkhdf_mb_file), intent(out) :: this
     character(*), intent(in) :: filename
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
+    integer(int64), intent(in), optional :: data_chunk_bytes
     call this%ctx%init()
-    call this%create_impl(filename, stat, errmsg)
+    call this%create_impl(filename, stat, errmsg, data_chunk_bytes)
   end subroutine create
 #endif
 
-  subroutine create_impl(this, filename, stat, errmsg)
+  subroutine create_impl(this, filename, stat, errmsg, data_chunk_bytes)
 
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: filename
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
+    integer(int64), intent(in), optional :: data_chunk_bytes
 
     integer(hid_t) :: fapl, gcpl
     integer(c_int) :: flag
@@ -209,6 +226,10 @@ contains
 
     call init_hdf5
     call err_ctx%capture
+
+    this%data_chunk_bytes = 128_int64*1024
+    if (present(data_chunk_bytes)) this%data_chunk_bytes = data_chunk_bytes
+    INSIST(this%data_chunk_bytes > 0)
 
     !! Open the file (read/write), overwrite any existing file
     call this%ctx%get_fapl(fapl) ! configures for parallel I/O in MPI build
@@ -252,16 +273,15 @@ contains
 
   end subroutine create_impl
 
-  function add_block(this, name, is_temporal) result(handle)
+  function add_block(this, name, mode) result(handle)
 
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: name
-    logical, intent(in), optional :: is_temporal
+    integer, intent(in), optional :: mode
     type(vtkhdf_block_handle) :: handle
 
-    integer :: n, ierr
+    integer :: ierr
     type(vtkhdf_h5e_context) :: err_ctx
-    logical :: temporal_flag
     character(16) :: group_name
     character(:), allocatable :: external_name, internal_name
 
@@ -269,11 +289,12 @@ contains
 
     ! If a block is temporal, it must be added before the
     ! timeline starts to ensure step-count consistency.
-    temporal_flag = .false.
-    if (present(is_temporal)) temporal_flag = is_temporal
-    if (temporal_flag) then
-      INSIST(.not.this%start_time_step_called)
-      this%is_temporal = .true.
+    ! NB: Fragile; assumes default is UG_STATIC (non-temporal)
+    if (present(mode)) then
+      if (mode > UG_STATIC) then
+        INSIST(.not.this%start_time_step_called)
+        this%is_temporal = .true.
+      end if
     end if
 
     external_name = trim(name)
@@ -305,14 +326,14 @@ contains
     !! Initialize the UG block group and its HDF5 hierarchy.
     associate (new_block => this%blocks(this%next_block_index)%b)
       write(group_name,'(a,i0)') 'Group_', this%next_block_index
-      call new_block%init(this%vtk_id, trim(group_name), this%ctx, is_temporal)
+      call new_block%init(this%vtk_id, trim(group_name), this%ctx, mode, this%data_chunk_bytes)
       call new_block%set_block_metadata(this%next_block_index, external_name)
       handle%index = this%next_block_index
       this%next_block_index = this%next_block_index + 1
     end associate
 
     !! Create a soft link in Assembly group to the block group.
-    ierr = H5Lcreate_soft('/VTKHDF/' // group_name, this%ass_id, internal_name)
+    ierr = H5Lcreate_soft('/VTKHDF/' // trim(group_name), this%ass_id, internal_name)
     INSIST(this%ctx%global_all(ierr >= 0))
 
     call err_ctx%restore(0)
@@ -325,7 +346,7 @@ contains
   !! This procedure must be called for each of the blocks before any of the
   !! following procedures.
 #:for r in real_specs
-#:for i in int_specs
+#:for i in int_specs_no_int8
 
   subroutine write_mesh_${r["kind"]}$_${i["kind"]}$(this, blk, points, cnode, xcnode, types)
 
@@ -346,6 +367,44 @@ contains
   end subroutine write_mesh_${r["kind"]}$_${i["kind"]}$
 
 #:endfor
+#:endfor
+#:for i in int_specs_no_int8
+
+  subroutine write_mesh_topology_${i["kind"]}$(this, blk, cnode, xcnode, types)
+
+    class(vtkhdf_mb_file), intent(inout) :: this
+    type(vtkhdf_block_handle), intent(in) :: blk
+    ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
+    integer(int8), intent(in) :: types(:)
+
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
+    call err_ctx%capture
+    call this%blocks(blk%index)%b%write_mesh_topology(cnode, xcnode, types)
+    call err_ctx%restore(0)
+
+  end subroutine write_mesh_topology_${i["kind"]}$
+
+#:endfor
+#:for r in real_specs
+
+  subroutine write_mesh_geometry_${r["kind"]}$(this, blk, points)
+
+    class(vtkhdf_mb_file), intent(inout) :: this
+    type(vtkhdf_block_handle), intent(in) :: blk
+    ${r["decl"]}$, intent(in) :: points(:,:)
+
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    INSIST(size(points,dim=1) == 3)
+    INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
+    call err_ctx%capture
+    call this%blocks(blk%index)%b%write_mesh_geometry(points)
+    call err_ctx%restore(0)
+
+  end subroutine write_mesh_geometry_${r["kind"]}$
+
 #:endfor
   !! Writes the cell/point-based data ARRAY to a new named cell/point dataset
   !! for the specified mesh block. Scalar, vector, and tensor data are
@@ -369,7 +428,7 @@ contains
 #:endfor
 #:endfor
 #:endfor
-#:for s in num_specs
+#:for s in num_specs_no_int8
 #:for d in field_data_specs
 
   subroutine write_field_data_${s["kind"]}$_${d["suffix"]}$(this, blk, name, array, as_vector)
@@ -424,7 +483,7 @@ contains
 #:endfor
 #:endfor
 #:endfor
-#:for s in num_specs
+#:for s in num_specs_no_int8
 
   function register_temporal_field_data_${s["kind"]}$(this, blk, name, mold) result(handle)
     class(vtkhdf_mb_file), intent(inout) :: this
@@ -500,13 +559,13 @@ contains
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     INSIST(get_block_index(var) == blk%index)
     call err_ctx%capture
-    call this%blocks(blk%index)%b%write_temporal_${loc}$_data(var, array)
+    call this%blocks(blk%index)%b%write_${loc}$_data(var, array)
     call err_ctx%restore(0)
   end subroutine
 #:endfor
 #:endfor
 #:endfor
-#:for s in num_specs
+#:for s in num_specs_no_int8
 #:for d in field_data_specs
 
   subroutine write_temporal_field_data_${s["kind"]}$_${d["suffix"]}$(this, blk, var, array, as_vector)
@@ -519,7 +578,7 @@ contains
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     INSIST(get_block_index(var) == blk%index)
     call err_ctx%capture
-    call this%blocks(blk%index)%b%write_temporal_field_data(var, array, as_vector)
+    call this%blocks(blk%index)%b%write_field_data(var, array, as_vector)
     call err_ctx%restore(0)
   end subroutine
 #:endfor

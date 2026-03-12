@@ -20,11 +20,14 @@
 
 #include "vtkhdf_assert.inc"
 
-#:set int_specs  = [ {"kind":"int32",  "decl":"integer(int32)"}, &
+#:set int_specs  = [ {"kind":"int8",   "decl":"integer(int8)"}, &
+                   & {"kind":"int32",  "decl":"integer(int32)"}, &
                    & {"kind":"int64",  "decl":"integer(int64)"} ]
 #:set real_specs = [ {"kind":"real32", "decl":"real(real32)"}, &
                    & {"kind":"real64", "decl":"real(real64)"} ]
 #:set num_specs = int_specs + real_specs
+#:set int_specs_no_int8 = [s for s in int_specs if s["kind"] != "int8"]
+#:set num_specs_no_int8 = [s for s in num_specs if s["kind"] != "int8"]
 #:set locations = ["cell", "point"]
 
 module vtkhdf_ug_type
@@ -39,6 +42,12 @@ module vtkhdf_ug_type
   private
 
   public :: set_block_index, get_block_index
+
+  !! UnstructuredGrid dataset modes
+  integer, parameter, public :: UG_STATIC       = 0
+  integer, parameter, public :: UG_FIXED_MESH   = 1
+  integer, parameter, public :: UG_MOVING_MESH  = 2
+  integer, parameter, public :: UG_DYNAMIC_MESH = 3
 
   !! NB: BLOCK_INDEX is only interpreted by the multiblock front-end.
   !! Carrying that metadata in these shared handles is not ideal from a
@@ -67,14 +76,22 @@ module vtkhdf_ug_type
     type(vtkhdf_ctx) :: ctx ! unowned copy
     integer(hid_t) :: root_id=H5I_INVALID_HID
     integer(hid_t) :: cgrp_id=H5I_INVALID_HID, pgrp_id=H5I_INVALID_HID, fgrp_id=H5I_INVALID_HID
-    integer(int64) :: nnode, ncell, nnode_tot, ncell_tot
-    integer :: npart
-    logical :: is_temporal = .false.
+    integer(int64) :: data_chunk_bytes = 128_int64*1024
+    integer(int64) :: nnode = 0, ncell = 0, nnode_tot = 0, ncell_tot = 0, maxval_cnode = 0
+    integer :: npart = 1
+    logical :: is_temporal = .false., allow_geometry_change = .false., allow_topology_change = .false.
+    logical :: allow_static_point_cell_data = .true., allow_static_field_data = .true.
     integer :: nsteps = -1
-    logical :: step_open = .false.
+    logical :: step_open = .false., mesh_locked = .false.
     integer(hid_t) :: steps_id=H5I_INVALID_HID
     integer(hid_t) :: cogrp_id=H5I_INVALID_HID, pogrp_id=H5I_INVALID_HID
     integer(hid_t) :: fogrp_id=H5I_INVALID_HID, fsgrp_id=H5I_INVALID_HID
+    logical :: geometry_written_this_step = .false., geometry_defined = .false.
+    logical :: topology_written_this_step = .false., topology_defined = .false.
+    integer(int64) :: point_offset = 0, points_next_offset = 0
+    integer(int64) :: conn_offset = 0, conn_next_offset = 0
+    integer(int64) :: cell_offset = 0, cells_next_offset = 0
+    integer(int64) :: part_offset = 0, part_next_offset = 0
     type(data_var_item), allocatable :: cell_vars(:)
     type(data_var_item), allocatable :: point_vars(:)
     type(data_var_item), allocatable :: field_vars(:)
@@ -88,10 +105,18 @@ module vtkhdf_ug_type
     procedure, private :: unique_point_data_name
     procedure, private :: unique_field_data_name
 #:for r in real_specs
-#:for i in int_specs
+#:for i in int_specs_no_int8
     generic :: write_mesh => write_mesh_${r["kind"]}$_${i["kind"]}$
     procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
 #:endfor
+#:endfor
+#:for i in int_specs_no_int8
+    generic :: write_mesh_topology => write_mesh_topology_${i["kind"]}$
+    procedure, private :: write_mesh_topology_${i["kind"]}$
+#:endfor
+#:for r in real_specs
+    generic :: write_mesh_geometry => write_mesh_geometry_${r["kind"]}$
+    procedure, private :: write_mesh_geometry_${r["kind"]}$
 #:endfor
     procedure :: start_time_step
     procedure :: finalize_time_step
@@ -102,19 +127,19 @@ module vtkhdf_ug_type
 #:for loc in locations
     generic :: write_${loc}$_data => write_${loc}$_data_${s["kind"]}$
     procedure, private :: write_${loc}$_data_${s["kind"]}$
+    generic :: write_${loc}$_data => write_temporal_${loc}$_data_${s["kind"]}$
+    procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$
     generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${s["kind"]}$
     procedure, private :: register_temporal_${loc}$_data_${s["kind"]}$
-    generic :: write_temporal_${loc}$_data => write_temporal_${loc}$_data_${s["kind"]}$
-    procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$
 #:endfor
 #:endfor
-#:for s in num_specs
+#:for s in num_specs_no_int8
     generic :: write_field_data => write_field_data_${s["kind"]}$
     procedure, private :: write_field_data_${s["kind"]}$
+    generic :: write_field_data => write_temporal_field_data_${s["kind"]}$
+    procedure, private :: write_temporal_field_data_${s["kind"]}$
     generic :: register_temporal_field_data => register_temporal_field_data_${s["kind"]}$
     procedure, private :: register_temporal_field_data_${s["kind"]}$
-    generic :: write_temporal_field_data => write_temporal_field_data_${s["kind"]}$
-    procedure, private :: write_temporal_field_data_${s["kind"]}$
 #:endfor
     final :: vtkhdf_ug_delete
   end type
@@ -124,6 +149,7 @@ module vtkhdf_ug_type
     logical :: is_temporal = .false.
     integer(int64) :: offset = 0
     integer(int64) :: next_offset = 0
+    integer(int64) :: last_entity_count = 0
     integer(int32) :: ncomp = 1
     integer(int32) :: tuples = 0
     logical :: wrote_this_step = .false.
@@ -141,7 +167,6 @@ module vtkhdf_ug_type
     module procedure get_field_block_index
   end interface
 
-  integer(int64), parameter :: DATA_CHUNK_BYTES = 8*1024*1024
   integer(int64), parameter :: STEPS_CHUNK_SIZE = 512
 
 contains
@@ -238,7 +263,7 @@ contains
   !! supporting time-dependent data, specify the optional argument
   !! TEMPORAL to true; otherwise a static group is created by default.
 
-  subroutine init(this, loc_id, name, ctx, temporal)
+  subroutine init(this, loc_id, name, ctx, mode, data_chunk_bytes)
 
     use vtkhdf_version_param
 
@@ -246,9 +271,24 @@ contains
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     type(vtkhdf_ctx), intent(in) :: ctx
-    logical, intent(in), optional :: temporal
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
 
-    integer :: ierr
+    integer :: mode_
+
+    mode_ = UG_STATIC
+    if (present(mode)) mode_ = mode
+    INSIST(UG_STATIC <= mode_ .and. mode_ <= UG_DYNAMIC_MESH)
+
+    this%data_chunk_bytes = 128_int64*1024
+    if (present(data_chunk_bytes)) this%data_chunk_bytes = data_chunk_bytes
+    INSIST(this%data_chunk_bytes > 0)
+
+    this%is_temporal = (mode_ > UG_STATIC)
+    this%allow_geometry_change = (mode_ >= UG_MOVING_MESH)
+    this%allow_topology_change = (mode_ >= UG_DYNAMIC_MESH)
+    this%allow_static_point_cell_data = (mode_ <= UG_FIXED_MESH)
+    this%allow_static_field_data = .not.this%is_temporal
 
     this%ctx = ctx
 
@@ -269,7 +309,6 @@ contains
     this%fgrp_id = H5Gcreate(this%root_id, 'FieldData')
     INSIST(this%ctx%global_all(this%fgrp_id >= 0))
 
-    if (present(temporal)) this%is_temporal = temporal
     if (this%is_temporal) then
       this%steps_id = H5Gcreate(this%root_id, 'Steps')
       INSIST(this%ctx%global_all(this%steps_id >= 0))
@@ -295,7 +334,7 @@ contains
 
       ! NB: Only static meshes are supported. ParaView 6.1 uses this attribute
       ! setting to signal it should use mesh caching -- read once and reuse.
-      call h5_write_attr(this%ctx, this%steps_id, 'StaticMesh', 1)
+      call h5_write_attr(this%ctx, this%steps_id, 'StaticMesh', merge(0, 1, this%allow_geometry_change))
 
       ! NB: These are no longer needed in ParaView 6.1 when StaticMesh=1, but
       ! we retain them for compatibility with earlier versions. They will be
@@ -334,7 +373,7 @@ contains
   !! normally would. Other datasets like Connectivity already contribute
   !! nothing for empty parts.
 #:for r in real_specs
-#:for i in int_specs
+#:for i in int_specs_no_int8
 
   subroutine write_mesh_${r["kind"]}$_${i["kind"]}$(this, points, cnode, xcnode, types)
 
@@ -343,74 +382,221 @@ contains
     ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
 
-    integer :: ierr
+    INSIST(this%root_id >= 0)
+    call this%write_mesh_geometry(points)
+    call this%write_mesh_topology(cnode, xcnode, types)
+
+  end subroutine
+
+#:endfor
+#:endfor
+#:for i in int_specs_no_int8
+
+  subroutine write_mesh_topology_${i["kind"]}$(this, cnode, xcnode, types)
+
+    class(vtkhdf_ug), intent(inout) :: this
+    ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
+    integer(int8), intent(in) :: types(:)
+
     integer(int64) :: idum(0)
+    logical :: define_datasets
 
     INSIST(this%root_id >= 0)
+    INSIST(.not.this%mesh_locked)
 
-    INSIST(size(points,dim=1) == 3)
-    this%nnode = size(points, dim=2, kind=int64)
+    if (this%ncell_tot > 0) then ! topology was previously written
+      INSIST(this%allow_topology_change)  ! it is allowed to change
+      INSIST(.not.this%topology_written_this_step) ! but at most once per step
+    end if
+
     this%ncell = size(types, kind=int64)
 
     INSIST(size(xcnode, kind=int64) == this%ncell+1)
     INSIST(size(cnode, kind=int64) == xcnode(this%ncell+1)-1)
     INSIST(minval(cnode) >= 1)
-    INSIST(maxval(cnode) <= this%nnode)
 
-    call this%ctx%global_sum(this%nnode, this%nnode_tot)
+    this%maxval_cnode = maxval(cnode) ! for later sanity checking against this%nnode
+
+    define_datasets = (this%ncell_tot <= 0)
     call this%ctx%global_sum(this%ncell, this%ncell_tot)
-    call this%ctx%global_sum(merge(1, 0, this%ncell>0), this%npart) ! see NB above
+    INSIST(this%ncell_tot > 0)
 
-    if (this%ncell > 0) then ! see NB above
-      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfPoints', this%nnode)
+    !this%npart = this%ctx%size ! see 0-sized part NB above
+    call this%ctx%global_sum(merge(1, 0, this%ncell>0), this%npart)
+    this%part_offset = this%part_next_offset
+    this%part_next_offset = this%part_offset + this%npart
+
+    if (this%is_temporal) then ! topology datasets are extendable
+      if (define_datasets) then
+        associate (mold => int(0,kind(cnode)), chunk_size => data_chunk_size(this, c_sizeof(int(0,kind(cnode)))))
+          call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Connectivity', mold, chunk_size)
+          call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Offsets', mold, chunk_size)
+        end associate
+        associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
+          call h5_create_unlimited_dataset(this%ctx, this%root_id, 'NumberOfConnectivityIds', mold, chunk_size)
+          call h5_create_unlimited_dataset(this%ctx, this%root_id, 'NumberOfCells', mold, chunk_size)
+        end associate
+        associate (mold => 0_int8, chunk_size => data_chunk_size(this, c_sizeof(0_int8)))
+          call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Types', mold, chunk_size)
+        end associate
+      end if
+      call append_to_datasets
     else
-      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfPoints', idum)
+      call write_datasets
     end if
 
-    if (this%ncell > 0) then ! see NB above
-      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfCells',  this%ncell)
-    else
-      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfCells',  idum)
+    this%topology_written_this_step = .true.
+    this%topology_defined = .true.
+
+    if (this%geometry_written_this_step) then ! mesh is known complete; check structural validity
+      INSIST(this%ctx%global_all(this%maxval_cnode <= this%nnode))
+      INSIST(this%ctx%global_all((this%ncell == 0) .eqv. (this%nnode == 0))) ! see 0-sized part NB
+    else if (this%geometry_defined) then ! invalidate an incompatible pre-existing geometry
+      this%geometry_defined = this%ctx%global_all(this%maxval_cnode <= this%nnode) .and. &
+          this%ctx%global_all((this%ncell == 0) .eqv. (this%nnode == 0)) ! see 0-sized part NB
     end if
 
-    if (this%ncell > 0) then ! see NB above
-      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfConnectivityIds', size(cnode, kind=int64))
-    else
-      call h5_write_dataset(this%ctx, this%root_id, 'NumberOfConnectivityIds', idum)
-    end if
+  contains
 
-    if (this%ncell > 0) then ! see NB above
-      call h5_write_dataset(this%ctx, this%root_id, 'Offsets', xcnode-1) ! offsets instead of starting indices
-    else
+#:for mode in ["write", "append_to"]
+    subroutine ${mode}$_datasets
+
+      integer(int64) :: n, idum(0)
+
+      if (this%ncell > 0) then ! see 0-sized part NB above
+        call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfCells',  this%ncell)
+      else
+        call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfCells',  idum)
+      end if
+
+      this%cell_offset = this%cells_next_offset
+      this%cells_next_offset = this%cell_offset + this%ncell_tot
+
+      call h5_${mode}$_dataset(this%ctx, this%root_id, 'Types', types)
+
+      if (this%ncell > 0) then ! see 0-sized part NB above
+        call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfConnectivityIds', size(cnode, kind=int64))
+      else
+        call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfConnectivityIds', idum)
+      end if
+
 #ifdef GNU_PR123899
-      block
-        ${i["decl"]}$ :: idum(0)
-        call h5_write_dataset(this%ctx, this%root_id, 'Offsets', idum)
-      end block
+      if (this%ncell > 0) then
+        call h5_${mode}$_dataset(this%ctx, this%root_id, 'Connectivity', cnode-1)  ! 0-based indexing
+      else
+        block
+          ${i["decl"]}$ :: idum(0)
+          call h5_${mode}$_dataset(this%ctx, this%root_id, 'Connectivity', idum)
+        end block
+      endif
 #else
-      call h5_write_dataset(this%ctx, this%root_id, 'Offsets', [${i["decl"]}$::])
+      call h5_${mode}$_dataset(this%ctx, this%root_id, 'Connectivity', cnode-1)  ! 0-based indexing
 #endif
-    end if
 
+      call this%ctx%global_sum(size(cnode, kind=int64), n)
+      this%conn_offset = this%conn_next_offset
+      this%conn_next_offset = this%conn_offset + n
+
+      if (this%ncell > 0) then ! see 0-sized part NB above
+        call h5_${mode}$_dataset(this%ctx, this%root_id, 'Offsets', xcnode-1) ! offsets instead of starting indices
+      else
 #ifdef GNU_PR123899
-    if (this%ncell > 0) then
-      call h5_write_dataset(this%ctx, this%root_id, 'Connectivity', cnode-1)  ! 0-based indexing
-    else
-      block
-        ${i["decl"]}$ :: idum(0)
-        call h5_write_dataset(this%ctx, this%root_id, 'Connectivity', idum)
-      end block
-    endif
+        block
+          ${i["decl"]}$ :: idum(0)
+          call h5_${mode}$_dataset(this%ctx, this%root_id, 'Offsets', idum)
+        end block
 #else
-    call h5_write_dataset(this%ctx, this%root_id, 'Connectivity', cnode-1)  ! 0-based indexing
+        call h5_${mode}$_dataset(this%ctx, this%root_id, 'Offsets', [${i["decl"]}$::])
 #endif
+      end if
 
-    call h5_write_dataset(this%ctx, this%root_id, 'Types', types)
-    call h5_write_dataset(this%ctx, this%root_id, 'Points', points)
-
-  end subroutine write_mesh_${r["kind"]}$_${i["kind"]}$
+    end subroutine ${mode}$_datasets
 
 #:endfor
+  end subroutine write_mesh_topology_${i["kind"]}$
+
+#:endfor
+#:for r in real_specs
+
+  subroutine write_mesh_geometry_${r["kind"]}$(this, points)
+
+    class(vtkhdf_ug), intent(inout) :: this
+    ${r["decl"]}$, intent(in) :: points(:,:)
+
+    logical :: define_datasets
+    ${r["decl"]}$ :: point(size(points,dim=1))
+
+    INSIST(this%root_id >= 0)
+    INSIST(.not.this%mesh_locked)
+
+    if (this%nnode_tot > 0) then ! geometry was previously written
+      INSIST(this%allow_geometry_change)  ! it is allowed to change
+      INSIST(.not.this%geometry_written_this_step) ! but at most once per step
+    end if
+
+    INSIST(size(points,dim=1) == 3)
+
+    if (this%geometry_defined) then ! there is a pre-existing geometry
+      if (this%ctx%global_any(this%nnode /= size(points,dim=2, kind=int64))) then
+        INSIST(this%allow_topology_change) ! changing number of points requires changing topology
+        if (.not.this%topology_written_this_step) &
+            this%topology_defined = .false. ! invalidate a pre-existing topology
+      end if
+    end if
+
+    this%nnode = size(points, dim=2, kind=int64)
+    define_datasets = (this%nnode_tot <= 0)
+    call this%ctx%global_sum(this%nnode, this%nnode_tot)
+    INSIST(this%nnode_tot > 0)
+
+    if (this%is_temporal) then ! geometry datasets are extendable
+      if (define_datasets) then
+        associate (mold => point, chunk_size => data_chunk_size(this, c_sizeof(point)))
+          call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Points', mold, chunk_size)
+        end associate
+        associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
+          call h5_create_unlimited_dataset(this%ctx, this%root_id, 'NumberOfPoints', mold, chunk_size)
+        end associate
+      end if
+      call append_to_datasets
+    else
+      call write_datasets
+    end if
+
+    this%geometry_written_this_step = .true.
+    this%geometry_defined = .true.
+
+    if (this%topology_written_this_step) then ! mesh is known complete; check structural validity
+      INSIST(this%ctx%global_all(this%maxval_cnode <= this%nnode))
+      INSIST(this%ctx%global_all((this%ncell == 0) .eqv. (this%nnode == 0))) ! see 0-sized part NB
+    else if (this%topology_defined) then ! invalidate an incompatible pre-existing topology
+      this%topology_defined = this%ctx%global_all(this%maxval_cnode <= this%nnode) .and. &
+          this%ctx%global_all((this%ncell == 0) .eqv. (this%nnode == 0)) ! see 0-sized part NB
+    end if
+
+  contains
+
+#:for mode in ["write", "append_to"]
+    subroutine ${mode}$_datasets
+      if (this%nnode > 0) then ! see 0-sized part NB above
+        call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfPoints', this%nnode)
+      else
+#ifdef GNU_PR123899
+        block
+          integer(int64) :: idum(0)
+          call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfPoints', idum)
+        end block
+#else
+        call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfPoints', [integer(int64)::])
+#endif
+      end if
+      call h5_${mode}$_dataset(this%ctx, this%root_id, 'Points', points)
+      this%point_offset = this%points_next_offset
+      this%points_next_offset = this%point_offset + this%nnode_tot
+    end subroutine
+#:endfor
+  end subroutine write_mesh_geometry_${r["kind"]}$
+
 #:endfor
   !! Writes the cell data ARRAY to a new CellData group dataset NAME. In the
   !! case of a temporal file supporting time-dependent datasets, this dataset
@@ -426,6 +612,9 @@ contains
     integer, allocatable :: dims(:)
     integer :: var_index
     character(:), allocatable :: external_name, internal_name
+    INSIST(this%allow_static_point_cell_data)
+    INSIST(this%geometry_defined)
+    INSIST(this%topology_defined)
     dims = shape(array)
     INSIST(this%ctx%global_all(dims(size(dims)) == this%ncell))
     call this%reserve_cell_data_name(name, external_name, internal_name, var_index)
@@ -448,6 +637,9 @@ contains
     integer, allocatable :: dims(:)
     integer :: var_index
     character(:), allocatable :: external_name, internal_name
+    INSIST(this%allow_static_point_cell_data)
+    INSIST(this%geometry_defined)
+    INSIST(this%topology_defined)
     dims = shape(array)
     INSIST(this%ctx%global_all(dims(size(dims)) == this%nnode))
     call this%reserve_point_data_name(name, external_name, internal_name, var_index)
@@ -459,7 +651,7 @@ contains
   !! Writes the field data ARRAY to a new FieldData group dataset NAME. In the
   !! case of a temporal file supporting time-dependent datasets, this dataset
   !! is static and not associated with any time step.
-#:for s in num_specs
+#:for s in num_specs_no_int8
 
   subroutine write_field_data_${s["kind"]}$(this, name, array, as_vector)
     class(vtkhdf_ug), intent(inout) :: this
@@ -470,6 +662,7 @@ contains
     integer :: var_index
     logical :: as_vector_
     character(:), allocatable :: external_name, internal_name
+    INSIST(this%allow_static_field_data)
     as_vector_ = .false.
     if (present(as_vector)) as_vector_ = as_vector
     dims = shape(array)
@@ -526,7 +719,7 @@ contains
     call this%reserve_cell_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
 
     !! Dataset for the cell data
-    associate (chunk_size => data_chunk_size(c_sizeof(mold)))
+    associate (chunk_size => data_chunk_size(this, c_sizeof(mold)))
       call h5_create_unlimited_dataset(this%ctx, this%cgrp_id, internal_name, mold, chunk_size)
     end associate
     call write_data_name_attr(this%ctx, this%cgrp_id, internal_name, external_name)
@@ -571,7 +764,7 @@ contains
     call this%reserve_point_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
 
     !! Dataset for the point data
-    associate (chunk_size => data_chunk_size(c_sizeof(mold)))
+    associate (chunk_size => data_chunk_size(this, c_sizeof(mold)))
       call h5_create_unlimited_dataset(this%ctx, this%pgrp_id, internal_name, mold, chunk_size)
     end associate
     call write_data_name_attr(this%ctx, this%pgrp_id, internal_name, external_name)
@@ -589,7 +782,7 @@ contains
   !! Register NAME as a time-dependent FieldData group dataset. This writes no
   !! data, but configures a new extendable HDF5 dataset and step metadata
   !! datasets for future writing.
-#:for s in num_specs
+#:for s in num_specs_no_int8
 
   function register_temporal_field_data_${s["kind"]}$(this, name, mold) result(handle)
 
@@ -607,7 +800,7 @@ contains
     call this%reserve_field_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
 
     !! Flattened temporal field data stream and per-step metadata
-    associate (chunk_size_data => data_chunk_size(c_sizeof(mold)))
+    associate (chunk_size_data => data_chunk_size(this, c_sizeof(mold)))
       call h5_create_unlimited_dataset(this%ctx, this%fgrp_id, internal_name, mold, chunk_size_data)
     end associate
     associate (chunk_size => STEPS_CHUNK_SIZE)
@@ -637,17 +830,16 @@ contains
 
     call h5_append_to_dataset(this%ctx, this%steps_id, 'Values', time, root=0)
 
-    !! A single mesh is used for all time steps so there are no offsets
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'PointOffsets', 0_int64, root=0)
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'CellOffsets', 0_int64, root=0)
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'ConnectivityIdOffsets', 0_int64, root=0)
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'NumberOfParts', this%npart, root=0)
-    call h5_append_to_dataset(this%ctx, this%steps_id, 'PartOffsets', 0_int64, root=0)
+    if (this%nsteps > 1) then
+      this%geometry_written_this_step = .false.
+      this%topology_written_this_step = .false.
+    end if
 
     call reset_data_step_flags(this%point_vars)
     call reset_data_step_flags(this%cell_vars)
     call reset_data_step_flags(this%field_vars)
     this%step_open = .true.
+    this%mesh_locked = .false. ! release barrier for changing the mesh
 
   end subroutine start_time_step
 
@@ -655,14 +847,40 @@ contains
 
     class(vtkhdf_ug), intent(inout) :: this
 
+    integer :: j
+
     INSIST(this%nsteps > 0)
     INSIST(this%step_open)
+
+    INSIST(this%geometry_defined .and. this%topology_defined)
+
+    if (allocated(this%cell_vars)) then
+      do j = 1, size(this%cell_vars)
+        if (this%cell_vars(j)%wrote_this_step) cycle
+        INSIST(this%ctx%global_all(this%cell_vars(j)%last_entity_count == this%ncell))
+      end do
+    end if
+
+    if (allocated(this%point_vars)) then
+      do j = 1, size(this%point_vars)
+        if (this%point_vars(j)%wrote_this_step) cycle
+        INSIST(this%ctx%global_all(this%point_vars(j)%last_entity_count == this%nnode))
+      end do
+    end if
+
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'PointOffsets', this%point_offset, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'CellOffsets', this%cell_offset, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'ConnectivityIdOffsets', this%conn_offset, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'NumberOfParts', this%npart, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'PartOffsets', this%part_offset, root=0)
 
     !! Cell and point data offsets for each temporal dataset for this timestep
     call append_data_offsets(this%ctx, this%pogrp_id, this%point_vars)
     call append_data_offsets(this%ctx, this%cogrp_id, this%cell_vars)
     call append_field_data_metadata(this%ctx, this%fogrp_id, this%fsgrp_id, this%field_vars)
     this%step_open = .false.
+
+    INSIST(this%geometry_defined .and. this%topology_defined)
 
   end subroutine finalize_time_step
 
@@ -683,6 +901,8 @@ contains
 
     INSIST(this%nsteps > 0)
     INSIST(this%step_open)
+    INSIST(this%geometry_defined)
+    INSIST(this%topology_defined)
 
     dims = shape(array)
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
@@ -695,7 +915,10 @@ contains
     this%cell_vars(var%index)%offset = this%cell_vars(var%index)%next_offset
     call h5_append_to_dataset(this%ctx, this%cgrp_id, this%cell_vars(var%index)%dataset_name, array)
     this%cell_vars(var%index)%next_offset = this%cell_vars(var%index)%next_offset + this%ncell_tot
+    this%cell_vars(var%index)%last_entity_count = this%ncell
     this%cell_vars(var%index)%wrote_this_step = .true. ! dataset has been written for this step
+
+    this%mesh_locked = .true. ! set barrier for changing the mesh
 
   end subroutine write_temporal_cell_data_${s["kind"]}$
 #:endfor
@@ -717,6 +940,8 @@ contains
 
     INSIST(this%nsteps > 0)
     INSIST(this%step_open)
+    INSIST(this%geometry_defined)
+    INSIST(this%topology_defined)
 
     dims = shape(array)
     INSIST(size(dims) >= 1 .and. size(dims) <= 3)
@@ -729,12 +954,15 @@ contains
     this%point_vars(var%index)%offset = this%point_vars(var%index)%next_offset
     call h5_append_to_dataset(this%ctx, this%pgrp_id, this%point_vars(var%index)%dataset_name, array)
     this%point_vars(var%index)%next_offset = this%point_vars(var%index)%next_offset + this%nnode_tot
+    this%point_vars(var%index)%last_entity_count = this%nnode
     this%point_vars(var%index)%wrote_this_step = .true. ! dataset has been written for this step
+
+    this%mesh_locked = .true. ! set barrier for changing the mesh
 
   end subroutine write_temporal_point_data_${s["kind"]}$
 #:endfor
 
-#:for s in num_specs
+#:for s in num_specs_no_int8
   subroutine write_temporal_field_data_${s["kind"]}$(this, var, array, as_vector)
 
     class(vtkhdf_ug), intent(inout) :: this
@@ -921,6 +1149,7 @@ contains
     vars(index)%is_temporal = is_temporal
     vars(index)%offset = 0
     vars(index)%next_offset = 0
+    vars(index)%last_entity_count = 0
     ! Initial temporal field state represents an empty value.
     vars(index)%ncomp = 1
     vars(index)%tuples = 0
@@ -984,10 +1213,11 @@ contains
 
   !!!! CHUNK SIZE HELPER !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  pure function data_chunk_size(value_bytes) result(chunk_size)
+  pure function data_chunk_size(this, value_bytes) result(chunk_size)
+    class(vtkhdf_ug), intent(in) :: this
     integer(int64), intent(in) :: value_bytes
     integer(int64) :: chunk_size
-    chunk_size = max(1_int64, DATA_CHUNK_BYTES / value_bytes)
+    chunk_size = max(1_int64, this%data_chunk_bytes / value_bytes)
   end function
 
 end module vtkhdf_ug_type
