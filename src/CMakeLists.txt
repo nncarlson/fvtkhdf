@@ -111,7 +111,7 @@ file(WRITE "${CONFIG_FILE}.in" "
 include(CMakeFindDependencyMacro)
 
 # Always require HDF5
-find_dependency(HDF5 COMPONENTS C HL)
+find_dependency(HDF5 COMPONENTS C)
 
 # Capture build state
 set(fVTKHDF_MPI_SUPPORT @ENABLE_MPI@)

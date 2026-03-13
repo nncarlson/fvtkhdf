@@ -30,7 +30,7 @@ else()
 endif()
 
 # 2. HDF5
-find_package(HDF5 REQUIRED COMPONENTS C HL)
+find_package(HDF5 REQUIRED COMPONENTS C)
 
 if(ENABLE_MPI AND NOT HDF5_IS_PARALLEL)
   message(FATAL_ERROR "Parallel HDF5 is required when MPI is enabled, but only serial HDF5 was found.")

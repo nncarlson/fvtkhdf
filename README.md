@@ -51,7 +51,7 @@ See the [Reference Manual](https://nncarlson.github.io/fvtkhdf/).
 ### Prerequisites
 * Fortran 2018 Compiler (GCC 13+, Intel oneAPI, etc.)
 * CMake (3.28+)
-* HDF5 Library (1.10+) (Parallel HDF5 for MPI-enabled build)
+* HDF5 C Library (1.10+) (Parallel HDF5 for MPI-enabled build)
 * Python 3 + `fypp` (`pip install fypp`)
 * MPI (Optional)
 
