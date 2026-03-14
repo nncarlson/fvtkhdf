@@ -856,15 +856,19 @@ contains
 
     if (allocated(this%cell_vars)) then
       do j = 1, size(this%cell_vars)
-        if (this%cell_vars(j)%wrote_this_step) cycle
-        INSIST(this%ctx%global_all(this%cell_vars(j)%last_entity_count == this%ncell))
+        if (this%cell_vars(j)%is_temporal) then
+          if (this%cell_vars(j)%wrote_this_step) cycle
+          INSIST(this%ctx%global_all(this%cell_vars(j)%last_entity_count == this%ncell))
+        end if
       end do
     end if
 
     if (allocated(this%point_vars)) then
       do j = 1, size(this%point_vars)
-        if (this%point_vars(j)%wrote_this_step) cycle
-        INSIST(this%ctx%global_all(this%point_vars(j)%last_entity_count == this%nnode))
+        if (this%point_vars(j)%is_temporal) then
+          if (this%point_vars(j)%wrote_this_step) cycle
+          INSIST(this%ctx%global_all(this%point_vars(j)%last_entity_count == this%nnode))
+        end if
       end do
     end if
 
