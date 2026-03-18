@@ -67,6 +67,21 @@ cmake -B build --install-prefix /path/to/install
 cmake --build build --parallel
 cmake --install build
 ```
+Run the tests for your chosen build configuration with:
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+### Spack
+
+fVTKHDF is available through Spack:
+
+```bash
+spack install fvtkhdf
+```
+
+The Spack package builds the MPI-enabled configuration and currently
+targets parallel HDF5 1.14.x.
 
 ## Using fVTKHDF in your Project
 Once installed, you can use **fVTKHDF** in your own CMake-based project by
