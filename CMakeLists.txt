@@ -90,5 +90,5 @@ if(BUILD_HTML)
 endif()
 
 if(BUILD_EXAMPLES)
-  add_subdirectory(examples)
+  add_subdirectory(example)
 endif()

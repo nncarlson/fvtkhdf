@@ -98,7 +98,7 @@ target_link_libraries(my_simulation PRIVATE fVTKHDF::fvtkhdf)
 Here is a minimal serial example that writes a **VTKHDF** UnstructuredGrid
 dataset for an unstructured mesh consisting of a single tetrahedral cell
 with a scalar field. More complete examples (serial and MPI-parallel,
-UnstructuredGrid and MultiBlockDataSet) are provided in the `examples`
+UnstructuredGrid and MultiBlockDataSet) are provided in the `example`
 directory.
 
 ```fortran
