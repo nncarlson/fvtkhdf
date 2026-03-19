@@ -558,10 +558,26 @@ contains
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'NumberOfPoints', mold, chunk_size)
         end associate
       end if
-      call append_to_datasets
+      call h5_append_to_dataset(this%ctx, this%root_id, 'Points', points)
+      !NB: finalize_time_step appends NumberOfPoints when necessary
     else
-      call write_datasets
+      if (this%nnode > 0) then ! see 0-sized part NB above
+        call h5_write_dataset(this%ctx, this%root_id, 'NumberOfPoints', this%nnode)
+      else
+#ifdef GNU_PR123899
+        block
+          integer(int64) :: idum(0)
+          call h5_write_dataset(this%ctx, this%root_id, 'NumberOfPoints', idum)
+        end block
+#else
+        call h5_write_dataset(this%ctx, this%root_id, 'NumberOfPoints', [integer(int64)::])
+#endif
+      end if
+      call h5_write_dataset(this%ctx, this%root_id, 'Points', points)
     end if
+
+    this%point_offset = this%points_next_offset
+    this%points_next_offset = this%point_offset + this%nnode_tot
 
     this%geometry_written_this_step = .true.
     this%geometry_defined = .true.
@@ -574,27 +590,6 @@ contains
           this%ctx%global_all((this%ncell == 0) .eqv. (this%nnode == 0)) ! see 0-sized part NB
     end if
 
-  contains
-
-#:for mode in ["write", "append_to"]
-    subroutine ${mode}$_datasets
-      if (this%nnode > 0) then ! see 0-sized part NB above
-        call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfPoints', this%nnode)
-      else
-#ifdef GNU_PR123899
-        block
-          integer(int64) :: idum(0)
-          call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfPoints', idum)
-        end block
-#else
-        call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfPoints', [integer(int64)::])
-#endif
-      end if
-      call h5_${mode}$_dataset(this%ctx, this%root_id, 'Points', points)
-      this%point_offset = this%points_next_offset
-      this%points_next_offset = this%point_offset + this%nnode_tot
-    end subroutine
-#:endfor
   end subroutine write_mesh_geometry_${r["kind"]}$
 
 #:endfor
@@ -870,6 +865,21 @@ contains
           INSIST(this%ctx%global_all(this%point_vars(j)%last_entity_count == this%nnode))
         end if
       end do
+    end if
+
+    if (this%topology_written_this_step) then
+      if (this%nnode > 0) then ! see 0-sized part NB above
+        call h5_append_to_dataset(this%ctx, this%root_id, 'NumberOfPoints', this%nnode)
+      else
+#ifdef GNU_PR123899
+        block
+          integer(int64) :: idum(0)
+          call h5_append_to_dataset(this%ctx, this%root_id, 'NumberOfPoints', idum)
+        end block
+#else
+        call h5_append_to_dataset(this%ctx, this%root_id, 'NumberOfPoints', [integer(int64)::])
+#endif
+      end if
     end if
 
     call h5_append_to_dataset(this%ctx, this%steps_id, 'PointOffsets', this%point_offset, root=0)
