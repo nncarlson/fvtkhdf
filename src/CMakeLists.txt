@@ -6,9 +6,14 @@ set(FYPP_SRC
   vtkhdf_ug_type.F90.fypp
   vtkhdf_ug_file_type.F90.fypp
   vtkhdf_mb_file_type.F90.fypp
+  vtkhdf_ctx_type.F90.fypp
 )
 
-add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC} FLAGS --line-numbering)
+if(ENABLE_MPI)
+  set(FYPP_DEFINES "-DUSE_MPI")
+endif()
+
+add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC} FLAGS --line-numbering ${FYPP_DEFINES})
 
 set(SRC
   vtkhdf_assert.F90
@@ -17,12 +22,6 @@ set(SRC
   vtkhdf_version_param.F90
   vtkhdf_h5e_context_type.F90
 )
-
-if(ENABLE_MPI)
-  list(APPEND SRC vtkhdf_ctx_type.F90)
-else()
-  list(APPEND SRC vtkhdf_ctx_type-serial.F90)
-endif()
 
 # Generate the library info file and add to source list
 configure_file(
