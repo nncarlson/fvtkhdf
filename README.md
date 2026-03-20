@@ -55,6 +55,8 @@ See the [Reference Manual](https://nncarlson.github.io/fvtkhdf/).
 * Python 3 + `fypp` (`pip install fypp`)
 * MPI (Optional)
 
+Limited `fpm` build instructions are available in [README-FPM.md](./README-FPM.md).
+
 ### Build and Install
 By default, the library builds with MPI support enabled. Use
 `-DENABLE_MPI=OFF` for a serial-only build.

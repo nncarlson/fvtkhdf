@@ -1,0 +1,37 @@
+name = "fvtkhdf"
+version = "0.5.1"
+license = "BSD-2-Clause"
+maintainer = "Neil Carlson"
+author = "Neil Carlson"
+description = "Modern Fortran library for writing VTKHDF files"
+
+[build]
+auto-executables = false
+auto-examples = true
+auto-tests = false
+module-naming = false
+external-modules = ["mpi_f08"]
+
+[library]
+source-dir = "src"
+
+[dependencies]
+hdf5 = "*"
+
+[preprocess]
+[preprocess.cpp]
+suffixes = ["F90"]
+
+[fortran]
+implicit-typing = false
+implicit-external = true
+source-form = "free"
+
+[features]
+optimized.flags = "-O3"
+optimized.preprocess.cpp.macros = ["NDEBUG"]
+mpi-release.flags = "-O3"
+mpi-release.preprocess.cpp.macros = ["USE_MPI", "NDEBUG"]
+
+[profiles]
+release = ["optimized"]
