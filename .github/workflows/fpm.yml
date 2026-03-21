@@ -36,8 +36,8 @@ jobs:
 
     - name: Install fpm
       run: |
-        curl -L \
-          -o "${{ runner.temp }}/fpm" \
+        wget \
+          -O "${{ runner.temp }}/fpm" \
           https://github.com/fortran-lang/fpm/releases/download/v0.13.0/fpm-0.13.0-linux-x86_64-gcc-12
         chmod +x "${{ runner.temp }}/fpm"
         echo "${{ runner.temp }}" >> "$GITHUB_PATH"
