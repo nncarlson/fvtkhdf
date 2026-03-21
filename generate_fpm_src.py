@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tomllib
 
 
 ROOT = Path(__file__).resolve().parent
@@ -16,6 +17,7 @@ SRC_IN = ROOT / "src"
 SRC_OUT = OUT / "src"
 EXAMPLE_IN = ROOT / "example"
 EXAMPLE_OUT = OUT / "example"
+LIB_INFO_TEMPLATE = SRC_IN / "fvtkhdf_lib_info.F90.in"
 
 ROOT_FILES = (
     "fpm.toml",
@@ -68,6 +70,32 @@ def run_fypp_with_args(src: Path, dst: Path, mpi: bool) -> None:
         cmd.append("-DUSE_MPI")
     cmd.extend((str(src), str(dst)))
     subprocess.run(cmd, check=True, cwd=ROOT)
+
+
+def load_version_fields() -> dict[str, str]:
+    with open(ROOT / "fpm.toml", "rb") as f:
+        manifest = tomllib.load(f)
+
+    version = manifest["version"]
+    parts = version.split(".")
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+        raise ValueError(f"unsupported version format in fpm.toml: {version!r}")
+
+    major, minor, patch = parts
+    return {
+        "@PROJECT_VERSION@": version,
+        "@PROJECT_VERSION_MAJOR@": major,
+        "@PROJECT_VERSION_MINOR@": minor,
+        "@PROJECT_VERSION_PATCH@": patch,
+    }
+
+
+def render_lib_info(dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    text = LIB_INFO_TEMPLATE.read_text()
+    for old, new in load_version_fields().items():
+        text = text.replace(old, new)
+    dst.write_text(text)
 
 
 def parse_args() -> argparse.Namespace:
@@ -124,6 +152,8 @@ def main() -> int:
         src = SRC_IN / name
         dst = SRC_OUT / name.removesuffix(".fypp")
         run_fypp_with_args(src, dst, mpi=mpi_enabled)
+
+    render_lib_info(SRC_OUT / "fvtkhdf_lib_info.F90")
 
     for pattern in EXAMPLE_GLOBS:
         for src in sorted(EXAMPLE_IN.glob(pattern)):
