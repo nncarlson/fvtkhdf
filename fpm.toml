@@ -10,7 +10,6 @@ auto-executables = false
 auto-examples = true
 auto-tests = false
 module-naming = false
-external-modules = ["mpi_f08"]
 
 [library]
 source-dir = "src"
@@ -23,17 +22,19 @@ hdf5 = "*"
 suffixes = ["F90"]
 
 [fortran]
-implicit-typing = false
+implicit-typing = true
 implicit-external = true
 source-form = "free"
 
 [features]
+strict.gfortran.flags = "-fimplicit-none -ffree-line-length-none"
 optimized.flags = "-O3"
-optimized.gfortran.flags = "-ffree-line-length-none"
 optimized.preprocess.cpp.macros = ["NDEBUG"]
+mpi-release.dependencies.mpi = "*"
 mpi-release.flags = "-O3"
-mpi-release.gfortran.flags = "-ffree-line-length-none"
+mpi-release.gfortran.flags = "-fimplicit-none -ffree-line-length-none"
 mpi-release.preprocess.cpp.macros = ["USE_MPI", "NDEBUG"]
 
 [profiles]
+default = ["strict"]
 release = ["optimized"]
