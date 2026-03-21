@@ -60,8 +60,11 @@ jobs:
         test -n "$pc_file"
         echo "Using pkg-config file: $pc_file"
         mkdir -p "$RUNNER_TEMP/pkgconfig"
+        pc_dir="$(dirname "$pc_file")"
+        find "$pc_dir" -maxdepth 1 -name '*.pc' -exec ln -sf {} "$RUNNER_TEMP/pkgconfig/" \;
         ln -sf "$pc_file" "$RUNNER_TEMP/pkgconfig/hdf5.pc"
-        echo "PKG_CONFIG_PATH=$RUNNER_TEMP/pkgconfig" >> "$GITHUB_ENV"
+        echo "PKG_CONFIG_LIBDIR=$RUNNER_TEMP/pkgconfig" >> "$GITHUB_ENV"
+        echo "PKG_CONFIG_PATH=" >> "$GITHUB_ENV"
         pkg-config --cflags --libs hdf5
 
     - name: Generate staged fpm sources
