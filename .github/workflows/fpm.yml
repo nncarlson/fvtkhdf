@@ -1,0 +1,67 @@
+name: fpm
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    name: fpm Build (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    container: ghcr.io/${{ github.repository }}/fvtkhdf-ci:latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: serial
+            hdf5_pkg: libhdf5-dev
+            hdf5_pc_pattern: '/pkgconfig/hdf5\.pc$'
+            generator_args: --profile release
+            build_args: --profile release
+            fc: gfortran
+            cc: gcc
+          - mode: mpi
+            hdf5_pkg: libhdf5-openmpi-dev
+            hdf5_pc_pattern: '/pkgconfig/hdf5-openmpi\.pc$'
+            generator_args: --features mpi-release
+            build_args: --features mpi-release
+            fc: mpifort
+            cc: mpicc
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install fpm
+      run: |
+        curl -L \
+          -o "${{ runner.temp }}/fpm" \
+          https://github.com/fortran-lang/fpm/releases/download/v0.13.0/fpm-0.13.0-linux-x86_64-gcc-12
+        chmod +x "${{ runner.temp }}/fpm"
+        echo "${{ runner.temp }}" >> "$GITHUB_PATH"
+        "${{ runner.temp }}/fpm" --version
+
+    - name: Select HDF5 pkg-config metadata
+      run: |
+        pc_file="$(dpkg -L "${{ matrix.hdf5_pkg }}" | grep -E "${{ matrix.hdf5_pc_pattern }}" | head -n1)"
+        test -n "$pc_file"
+        mkdir -p "${{ runner.temp }}/pkgconfig"
+        ln -sf "$pc_file" "${{ runner.temp }}/pkgconfig/hdf5.pc"
+        echo "PKG_CONFIG_PATH=${{ runner.temp }}/pkgconfig" >> "$GITHUB_ENV"
+        pkg-config --cflags --libs hdf5
+
+    - name: Generate staged fpm sources
+      env:
+        FPM_FC: ${{ matrix.fc }}
+        FPM_CC: ${{ matrix.cc }}
+      run: ./generate_fpm_src.py ${{ matrix.generator_args }}
+
+    - name: Build with fpm
+      env:
+        FPM_FC: ${{ matrix.fc }}
+        FPM_CC: ${{ matrix.cc }}
+      run: |
+        cd fpm-src
+        fpm build ${{ matrix.build_args }}
