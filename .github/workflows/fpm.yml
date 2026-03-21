@@ -38,11 +38,16 @@ jobs:
       run: |
         python3 - <<'PY'
         import os
+        import shutil
         import urllib.request
 
         url = "https://github.com/fortran-lang/fpm/releases/download/v0.13.0/fpm-0.13.0-linux-x86_64-gcc-12"
         dst = os.path.join(os.environ["RUNNER_TEMP"], "fpm")
-        urllib.request.urlretrieve(url, dst)
+        with urllib.request.urlopen(url) as response, open(dst, "wb") as f:
+            shutil.copyfileobj(response, f)
+        if not os.path.isfile(dst):
+            raise SystemExit(f"download failed: {dst} was not created")
+        print(dst)
         PY
         chmod +x "${{ runner.temp }}/fpm"
         echo "${{ runner.temp }}" >> "$GITHUB_PATH"
