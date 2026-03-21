@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
-import tomllib
 
 
 ROOT = Path(__file__).resolve().parent
@@ -73,10 +73,12 @@ def run_fypp_with_args(src: Path, dst: Path, mpi: bool) -> None:
 
 
 def load_version_fields() -> dict[str, str]:
-    with open(ROOT / "fpm.toml", "rb") as f:
-        manifest = tomllib.load(f)
+    manifest_text = (ROOT / "fpm.toml").read_text()
+    match = re.search(r'^\s*version\s*=\s*"([^"]+)"\s*$', manifest_text, re.MULTILINE)
+    if match is None:
+        raise ValueError("could not find version in fpm.toml")
 
-    version = manifest["version"]
+    version = match.group(1)
     parts = version.split(".")
     if len(parts) != 3 or not all(part.isdigit() for part in parts):
         raise ValueError(f"unsupported version format in fpm.toml: {version!r}")
