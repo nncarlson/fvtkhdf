@@ -29,8 +29,10 @@ source-form = "free"
 
 [features]
 optimized.flags = "-O3"
+optimized.gfortran.flags = "-ffree-line-length-none"
 optimized.preprocess.cpp.macros = ["NDEBUG"]
 mpi-release.flags = "-O3"
+mpi-release.gfortran.flags = "-ffree-line-length-none"
 mpi-release.preprocess.cpp.macros = ["USE_MPI", "NDEBUG"]
 
 [profiles]
