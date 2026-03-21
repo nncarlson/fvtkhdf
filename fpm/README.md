@@ -5,6 +5,7 @@ This repository includes limited `fpm` support as a secondary build path.
 ## Serial build
 
 ```bash
+cd fpm
 export PKG_CONFIG_PATH=</path/to/hdf5/lib/pkgconfig>
 ./generate_fpm_src.py --profile release
 cd fpm-src
@@ -14,6 +15,7 @@ fpm build --profile release
 ## MPI build
 
 ```bash
+cd fpm
 export PKG_CONFIG_PATH=</path/to/parallel-hdf5/lib/pkgconfig>
 ./generate_fpm_src.py --features mpi-release
 cd fpm-src

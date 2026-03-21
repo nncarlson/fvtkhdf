@@ -68,9 +68,11 @@ jobs:
         pkg-config --cflags --libs hdf5
 
     - name: Generate staged fpm sources
-      run: ./generate_fpm_src.py ${{ matrix.generator_args }}
+      run: |
+        cd fpm
+        ./generate_fpm_src.py ${{ matrix.generator_args }}
 
     - name: Build with fpm
       run: |
-        cd fpm-src
+        cd fpm/fpm-src
         fpm build ${{ matrix.build_args }}

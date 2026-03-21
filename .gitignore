@@ -1,2 +1,3 @@
 build*/
-fpm-src/
+fpm/fpm-src/
+__pycache__/

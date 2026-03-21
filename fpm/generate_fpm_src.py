@@ -11,19 +11,14 @@ import subprocess
 import sys
 
 
-ROOT = Path(__file__).resolve().parent
-OUT = ROOT / "fpm-src"
-SRC_IN = ROOT / "src"
+FPM_DIR = Path(__file__).resolve().parent
+REPO_ROOT = FPM_DIR.parent
+OUT = FPM_DIR / "fpm-src"
+SRC_IN = REPO_ROOT / "src"
 SRC_OUT = OUT / "src"
-EXAMPLE_IN = ROOT / "example"
+EXAMPLE_IN = REPO_ROOT / "example"
 EXAMPLE_OUT = OUT / "example"
 LIB_INFO_TEMPLATE = SRC_IN / "fvtkhdf_lib_info.F90.in"
-
-ROOT_FILES = (
-    "fpm.toml",
-    "README.md",
-    "LICENSE.md",
-)
 
 SRC_COPY_FILES = (
     "vtkhdf_assert.F90",
@@ -58,22 +53,17 @@ def copy_file(src: Path, dst: Path) -> None:
     shutil.copy2(src, dst)
 
 
-def run_fypp(src: Path, dst: Path) -> None:
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["fypp", str(src), str(dst)], check=True, cwd=ROOT)
-
-
 def run_fypp_with_args(src: Path, dst: Path, mpi: bool) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     cmd = ["fypp"]
     if mpi:
         cmd.append("-DUSE_MPI")
     cmd.extend((str(src), str(dst)))
-    subprocess.run(cmd, check=True, cwd=ROOT)
+    subprocess.run(cmd, check=True, cwd=REPO_ROOT)
 
 
 def load_version_fields() -> dict[str, str]:
-    manifest_text = (ROOT / "fpm.toml").read_text()
+    manifest_text = (FPM_DIR / "fpm.toml").read_text()
     match = re.search(r'^\s*version\s*=\s*"([^"]+)"\s*$', manifest_text, re.MULTILINE)
     if match is None:
         raise ValueError("could not find version in fpm.toml")
@@ -135,8 +125,8 @@ def main() -> int:
         print("error: fypp not found in PATH", file=sys.stderr)
         return 1
 
-    if not (ROOT / "fpm.toml").is_file():
-        print("error: fpm.toml not found at repository root", file=sys.stderr)
+    if not (FPM_DIR / "fpm.toml").is_file():
+        print("error: fpm.toml not found in fpm/", file=sys.stderr)
         return 1
 
     if OUT.exists():
@@ -144,8 +134,9 @@ def main() -> int:
 
     SRC_OUT.mkdir(parents=True)
 
-    for name in ROOT_FILES:
-        copy_file(ROOT / name, OUT / name)
+    copy_file(FPM_DIR / "fpm.toml", OUT / "fpm.toml")
+    copy_file(FPM_DIR / "README.md", OUT / "README.md")
+    copy_file(REPO_ROOT / "LICENSE.md", OUT / "LICENSE.md")
 
     for name in SRC_COPY_FILES:
         copy_file(SRC_IN / name, SRC_OUT / name)
@@ -166,7 +157,7 @@ def main() -> int:
 
     feature_note = f" ({','.join(sorted(features))})" if features else ""
     mode = " (MPI)" if mpi_enabled and not feature_note else feature_note
-    print(f"Generated {OUT.relative_to(ROOT)}/{mode}")
+    print(f"Generated {OUT.relative_to(FPM_DIR)}/{mode}")
     return 0
 
 
