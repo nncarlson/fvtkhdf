@@ -36,9 +36,14 @@ jobs:
 
     - name: Install fpm
       run: |
-        wget \
-          -O "${{ runner.temp }}/fpm" \
-          https://github.com/fortran-lang/fpm/releases/download/v0.13.0/fpm-0.13.0-linux-x86_64-gcc-12
+        python3 - <<'PY'
+        import os
+        import urllib.request
+
+        url = "https://github.com/fortran-lang/fpm/releases/download/v0.13.0/fpm-0.13.0-linux-x86_64-gcc-12"
+        dst = os.path.join(os.environ["RUNNER_TEMP"], "fpm")
+        urllib.request.urlretrieve(url, dst)
+        PY
         chmod +x "${{ runner.temp }}/fpm"
         echo "${{ runner.temp }}" >> "$GITHUB_PATH"
         "${{ runner.temp }}/fpm" --version
