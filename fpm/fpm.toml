@@ -1,0 +1,49 @@
+name = "fvtkhdf"
+version = "0.5.1"
+license = "BSD-2-Clause"
+maintainer = "Neil Carlson"
+author = "Neil Carlson"
+description = "Modern Fortran library for writing VTKHDF files"
+
+[build]
+auto-executables = false
+auto-examples = true
+auto-tests = false
+module-naming = false
+
+[library]
+source-dir = "src"
+
+[dependencies]
+hdf5 = "*"
+
+[preprocess]
+[preprocess.cpp]
+suffixes = ["F90"]
+
+[fortran]
+implicit-typing = true
+implicit-external = true
+source-form = "free"
+
+[features]
+strict.gfortran.flags = "-fimplicit-none -ffree-line-length-none"
+strict.gfortran.preprocess.cpp.macros = ["GNU_PR123899"]
+strict.ifort.preprocess.cpp.macros = ["INTEL_BUG20240327"]
+strict.ifx.preprocess.cpp.macros = ["INTEL_BUG20240327"]
+optimized.flags = "-O3"
+optimized.gfortran.preprocess.cpp.macros = ["GNU_PR123899"]
+optimized.ifort.preprocess.cpp.macros = ["INTEL_BUG20240327"]
+optimized.ifx.preprocess.cpp.macros = ["INTEL_BUG20240327"]
+optimized.preprocess.cpp.macros = ["NDEBUG"]
+mpi-release.dependencies.mpi = "*"
+mpi-release.flags = "-O3"
+mpi-release.gfortran.flags = "-fimplicit-none -ffree-line-length-none"
+mpi-release.gfortran.preprocess.cpp.macros = ["GNU_PR123899"]
+mpi-release.ifort.preprocess.cpp.macros = ["INTEL_BUG20240327"]
+mpi-release.ifx.preprocess.cpp.macros = ["INTEL_BUG20240327"]
+mpi-release.preprocess.cpp.macros = ["USE_MPI", "NDEBUG"]
+
+[profiles]
+default = ["strict"]
+release = ["optimized"]
