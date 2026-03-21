@@ -20,15 +20,11 @@ jobs:
             hdf5_pc_pattern: '/pkgconfig/(hdf5|hdf5-serial)\.pc$'
             generator_args: --profile release
             build_args: --profile release
-            fc: gfortran
-            cc: gcc
           - mode: mpi
             hdf5_pkg: libhdf5-openmpi-dev
             hdf5_pc_pattern: '/pkgconfig/(hdf5-openmpi|hdf5)\.pc$'
             generator_args: --features mpi-release
             build_args: --features mpi-release
-            fc: mpifort
-            cc: mpicc
 
     steps:
     - name: Checkout code
@@ -69,15 +65,9 @@ jobs:
         pkg-config --cflags --libs hdf5
 
     - name: Generate staged fpm sources
-      env:
-        FPM_FC: ${{ matrix.fc }}
-        FPM_CC: ${{ matrix.cc }}
       run: ./generate_fpm_src.py ${{ matrix.generator_args }}
 
     - name: Build with fpm
-      env:
-        FPM_FC: ${{ matrix.fc }}
-        FPM_CC: ${{ matrix.cc }}
       run: |
         cd fpm-src
         fpm build ${{ matrix.build_args }}
