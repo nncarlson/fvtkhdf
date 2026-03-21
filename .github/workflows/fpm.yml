@@ -34,6 +34,11 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Install pkg-config
+      run: |
+        apt-get update
+        apt-get install -y pkg-config
+
     - name: Install fpm
       run: |
         python3 - <<'PY'
