@@ -49,17 +49,17 @@ jobs:
             raise SystemExit(f"download failed: {dst} was not created")
         print(dst)
         PY
-        chmod +x "${{ runner.temp }}/fpm"
-        echo "${{ runner.temp }}" >> "$GITHUB_PATH"
-        "${{ runner.temp }}/fpm" --version
+        chmod +x "$RUNNER_TEMP/fpm"
+        echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/fpm" --version
 
     - name: Select HDF5 pkg-config metadata
       run: |
         pc_file="$(dpkg -L "${{ matrix.hdf5_pkg }}" | grep -E "${{ matrix.hdf5_pc_pattern }}" | head -n1)"
         test -n "$pc_file"
-        mkdir -p "${{ runner.temp }}/pkgconfig"
-        ln -sf "$pc_file" "${{ runner.temp }}/pkgconfig/hdf5.pc"
-        echo "PKG_CONFIG_PATH=${{ runner.temp }}/pkgconfig" >> "$GITHUB_ENV"
+        mkdir -p "$RUNNER_TEMP/pkgconfig"
+        ln -sf "$pc_file" "$RUNNER_TEMP/pkgconfig/hdf5.pc"
+        echo "PKG_CONFIG_PATH=$RUNNER_TEMP/pkgconfig" >> "$GITHUB_ENV"
         pkg-config --cflags --libs hdf5
 
     - name: Generate staged fpm sources
