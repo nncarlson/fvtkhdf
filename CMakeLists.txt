@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28..3.30)
 
-project(fVTKHDF VERSION 0.5.1 LANGUAGES Fortran C)
+project(fVTKHDF VERSION 0.6.0 LANGUAGES Fortran C)
 
 # --- Options ---
 option(ENABLE_MPI "Enable MPI support" ON)
