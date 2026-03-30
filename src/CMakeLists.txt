@@ -11,6 +11,9 @@ set(FYPP_SRC
 
 if(ENABLE_MPI)
   set(FYPP_DEFINES "-DUSE_MPI")
+  if(USE_MPI_F08)
+    list(APPEND FYPP_DEFINES "-DUSE_MPI_F08")
+  endif()
 endif()
 
 add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC} FLAGS --line-numbering ${FYPP_DEFINES})
@@ -103,6 +106,10 @@ install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/mod/
 # 3. Generate & Install Config File (fVTKHDFConfig.cmake)
 set(CONFIG_FILE "${CMAKE_CURRENT_BINARY_DIR}/fVTKHDFConfig.cmake")
 set(VERSION_FILE "${CMAKE_CURRENT_BINARY_DIR}/fVTKHDFConfigVersion.cmake")
+set(FVTKHDF_MPI_F08_SUPPORT OFF)
+if(USE_MPI_F08)
+  set(FVTKHDF_MPI_F08_SUPPORT ON)
+endif()
 
 file(WRITE "${CONFIG_FILE}.in" "
 @PACKAGE_INIT@
@@ -114,6 +121,7 @@ find_dependency(HDF5 COMPONENTS C)
 
 # Capture build state
 set(fVTKHDF_MPI_SUPPORT @ENABLE_MPI@)
+set(fVTKHDF_MPI_F08_SUPPORT @FVTKHDF_MPI_F08_SUPPORT@)
 
 # If built with MPI, require MPI
 if(fVTKHDF_MPI_SUPPORT)

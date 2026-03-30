@@ -5,7 +5,7 @@ program vtkhdf_chunk_test
   use vtkhdf_mb_file_type
   use vtkhdf_vtk_cell_types
 #ifdef USE_MPI
-  use mpi_f08
+  use mpi
 #endif
   implicit none
 

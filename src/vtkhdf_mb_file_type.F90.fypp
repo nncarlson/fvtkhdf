@@ -60,9 +60,12 @@ module vtkhdf_mb_file_type
     type(block_item), allocatable :: blocks(:) ! a 0-indexed array
     logical :: is_temporal = .false., start_time_step_called = .false.
   contains
-#ifdef USE_MPI
+#ifdef USE_MPI_F08
     generic :: create => create_f08, create_int
     procedure, private :: create_f08, create_int
+#elif defined(USE_MPI)
+    generic :: create => create_int
+    procedure, private :: create_int
 #else
     procedure :: create
 #endif
@@ -174,7 +177,7 @@ contains
     call err_ctx%restore(0)
   end subroutine
 
-#ifdef USE_MPI
+#ifdef USE_MPI_F08
   subroutine create_f08(this, filename, comm, stat, errmsg, data_chunk_bytes)
     use mpi_f08, only: MPI_Comm
     class(vtkhdf_mb_file), intent(out) :: this
@@ -183,21 +186,20 @@ contains
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer(int64), intent(in), optional :: data_chunk_bytes
-    call this%ctx%init(comm)
-    call this%create_impl(filename, stat, errmsg, data_chunk_bytes)
+    call this%create(filename, comm%mpi_val, stat, errmsg, data_chunk_bytes)
   end subroutine create_f08
 
+#endif
+#ifdef USE_MPI
   subroutine create_int(this, filename, comm, stat, errmsg, data_chunk_bytes)
-    use mpi_f08, only: MPI_Comm
     class(vtkhdf_mb_file), intent(out) :: this
     character(*), intent(in) :: filename
     integer, intent(in) :: comm
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
     integer(int64), intent(in), optional :: data_chunk_bytes
-    type(MPI_Comm) :: f08_comm
-    f08_comm%mpi_val = comm
-    call this%create(filename, f08_comm, stat, errmsg, data_chunk_bytes)
+    call this%ctx%init(comm)
+    call this%create_impl(filename, stat, errmsg, data_chunk_bytes)
   end subroutine create_int
 #else
   subroutine create(this, filename, stat, errmsg, data_chunk_bytes)

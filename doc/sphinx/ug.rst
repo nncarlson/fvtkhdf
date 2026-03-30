@@ -22,8 +22,11 @@ File Creation and Management
 
    * ``filename``: path to the file to create. The recommended extension is
      ``.vtkhdf``.
-   * ``comm``: MPI communicator, either ``integer`` or ``type(MPI_Comm)``.
-     In serial builds, ``comm`` is omitted from the interface.
+   * ``comm``: MPI communicator. In MPI builds with ``USE_MPI_F08=ON``
+     (default), this may be either ``integer`` or ``type(MPI_Comm)``.
+     With ``USE_MPI_F08=OFF``, only the ``integer`` communicator
+     interface is available. In serial builds, ``comm`` is omitted from
+     the interface.
    * ``mode``: one of ``UG_STATIC``, ``UG_FIXED_MESH``,
      ``UG_MOVING_MESH``, or ``UG_DYNAMIC_MESH``. The default is
      ``UG_STATIC``.

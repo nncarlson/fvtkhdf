@@ -59,7 +59,10 @@ Limited `fpm` build instructions are available in [fpm/README.md](./fpm/README.m
 
 ### Build and Install
 By default, the library builds with MPI support enabled. Use
-`-DENABLE_MPI=OFF` for a serial-only build.
+`-DENABLE_MPI=OFF` for a serial-only build. If your MPI installation does
+not provide the `mpi_f08` module, use `-DUSE_MPI_F08=OFF` to disable the
+`mpi_f08` communicator overloads while keeping the integer-communicator MPI
+interface enabled.
 ```bash
 git clone https://github.com/nncarlson/fvtkhdf
 cd fvtkhdf
