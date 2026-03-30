@@ -13,7 +13,7 @@ subroutine vtkhdf_assert(file, line)
 
 #ifdef USE_MPI
   block
-    use mpi_f08
+    use mpi
     integer :: rank
     logical :: mpi_is_init
     call MPI_Initialized(mpi_is_init, ierr)
@@ -29,7 +29,7 @@ subroutine vtkhdf_assert(file, line)
 
 #ifdef USE_MPI
   block
-    use mpi_f08
+    use mpi
     call MPI_Abort(MPI_COMM_WORLD, 1, ierr)
   end block
 #else

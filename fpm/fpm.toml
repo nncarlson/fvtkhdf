@@ -42,7 +42,14 @@ mpi-release.gfortran.flags = "-fimplicit-none -ffree-line-length-none"
 mpi-release.gfortran.preprocess.cpp.macros = ["GNU_PR123899"]
 mpi-release.ifort.preprocess.cpp.macros = ["INTEL_BUG20240327"]
 mpi-release.ifx.preprocess.cpp.macros = ["INTEL_BUG20240327"]
-mpi-release.preprocess.cpp.macros = ["USE_MPI", "NDEBUG"]
+mpi-release.preprocess.cpp.macros = ["USE_MPI", "USE_MPI_F08", "NDEBUG"]
+mpi-nof08-release.dependencies.mpi = "*"
+mpi-nof08-release.flags = "-O3"
+mpi-nof08-release.gfortran.flags = "-fimplicit-none -ffree-line-length-none"
+mpi-nof08-release.gfortran.preprocess.cpp.macros = ["GNU_PR123899"]
+mpi-nof08-release.ifort.preprocess.cpp.macros = ["INTEL_BUG20240327"]
+mpi-nof08-release.ifx.preprocess.cpp.macros = ["INTEL_BUG20240327"]
+mpi-nof08-release.preprocess.cpp.macros = ["USE_MPI", "NDEBUG"]
 
 [profiles]
 default = ["strict"]

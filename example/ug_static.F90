@@ -4,7 +4,7 @@ program ug_static_example
   use vtkhdf_ug_file_type
   use vtkhdf_vtk_cell_types, only: VTK_TRIANGLE
 #ifdef USE_MPI
-  use mpi_f08
+  use mpi
 #endif
   implicit none
 

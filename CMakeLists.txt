@@ -4,6 +4,7 @@ project(fVTKHDF VERSION 0.5.1 LANGUAGES Fortran C)
 
 # --- Options ---
 option(ENABLE_MPI "Enable MPI support" ON)
+option(USE_MPI_F08 "Expose mpi_f08 communicator overloads when MPI is enabled" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(ENABLE_STD_MOD_PROC_NAME "Build with -assume std_mod_proc_name when using Intel" OFF)
 option(BUILD_HTML "Build HTML documentation" OFF)
@@ -25,8 +26,12 @@ if(ENABLE_MPI)
   find_package(MPI REQUIRED COMPONENTS C Fortran)
   set(HDF5_PREFER_PARALLEL True)
   add_compile_definitions(USE_MPI)
+  if(USE_MPI_F08)
+    add_compile_definitions(USE_MPI_F08)
+  endif()
 else()
   set(HDF5_PREFER_PARALLEL False)
+  set(USE_MPI_F08 OFF)
 endif()
 
 # 2. HDF5

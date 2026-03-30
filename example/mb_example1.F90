@@ -3,7 +3,7 @@ program mb_example1
   use,intrinsic :: iso_fortran_env, only: int8
   use vtkhdf_mb_file_type
 #ifdef USE_MPI
-  use mpi_f08
+  use mpi
 #endif
   implicit none
 

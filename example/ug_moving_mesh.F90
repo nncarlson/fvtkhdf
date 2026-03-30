@@ -4,7 +4,7 @@ program ug_moving_mesh_example
   use vtkhdf_ug_file_type
   use vtkhdf_vtk_cell_types, only: VTK_TRIANGLE
 #ifdef USE_MPI
-  use mpi_f08
+  use mpi
 #endif
   implicit none
 
@@ -12,7 +12,7 @@ program ug_moving_mesh_example
   integer, allocatable :: cnode(:), xcnode(:)
   integer(int8), allocatable :: types(:)
   character(:), allocatable :: errmsg
-  integer :: stat, nproc, rank, ncells, npoints, step, j
+  integer :: stat, ierr, nproc, rank, ncells, npoints, step, j
   real :: dt, t
 
   type(vtkhdf_ug_file) :: file
@@ -33,7 +33,7 @@ program ug_moving_mesh_example
   call file%create('example.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_MOVING_MESH)
   if (stat /= 0) then
     if (rank == 0) print *, errmsg
-    call MPI_Abort(MPI_COMM_WORLD, stat)
+    call MPI_Abort(MPI_COMM_WORLD, stat, ierr)
   end if
 #else
   call file%create('example.vtkhdf', stat, errmsg, mode=UG_MOVING_MESH)

@@ -4,7 +4,7 @@ program vtkhdf_ug_test
   use vtkhdf_ug_file_type
   use vtkhdf_vtk_cell_types
 #ifdef USE_MPI
-  use mpi_f08
+  use mpi
 #endif
   implicit none
 

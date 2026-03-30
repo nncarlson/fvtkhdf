@@ -54,9 +54,12 @@ module vtkhdf_ug_file_type
     integer(hid_t)  :: file_id=H5I_INVALID_HID
     type(vtkhdf_ug) :: ug
   contains
-#ifdef USE_MPI
+#ifdef USE_MPI_F08
     generic :: create => create_f08, create_int
     procedure, private :: create_f08, create_int
+#elif defined(USE_MPI)
+    generic :: create => create_int
+    procedure, private :: create_int
 #else
     procedure :: create
 #endif
@@ -146,7 +149,7 @@ contains
     call err_ctx%restore(0)
   end subroutine
 
-#ifdef USE_MPI
+#ifdef USE_MPI_F08
   subroutine create_f08(this, filename, comm, stat, errmsg, mode, data_chunk_bytes)
     use mpi_f08, only: MPI_Comm
     class(vtkhdf_ug_file), intent(out) :: this
@@ -156,12 +159,12 @@ contains
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: mode
     integer(int64), intent(in), optional :: data_chunk_bytes
-    call this%ctx%init(comm)
-    call this%create_impl(filename, stat, errmsg, mode, data_chunk_bytes)
+    call this%create(filename, comm%mpi_val, stat, errmsg, mode, data_chunk_bytes)
   end subroutine create_f08
 
+#endif
+#ifdef USE_MPI
   subroutine create_int(this, filename, comm, stat, errmsg, mode, data_chunk_bytes)
-    use mpi_f08, only: MPI_Comm
     class(vtkhdf_ug_file), intent(out) :: this
     character(*), intent(in) :: filename
     integer, intent(in) :: comm
@@ -169,9 +172,8 @@ contains
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: mode
     integer(int64), intent(in), optional :: data_chunk_bytes
-    type(MPI_Comm) :: f08_comm
-    f08_comm%mpi_val = comm
-    call this%create(filename, f08_comm, stat, errmsg, mode, data_chunk_bytes)
+    call this%ctx%init(comm)
+    call this%create_impl(filename, stat, errmsg, mode, data_chunk_bytes)
   end subroutine create_int
 #else
   subroutine create(this, filename, stat, errmsg, mode, data_chunk_bytes)
