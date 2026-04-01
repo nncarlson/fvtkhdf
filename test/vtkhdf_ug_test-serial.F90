@@ -28,10 +28,10 @@ program vtkhdf_ug_test
   !! are only used to glean their types and shapes.
 
   associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
-    hcell_radius = vizfile%register_temporal_cell_data('cell-radius', scalar_mold)
+    hcell_radius = vizfile%register_temporal_cell_data('cell-radius', scalar_mold, attribute='Scalars')
     hcell_velocity = vizfile%register_temporal_cell_data('cell-velocity', vector_mold)
     hpoint_radius = vizfile%register_temporal_point_data('point-radius', scalar_mold)
-    hpoint_velocity = vizfile%register_temporal_point_data('point-velocity', vector_mold)
+    hpoint_velocity = vizfile%register_temporal_point_data('point-velocity', vector_mold, attribute='Vectors')
     hfield_value = vizfile%register_temporal_field_data('field-value', scalar_mold)
     hfield_scalar = vizfile%register_temporal_field_data('field-scalar', scalar_mold)
     hfield_vector = vizfile%register_temporal_field_data('field-vector', scalar_mold)
@@ -73,10 +73,10 @@ program vtkhdf_ug_test
   !! At any point you can write a data that isn't time dependent, but its name must
   !! be unique from any other data temporal or not of the same type (cell or point).
 
-  call vizfile%write_cell_data('static-cell-scalar', -scalar_cell_data)
+  call vizfile%write_cell_data('static-cell-scalar', -scalar_cell_data, attribute='Scalars')
   call vizfile%write_cell_data('static-cell-vector', -vector_cell_data)
   call vizfile%write_point_data('static-point-scalar', -scalar_point_data)
-  call vizfile%write_point_data('static-point-vector', -vector_point_data)
+  call vizfile%write_point_data('static-point-vector', -vector_point_data, attribute='Vectors')
 
   call vizfile%close
 

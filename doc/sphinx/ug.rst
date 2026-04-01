@@ -158,14 +158,20 @@ static mesh-centered data.
 
 .. glossary::
 
-   ``call file%write_cell_data(name, array)``
-   ``call file%write_point_data(name, array)``
+   ``call file%write_cell_data(name, array [, attribute])``
+   ``call file%write_point_data(name, array [, attribute])``
       Write the data ``array`` to a new cell or point dataset ``name``.
       Scalar data (rank-1 ``array``) and vector data (rank-2 ``array``)
       are supported. The last dimension of ``array`` indexes the mesh entity
       and must have extent `ncells` (cell data) or `npoints` (point data).
       Supported types are ``real32``, ``real64``, ``int8``, ``int32`` and
       ``int64``.
+
+      If present, ``attribute`` writes the VTKHDF dataset ``Attribute``
+      HDF5 attribute for arrays with a specific VTK role, for example
+      ``Tensors`` or ``GlobalIds``. Blank values are ignored. For the
+      full set of allowed values, see the VTKHDF specification section
+      `Attribute Data <https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#attribute-data>`_.
 
 .. warning::
    ``int8`` data is written using VTK/ParaView-compatible 8-bit
@@ -185,14 +191,19 @@ step must be started before temporal datasets are written.
 
 .. glossary::
 
-   ``cell_var = file%register_temporal_cell_data(name, mold)``
-   ``point_var = file%register_temporal_point_data(name, mold)``
+   ``cell_var = file%register_temporal_cell_data(name, mold [, attribute])``
+   ``point_var = file%register_temporal_point_data(name, mold [, attribute])``
       Register ``name`` as a time-dependent cell or point dataset. The type
       and kind of ``mold`` determines the dataset type. For scalar data,
       pass a scalar ``mold``, and for vector data, pass a rank-1 ``mold``
       whose size equals the number of components. The value of ``mold`` is
       never referenced. Supported types are ``real32``, ``real64``, ``int8``,
       ``int32`` and ``int64``.
+
+      If present, ``attribute`` writes the VTKHDF dataset ``Attribute``
+      HDF5 attribute for the registered array, for example ``Tensors`` or
+      ``GlobalIds``. For the full set of allowed values, see the VTKHDF
+      specification section `Attribute Data <https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#attribute-data>`_.
 
       The returned handle is opaque; user code should store it and pass it
       to later temporal writes.
@@ -290,8 +301,8 @@ Workflow by Mode
 * Write the mesh once with ``write_mesh``.
 * Then write static datasets by name:
 
-  - ``call file%write_point_data(name, array)``
-  - ``call file%write_cell_data(name, array)``
+  - ``call file%write_point_data(name, array [, attribute])``
+  - ``call file%write_cell_data(name, array [, attribute])``
   - ``call file%write_field_data(name, array [, as_vector])``
 
 Time stepping and temporal registration are not allowed.
@@ -301,15 +312,15 @@ Time stepping and temporal registration are not allowed.
 * Write the mesh once with ``write_mesh``.
 * Write static cell and point data (may be done at any time after the mesh)
 
-  - ``call file%write_cell_data(name, array)``
-  - ``call file%write_point_data(name, array)``
+  - ``call file%write_cell_data(name, array [, attribute])``
+  - ``call file%write_point_data(name, array [, attribute])``
 
   Static field data is not allowed in this mode.
 
 * Register temporal datasets before the first time step:
 
-  - ``cell_var = file%register_temporal_cell_data(name, mold)``
-  - ``point_var = file%register_temporal_point_data(name, mold)``
+  - ``cell_var = file%register_temporal_cell_data(name, mold [, attribute])``
+  - ``point_var = file%register_temporal_point_data(name, mold [, attribute])``
   - ``field_var = file%register_temporal_field_data(name, mold)``
 
 * Then, for each step:
@@ -329,8 +340,8 @@ Time stepping and temporal registration are not allowed.
 
 * Register temporal datasets before the first time step:
 
-  - ``cell_var = file%register_temporal_cell_data(name, mold)``
-  - ``point_var = file%register_temporal_point_data(name, mold)``
+  - ``cell_var = file%register_temporal_cell_data(name, mold [, attribute])``
+  - ``point_var = file%register_temporal_point_data(name, mold [, attribute])``
   - ``field_var = file%register_temporal_field_data(name, mold)``
 
 * Then, for each step:
@@ -355,8 +366,8 @@ Static datasets are not allowed in this mode.
 
 * Register temporal datasets before the first time step:
 
-  - ``cell_var = file%register_temporal_cell_data(name, mold)``
-  - ``point_var = file%register_temporal_point_data(name, mold)``
+  - ``cell_var = file%register_temporal_cell_data(name, mold [, attribute])``
+  - ``point_var = file%register_temporal_point_data(name, mold [, attribute])``
   - ``field_var = file%register_temporal_field_data(name, mold)``
 
 * Then, for each step:

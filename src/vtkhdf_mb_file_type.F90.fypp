@@ -416,15 +416,16 @@ contains
 #:for s in num_specs
 #:for d in data_specs
 
-  subroutine write_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, blk, name, array)
+  subroutine write_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, blk, name, array, attribute)
     class(vtkhdf_mb_file), intent(inout) :: this
     type(vtkhdf_block_handle), intent(in) :: blk
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array${d["array"]}$
+    character(*), intent(in), optional :: attribute
     type(vtkhdf_h5e_context) :: err_ctx
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
-    call this%blocks(blk%index)%b%write_${loc}$_data(name, array)
+    call this%blocks(blk%index)%b%write_${loc}$_data(name, array, attribute)
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -469,16 +470,17 @@ contains
 #:for s in num_specs
 #:for d in data_specs
 
-  function register_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, blk, name, mold) result(handle)
+  function register_temporal_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, blk, name, mold, attribute) result(handle)
     class(vtkhdf_mb_file), intent(inout) :: this
     type(vtkhdf_block_handle), intent(in) :: blk
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: mold${d["mold"]}$
+    character(*), intent(in), optional :: attribute
     type(vtkhdf_h5e_context) :: err_ctx
     type(vtkhdf_${loc}$_data_handle) :: handle
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
-    handle = this%blocks(blk%index)%b%register_temporal_${loc}$_data(name, mold)
+    handle = this%blocks(blk%index)%b%register_temporal_${loc}$_data(name, mold, attribute)
     call set_block_index(handle, blk%index)
     call err_ctx%restore(0)
   end function
