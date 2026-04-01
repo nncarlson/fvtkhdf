@@ -277,13 +277,14 @@ contains
 #:for s in num_specs
 #:for d in data_specs
 
-  subroutine write_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, name, array)
+  subroutine write_${loc}$_data_${s["kind"]}$_${d["suffix"]}$(this, name, array, attribute)
     class(vtkhdf_ug_file), intent(inout) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array${d["array"]}$
+    character(*), intent(in), optional :: attribute
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    call this%ug%write_${loc}$_data(name, array)
+    call this%ug%write_${loc}$_data(name, array, attribute)
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -326,14 +327,15 @@ contains
 #:for s in num_specs
 #:for r in data_specs
 
-  function register_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$(this, name, mold) result(handle)
+  function register_temporal_${loc}$_data_${s["kind"]}$_${r["suffix"]}$(this, name, mold, attribute) result(handle)
     class(vtkhdf_ug_file), intent(inout) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: mold${r["mold"]}$
+    character(*), intent(in), optional :: attribute
     type(vtkhdf_h5e_context) :: err_ctx
     type(vtkhdf_${loc}$_data_handle) :: handle
     call err_ctx%capture !TODO? push this down?
-    handle = this%ug%register_temporal_${loc}$_data(name, mold)
+    handle = this%ug%register_temporal_${loc}$_data(name, mold, attribute)
     call err_ctx%restore(0)
   end function
 #:endfor

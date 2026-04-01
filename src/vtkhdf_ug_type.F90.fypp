@@ -600,10 +600,11 @@ contains
   !! should be a compile time constraint implemented by the public API.
 #:for s in num_specs
 
-  subroutine write_cell_data_${s["kind"]}$(this, name, array)
+  subroutine write_cell_data_${s["kind"]}$(this, name, array, attribute)
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array(..)
+    character(*), intent(in), optional :: attribute
     integer, allocatable :: dims(:)
     integer :: var_index
     character(:), allocatable :: external_name, internal_name
@@ -614,7 +615,7 @@ contains
     INSIST(this%ctx%global_all(dims(size(dims)) == this%ncell))
     call this%reserve_cell_data_name(name, external_name, internal_name, var_index)
     call h5_write_dataset(this%ctx, this%cgrp_id, internal_name, array)
-    call write_data_name_attr(this%ctx, this%cgrp_id, internal_name, external_name)
+    call write_data_name_attr(this%ctx, this%cgrp_id, internal_name, external_name, attribute)
   end subroutine
 #:endfor
 
@@ -625,10 +626,11 @@ contains
   !! should be a compile time constraint implemented by the public API.
 #:for s in num_specs
 
-  subroutine write_point_data_${s["kind"]}$(this, name, array)
+  subroutine write_point_data_${s["kind"]}$(this, name, array, attribute)
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array(..)
+    character(*), intent(in), optional :: attribute
     integer, allocatable :: dims(:)
     integer :: var_index
     character(:), allocatable :: external_name, internal_name
@@ -639,7 +641,7 @@ contains
     INSIST(this%ctx%global_all(dims(size(dims)) == this%nnode))
     call this%reserve_point_data_name(name, external_name, internal_name, var_index)
     call h5_write_dataset(this%ctx, this%pgrp_id, internal_name, array)
-    call write_data_name_attr(this%ctx, this%pgrp_id, internal_name, external_name)
+    call write_data_name_attr(this%ctx, this%pgrp_id, internal_name, external_name, attribute)
   end subroutine
 #:endfor
 
@@ -698,11 +700,12 @@ contains
   !! dataset. All MPI ranks must provide identical MOLD characteristics.
 #:for s in num_specs
 
-  function register_temporal_cell_data_${s["kind"]}$(this, name, mold) result(handle)
+  function register_temporal_cell_data_${s["kind"]}$(this, name, mold, attribute) result(handle)
 
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: mold(..)
+    character(*), intent(in), optional :: attribute
     type(vtkhdf_cell_data_handle) :: handle
 
     integer :: var_index
@@ -717,7 +720,7 @@ contains
     associate (chunk_size => data_chunk_size(this, c_sizeof(mold)))
       call h5_create_unlimited_dataset(this%ctx, this%cgrp_id, internal_name, mold, chunk_size)
     end associate
-    call write_data_name_attr(this%ctx, this%cgrp_id, internal_name, external_name)
+    call write_data_name_attr(this%ctx, this%cgrp_id, internal_name, external_name, attribute)
 
     !! Dataset for its time step offsets
     associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
@@ -743,11 +746,12 @@ contains
   !! All MPI ranks must provide identical MOLD characteristics.
 #:for s in num_specs
 
-  function register_temporal_point_data_${s["kind"]}$(this, name, mold) result(handle)
+  function register_temporal_point_data_${s["kind"]}$(this, name, mold, attribute) result(handle)
 
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: mold(..)
+    character(*), intent(in), optional :: attribute
     type(vtkhdf_point_data_handle) :: handle
 
     integer :: var_index
@@ -762,7 +766,7 @@ contains
     associate (chunk_size => data_chunk_size(this, c_sizeof(mold)))
       call h5_create_unlimited_dataset(this%ctx, this%pgrp_id, internal_name, mold, chunk_size)
     end associate
-    call write_data_name_attr(this%ctx, this%pgrp_id, internal_name, external_name)
+    call write_data_name_attr(this%ctx, this%pgrp_id, internal_name, external_name, attribute)
 
     !! Dataset for its time step offsets
     associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
@@ -1212,15 +1216,21 @@ contains
     end do
   end subroutine
 
-  subroutine write_data_name_attr(ctx, grp_id, dataset_name, external_name)
+  subroutine write_data_name_attr(ctx, grp_id, dataset_name, external_name, attribute)
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: grp_id
     character(*), intent(in) :: dataset_name, external_name
+    character(*), intent(in), optional :: attribute
+    character(:), allocatable :: trimmed_attribute
     integer(hid_t) :: dset_id
     integer :: ierr
     dset_id = H5Dopen(grp_id, dataset_name)
     INSIST(ctx%global_all(dset_id >= 0))
     call h5_write_attr(ctx, dset_id, 'Name', external_name)
+    if (present(attribute)) then
+      trimmed_attribute = trim(attribute)
+      if (trimmed_attribute /= '') call h5_write_attr(ctx, dset_id, 'Attribute', trimmed_attribute)
+    end if
     ierr = H5Dclose(dset_id)
     INSIST(ctx%global_all(ierr >= 0))
   end subroutine

@@ -2,32 +2,49 @@ if(ENABLE_MPI)
   add_executable(vtkhdf_mb_test vtkhdf_mb_test.F90)
   target_link_libraries(vtkhdf_mb_test PRIVATE fvtkhdf)
 
-  add_test(vtkhdf_mb_file_type ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4 ./vtkhdf_mb_test ${MPIEXEC_POSTFLAGS})
-  set_tests_properties(vtkhdf_mb_file_type PROPERTIES PROCESSORS 4)
+  add_test(vtkhdf_mb_file_type ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
+           ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_mb_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_mb_file_type PROPERTIES
+    PROCESSORS 4
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  )
 
   add_executable(vtkhdf_ug_test vtkhdf_ug_test.F90)
   target_link_libraries(vtkhdf_ug_test PRIVATE fvtkhdf)
 
-  add_test(vtkhdf_ug_file_type ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4 ./vtkhdf_ug_test ${MPIEXEC_POSTFLAGS})
-  set_tests_properties(vtkhdf_ug_file_type PROPERTIES PROCESSORS 4)
+  add_test(vtkhdf_ug_file_type ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
+           ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_ug_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_ug_file_type PROPERTIES
+    PROCESSORS 4
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  )
 else()
   add_executable(vtkhdf_ug_test vtkhdf_ug_test-serial.F90)
   target_link_libraries(vtkhdf_ug_test PRIVATE fvtkhdf)
 
-  add_test(vtkhdf_ug_file_type ./vtkhdf_ug_test)
-  set_tests_properties(vtkhdf_ug_file_type PROPERTIES PROCESSORS 1)
+  add_test(vtkhdf_ug_file_type ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_ug_test)
+  set_tests_properties(vtkhdf_ug_file_type PROPERTIES
+    PROCESSORS 1
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  )
 
   add_executable(vtkhdf_moving_ug_test vtkhdf_moving_ug_test-serial.F90)
   target_link_libraries(vtkhdf_moving_ug_test PRIVATE fvtkhdf)
 
-  add_test(vtkhdf_moving_ug_file_type ./vtkhdf_moving_ug_test)
-  set_tests_properties(vtkhdf_moving_ug_file_type PROPERTIES PROCESSORS 1)
+  add_test(vtkhdf_moving_ug_file_type ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_moving_ug_test)
+  set_tests_properties(vtkhdf_moving_ug_file_type PROPERTIES
+    PROCESSORS 1
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  )
 
   add_executable(vtkhdf_mb_test vtkhdf_mb_test-serial.F90)
   target_link_libraries(vtkhdf_mb_test PRIVATE fvtkhdf)
 
-  add_test(vtkhdf_mb_file_type ./vtkhdf_mb_test)
-  set_tests_properties(vtkhdf_mb_file_type PROPERTIES PROCESSORS 1)
+  add_test(vtkhdf_mb_file_type ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_mb_test)
+  set_tests_properties(vtkhdf_mb_file_type PROPERTIES
+    PROCESSORS 1
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  )
 endif()
 
 add_executable(vtkhdf_dynamic_ug_test vtkhdf_dynamic_ug_test.F90)
@@ -39,22 +56,94 @@ target_link_libraries(vtkhdf_chunk_test PRIVATE fvtkhdf)
 find_program(H5DUMP_EXECUTABLE NAMES h5dump)
 
 if(ENABLE_MPI)
-  add_test(vtkhdf_dynamic_ug_file_type ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4 ./vtkhdf_dynamic_ug_test ${MPIEXEC_POSTFLAGS})
-  set_tests_properties(vtkhdf_dynamic_ug_file_type PROPERTIES PROCESSORS 4)
+  add_test(vtkhdf_dynamic_ug_file_type ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
+           ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_dynamic_ug_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_dynamic_ug_file_type PROPERTIES
+    PROCESSORS 4
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  )
 
-  add_test(vtkhdf_chunk_settings ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4 ./vtkhdf_chunk_test ${MPIEXEC_POSTFLAGS})
+  add_test(vtkhdf_chunk_settings ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
+           ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_chunk_test ${MPIEXEC_POSTFLAGS})
   set_tests_properties(vtkhdf_chunk_settings PROPERTIES
     PROCESSORS 4
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     FIXTURES_SETUP vtkhdf_chunk_files
   )
 else()
-  add_test(vtkhdf_dynamic_ug_file_type vtkhdf_dynamic_ug_test)
+  add_test(vtkhdf_dynamic_ug_file_type ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_dynamic_ug_test)
+  set_tests_properties(vtkhdf_dynamic_ug_file_type PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  )
 
-  add_test(vtkhdf_chunk_settings vtkhdf_chunk_test)
-  set_tests_properties(vtkhdf_chunk_settings PROPERTIES FIXTURES_SETUP vtkhdf_chunk_files)
+  add_test(vtkhdf_chunk_settings ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_chunk_test)
+  set_tests_properties(vtkhdf_chunk_settings PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    FIXTURES_SETUP vtkhdf_chunk_files
+  )
 endif()
 
 if(H5DUMP_EXECUTABLE)
+  add_test(
+    NAME vtkhdf_ug_static_cell_attribute
+    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/CellData/static-cell-scalar/Attribute
+            ${CMAKE_CURRENT_BINARY_DIR}/ug_test.vtkhdf
+  )
+  set_tests_properties(vtkhdf_ug_static_cell_attribute PROPERTIES
+    DEPENDS vtkhdf_ug_file_type
+    PASS_REGULAR_EXPRESSION "\"Scalars\""
+  )
+
+  add_test(
+    NAME vtkhdf_ug_static_point_attribute
+    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/PointData/static-point-vector/Attribute
+            ${CMAKE_CURRENT_BINARY_DIR}/ug_test.vtkhdf
+  )
+  set_tests_properties(vtkhdf_ug_static_point_attribute PROPERTIES
+    DEPENDS vtkhdf_ug_file_type
+    PASS_REGULAR_EXPRESSION "\"Vectors\""
+  )
+
+  add_test(
+    NAME vtkhdf_ug_temporal_cell_attribute
+    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/CellData/cell-radius/Attribute
+            ${CMAKE_CURRENT_BINARY_DIR}/ug_test.vtkhdf
+  )
+  set_tests_properties(vtkhdf_ug_temporal_cell_attribute PROPERTIES
+    DEPENDS vtkhdf_ug_file_type
+    PASS_REGULAR_EXPRESSION "\"Scalars\""
+  )
+
+  add_test(
+    NAME vtkhdf_ug_temporal_point_attribute
+    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/PointData/point-velocity/Attribute
+            ${CMAKE_CURRENT_BINARY_DIR}/ug_test.vtkhdf
+  )
+  set_tests_properties(vtkhdf_ug_temporal_point_attribute PROPERTIES
+    DEPENDS vtkhdf_ug_file_type
+    PASS_REGULAR_EXPRESSION "\"Vectors\""
+  )
+
+  add_test(
+    NAME vtkhdf_mb_static_cell_attribute
+    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/Group_0/CellData/static-cell-scalar/Attribute
+            ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
+  )
+  set_tests_properties(vtkhdf_mb_static_cell_attribute PROPERTIES
+    DEPENDS vtkhdf_mb_file_type
+    PASS_REGULAR_EXPRESSION "\"Scalars\""
+  )
+
+  add_test(
+    NAME vtkhdf_mb_temporal_point_attribute
+    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/Group_1/PointData/point-velocity/Attribute
+            ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
+  )
+  set_tests_properties(vtkhdf_mb_temporal_point_attribute PROPERTIES
+    DEPENDS vtkhdf_mb_file_type
+    PASS_REGULAR_EXPRESSION "\"Vectors\""
+  )
+
   add_test(
     NAME vtkhdf_chunk_default_layout
     COMMAND ${H5DUMP_EXECUTABLE} -pH -d /VTKHDF/Types
@@ -78,4 +167,5 @@ endif()
 
 add_executable(test_leak test_leak.F90)
 target_link_libraries(test_leak PRIVATE fvtkhdf)
-add_test(NAME test_leak COMMAND test_leak)
+add_test(NAME test_leak COMMAND ${CMAKE_CURRENT_BINARY_DIR}/test_leak)
+set_tests_properties(test_leak PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})

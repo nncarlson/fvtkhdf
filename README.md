@@ -13,8 +13,9 @@ while also supporting serial workflows. By utilizing HDF5 as the underlying
 storage mechanism, **fVTKHDF** provides a more scalable alternative to older
 VTK ASCII or XML formats.
 
-* Targets version 2.5 of the [VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html).
-* ParaView 5.13+ recommended for full support of the generated files.
+* Targets version 2.6 of the [VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html).
+* ParaView 5.13 and 6.0 are expected to work for most generated files, but
+  ParaView 6.1+ is recommended for full VTKHDF 2.6 support.
 
 **Dataset Support**
 
@@ -159,10 +160,6 @@ Planned and prospective features include:
 * Composite VTK datasets
   - Replace the legacy MB with PartitionedDataSetCollection (PDC) ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26))
   - Implement a general `Assembly` tree for PDC to replace the existing flat tree.
-
-* New features added in VTKHDF version 2.6
-  - Add support for [`Attribute` data](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#attribute-data)
-    on cell/point/field datasets ([issue #23](https://github.com/nncarlson/fvtkhdf/issues/23)).
 
 ### Additional Dataset Types
 

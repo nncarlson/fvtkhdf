@@ -41,7 +41,7 @@ program vtkhdf_mb_test
     hcell_velocity = vizfile%register_temporal_cell_data(hblk_a, 'cell-velocity', vector_mold)
     ! Block-B has time-dependent point data
     hpoint_radius = vizfile%register_temporal_point_data(hblk_b, 'point-radius', scalar_mold)
-    hpoint_velocity = vizfile%register_temporal_point_data(hblk_b, 'point-velocity', vector_mold)
+    hpoint_velocity = vizfile%register_temporal_point_data(hblk_b, 'point-velocity', vector_mold, attribute='Vectors')
     hfield_value = vizfile%register_temporal_field_data(hblk_a, 'field-value', scalar_mold)
     hfield_scalar = vizfile%register_temporal_field_data(hblk_a, 'field-scalar', scalar_mold)
     hfield_vector = vizfile%register_temporal_field_data(hblk_a, 'field-vector', scalar_mold)
@@ -83,7 +83,7 @@ program vtkhdf_mb_test
   !! At any point you can write a data that isn't time dependent, but its name must
   !! be unique from any other data temporal or not of the same type (cell or point).
 
-  call vizfile%write_cell_data(hblk_a, 'static-cell-scalar', -scalar_cell_data)
+  call vizfile%write_cell_data(hblk_a, 'static-cell-scalar', -scalar_cell_data, attribute='Scalars')
   call vizfile%write_cell_data(hblk_a, 'static-cell-vector', -vector_cell_data)
   call vizfile%write_point_data(hblk_b, 'static-point-scalar', -scalar_point_data)
   call vizfile%write_point_data(hblk_b, 'static-point-vector', -vector_point_data)

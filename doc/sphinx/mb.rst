@@ -127,11 +127,17 @@ block permits static data of that category (mesh-centered or field).
 
 .. glossary::
 
-   ``call file%write_cell_data(block, name, array)``
-   ``call file%write_point_data(block, name, array)``
+   ``call file%write_cell_data(block, name, array [, attribute])``
+   ``call file%write_point_data(block, name, array [, attribute])``
    ``call file%write_field_data(block, name, array [, as_vector])``
       Write ``array`` to a new cell, point, or field dataset ``name``
       for the block identified by ``block``.
+
+      For cell and point data, the optional ``attribute`` argument writes
+      the VTKHDF dataset ``Attribute`` HDF5 attribute for arrays with a specific
+      VTK role, for example ``Tensors`` or ``GlobalIds``. For the full
+      set of allowed values, see the VTKHDF specification section
+      `Attribute Data <https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#attribute-data>`_.
 
 Temporal Data
 ~~~~~~~~~~~~~
@@ -145,12 +151,18 @@ All temporal blocks share a common timeline created by ``start_time_step``.
 
 .. glossary::
 
-   ``cell_var  = file%register_temporal_cell_data(block, name, mold)``
-   ``point_var = file%register_temporal_point_data(block, name, mold)``
+   ``cell_var  = file%register_temporal_cell_data(block, name, mold [, attribute])``
+   ``point_var = file%register_temporal_point_data(block, name, mold [, attribute])``
    ``field_var = file%register_temporal_field_data(block, name, mold)``
       Register ``name`` as a time-dependent cell, point, or field dataset
       for the block identified by ``block``, and return an opaque handle
       to it.
+
+      For cell and point data, the optional ``attribute`` argument writes
+      the dataset ``Attribute`` HDF5 attribute at registration time, for example
+      ``Tensors`` or ``GlobalIds``. For the full set of allowed values,
+      see the VTKHDF specification section `Attribute Data
+      <https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#attribute-data>`_.
 
 ``call file%start_time_step(time)``
    Start a new shared time step with time value ``time`` for every
