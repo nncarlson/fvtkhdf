@@ -5,4 +5,5 @@ module fvtkhdf_lib_info
   integer, parameter :: FVTKHDF_LIB_MINOR = @PROJECT_VERSION_MINOR@
   integer, parameter :: FVTKHDF_LIB_PATCH = @PROJECT_VERSION_PATCH@
   character(*), parameter :: FVTKHDF_LIB_VERSION = "@PROJECT_VERSION@"
+  character(*), parameter :: FVTKHDF_LIB_DISPLAY_VERSION = "@FVTKHDF_DISPLAY_VERSION@"
 end module

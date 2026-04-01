@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28..3.30)
 
-project(fVTKHDF VERSION 0.6.0 LANGUAGES Fortran C)
+project(fVTKHDF VERSION 0.6.1 LANGUAGES Fortran C)
 
 # --- Options ---
 option(ENABLE_MPI "Enable MPI support" ON)
@@ -18,6 +18,8 @@ endif()
 
 # Standardize install paths (lib64, bin, include)
 include(GNUInstallDirs)
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+include(Version)
 
 # --- Dependencies ---
 
@@ -74,7 +76,6 @@ if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
 endif()
 
 # --- Subdirectories ---
-list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 include(Fypp)
 
 add_subdirectory(src)

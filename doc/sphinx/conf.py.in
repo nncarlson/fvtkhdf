@@ -9,8 +9,8 @@
 project = 'fVTKHDF'
 copyright = '2026, Neil N. Carlson'
 author = 'Neil N. Carlson'
-version = '@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@'
-release = '@PROJECT_VERSION@'
+version = '@PROJECT_VERSION@'
+release = '@FVTKHDF_DISPLAY_VERSION@'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
