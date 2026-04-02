@@ -104,11 +104,10 @@ contains
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
-    character(*), intent(in) :: value
-    character(kind=c_char, len=1) :: cbuf(len(value))
+    character(kind=c_char, len=*), intent(in) :: value
 
     integer(hid_t) :: type_id, attr_id
-    integer :: ierr, i
+    integer :: ierr
 
     type_id = H5Tcopy(H5T_NATIVE_CHARACTER)
     INSIST(type_id > 0)
@@ -117,11 +116,7 @@ contains
 
     call get_attr_id(ctx, obj_id, name, type_id, [integer(hsize_t) ::], attr_id)
 
-    do i = 1, len(value)
-      cbuf(i) = value(i:i)
-    end do
-
-    ierr = H5Awrite(attr_id, type_id, cbuf)
+    ierr = H5Awrite(attr_id, type_id, value)
     INSIST(ctx%global_all(ierr >= 0))
 
     ierr = H5Aclose(attr_id)
