@@ -105,7 +105,7 @@ contains
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     character(*), intent(in) :: value
-    character(kind=c_char, len=1) :: cbuf(len(value)+1)
+    character(kind=c_char, len=1) :: cbuf(len(value))
 
     integer(hid_t) :: type_id, attr_id
     integer :: ierr, i
@@ -120,7 +120,6 @@ contains
     do i = 1, len(value)
       cbuf(i) = value(i:i)
     end do
-    cbuf(len(value)+1) = c_null_char
 
     ierr = H5Awrite(attr_id, type_id, cbuf)
     INSIST(ctx%global_all(ierr >= 0))
