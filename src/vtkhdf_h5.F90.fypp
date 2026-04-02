@@ -104,36 +104,25 @@ contains
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
-#ifdef INTEL_BUG20240327
     character(*), intent(in) :: value
-#else
-    character(*), intent(in) :: value(..)
-#endif
+    character(kind=c_char, len=1) :: cbuf(len(value)+1)
 
     integer(hid_t) :: type_id, attr_id
-    integer :: ierr
+    integer :: ierr, i
 
     type_id = H5Tcopy(H5T_NATIVE_CHARACTER)
     INSIST(type_id > 0)
     ierr = H5Tset_size(type_id, len(value, kind=c_size_t))
     INSIST(ierr >= 0)
 
-    call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id)
+    call get_attr_id(ctx, obj_id, name, type_id, [integer(hsize_t) ::], attr_id)
 
-#ifdef INTEL_BUG20240327
-    ierr = H5Awrite(attr_id, type_id, [value])
-#else
-    select rank (value)
-    rank (0)
-      ierr = H5Awrite(attr_id, type_id, [value])
-    rank (1)
-      ierr = H5Awrite(attr_id, type_id, value)
-    rank (2)
-      ierr = H5Awrite(attr_id, type_id, value)
-    rank default
-      INSIST(.false.)
-    end select
-#endif
+    do i = 1, len(value)
+      cbuf(i) = value(i:i)
+    end do
+    cbuf(len(value)+1) = c_null_char
+
+    ierr = H5Awrite(attr_id, type_id, cbuf)
     INSIST(ctx%global_all(ierr >= 0))
 
     ierr = H5Aclose(attr_id)
