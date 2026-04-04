@@ -22,7 +22,7 @@ jobs:
 
     - name: Configure CMake
       run: |
-        if [ "${{ matrix.mpi }}" == "ON" ]; then
+        if [ "${{ matrix.mpi }}" = "ON" ]; then
           export CC=mpicc
           export FC=mpif90
         fi

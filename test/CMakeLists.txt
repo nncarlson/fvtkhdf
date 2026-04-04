@@ -28,7 +28,6 @@ endfunction()
 
 vtkhdf_add_test_target(vtkhdf_mb_test vtkhdf_mb_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_basic_blocks_test vtkhdf_mb_basic_blocks_test.F90)
-vtkhdf_add_test_target(vtkhdf_mb_zero_part_test vtkhdf_mb_zero_part_test.F90)
 vtkhdf_add_test_target(vtkhdf_ug_test vtkhdf_ug_test.F90)
 vtkhdf_add_test_target(vtkhdf_ug_static_test vtkhdf_ug_static_test.F90)
 vtkhdf_add_test_target(vtkhdf_ug_fixed_file_test vtkhdf_ug_fixed_test.F90)
@@ -70,6 +69,7 @@ set_tests_properties(vtkhdf_chunk_settings PROPERTIES
 )
 
 if(ENABLE_MPI)
+  vtkhdf_add_test_target(vtkhdf_mb_zero_part_test vtkhdf_mb_zero_part_test.F90)
   vtkhdf_add_runtime_test(vtkhdf_mb_zero_part_file_type vtkhdf_mb_zero_part_test)
 endif()
 
@@ -93,34 +93,6 @@ else()
   else()
     message(STATUS "VTK Python reader not available: skipping VTK HDF readback tests")
   endif()
-endif()
-
-if(ENABLE_MPI)
-  add_test(vtkhdf_dynamic_ug_file_type ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
-           ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_dynamic_ug_test ${MPIEXEC_POSTFLAGS})
-  set_tests_properties(vtkhdf_dynamic_ug_file_type PROPERTIES
-    PROCESSORS 4
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  )
-
-  add_test(vtkhdf_chunk_settings ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
-           ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_chunk_test ${MPIEXEC_POSTFLAGS})
-  set_tests_properties(vtkhdf_chunk_settings PROPERTIES
-    PROCESSORS 4
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    FIXTURES_SETUP vtkhdf_chunk_files
-  )
-else()
-  add_test(vtkhdf_dynamic_ug_file_type ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_dynamic_ug_test)
-  set_tests_properties(vtkhdf_dynamic_ug_file_type PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  )
-
-  add_test(vtkhdf_chunk_settings ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_chunk_test)
-  set_tests_properties(vtkhdf_chunk_settings PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    FIXTURES_SETUP vtkhdf_chunk_files
-  )
 endif()
 
 if(ENABLE_MPI)
