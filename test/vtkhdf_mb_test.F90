@@ -1,233 +1,62 @@
 program vtkhdf_mb_test
 
-  use,intrinsic :: iso_fortran_env, only: r8 => real64, int8
+  use, intrinsic :: iso_fortran_env, only: r8 => real64, int8
+  use vtkhdf_test_env
+  use vtkhdf_test_data
   use vtkhdf_mb_file_type
-  use vtkhdf_vtk_cell_types
+#ifdef USE_MPI
   use mpi
+#endif
   implicit none
 
-  type(vtkhdf_mb_file) :: vizfile
-  integer :: istat, nproc, rank, stat, j
-  character(:), allocatable :: errmsg
-  character(7), allocatable :: name(:)
-  !! 0-sized mesh
-  real(r8) :: x0(3,0)
-  integer  :: cnode0(0), xcnode0(1) = 1
-  integer(int8) :: types0(0)
-  !! Basic mesh unit
-  real(r8), allocatable :: points(:,:), y(:,:)
-  integer,  allocatable :: cnode(:), xcnode(:)
+  real(r8), allocatable :: points_a(:,:), points_b(:,:)
+  real(r8), allocatable :: scalar_cell_data(:), vector_point_data(:,:)
+  integer, allocatable :: cnode(:), xcnode(:)
   integer(int8), allocatable :: types(:)
-  real(r8), allocatable :: s(:), v(:,:) ! scalar and vector data arrays
-  real(r8), allocatable :: fs(:), fv(:,:) ! scalar and vector field arrays
-  real(r8) :: s0(0), v0(3,0) ! 0-sized scalar and vector arrays; also molds for same
-  type(vtkhdf_block_handle), allocatable :: hblk(:)
-  type(vtkhdf_cell_data_handle), allocatable :: hcell_scalar(:), hcell_vector(:)
-  type(vtkhdf_point_data_handle), allocatable :: hpoint_scalar(:), hpoint_vector(:)
-  type(vtkhdf_field_data_handle), allocatable :: hfield_value(:), hfield_scalar(:), hfield_vector(:)
+  character(:), allocatable :: errmsg
+  integer :: rank, nproc, stat
 
-  call MPI_Init(istat)
-  call MPI_Comm_size(MPI_COMM_WORLD, nproc, istat)
-  call MPI_Comm_rank(MPI_COMM_WORLD, rank, istat)
+  type(vtkhdf_mb_file) :: vizfile
+  type(vtkhdf_block_handle) :: hblk_a, hblk_b
+  type(vtkhdf_point_data_handle) :: hpoint_velocity
 
+  call test_env_init(rank, nproc)
+
+#ifdef USE_MPI
   call vizfile%create('mb_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg)
+#else
+  call vizfile%create('mb_test.vtkhdf', stat, errmsg)
+#endif
   if (stat /= 0) error stop errmsg
 
-  !! The unstructured mesh data for a basic mesh unit. The full mesh will
-  !! be a collection of non-overlapping shifts of this basic unit. Each
-  !! rank has one of these, which is right-shifted proportional to the rank.
-  call get_mesh_data(points, cnode, xcnode, types)
-  points(1,:) = points(1,:) + rank ! shift right
+  call get_tet_cube_mesh_data(points_a, cnode, xcnode, types)
+  call shift_points(points_a, dx=real(rank, r8))
+  points_b = points_a
+  call shift_points(points_b, dy=1.0_r8)
 
-  !! Create the mesh blocks and export the mesh for each. Each mesh block
-  !! consists of 2 or 3 basic mesh units from select ranks; other ranks
-  !! contribute an empty mesh. Not all blocks (or any) need to be temporal.
-  !!
-  !! NB: all VTKHDF_FILE methods are collective and ranks not contributing
-  !! any data need to be called with appropriate 0-sized data.
+  hblk_a = vizfile%add_block('Block-A', mode=UG_FIXED_MESH)
+  call vizfile%write_mesh(hblk_a, points_a, cnode, xcnode, types)
 
-  allocate(name(0:nproc-1), hblk(0:nproc-1), hcell_scalar(0:nproc-1), hcell_vector(0:nproc-1), &
-      hpoint_scalar(0:nproc-1), hpoint_vector(0:nproc-1), hfield_value(0:nproc-1), &
-      hfield_scalar(0:nproc-1), hfield_vector(0:nproc-1))
-  do j = 0, nproc-1! Block names
-    write(name(j),'("block",i2.2)') j
-  end do
+  hblk_b = vizfile%add_block('Block-B', mode=UG_FIXED_MESH)
+  call vizfile%write_mesh(hblk_b, points_b, cnode, xcnode, types)
 
-  y = points ! initial node coordinates
-  do j = 0, nproc-1 ! block loop
-    hblk(j) = vizfile%add_block(name(j), mode=UG_FIXED_MESH)
-    if (abs(rank-j) <= 1) then
-      call vizfile%write_mesh(hblk(j), y, cnode, xcnode, types)
-    else ! pass a 0-sized mesh
-      call vizfile%write_mesh(hblk(j), x0, cnode0, xcnode0, types0)
-    endif
-    y(2,:) = y(2,:) + 1 ! everyone shifts up
-  end do
+  hpoint_velocity = vizfile%register_temporal_point_data(hblk_b, 'point-velocity', [real(r8) :: 0, 0, 0], &
+      attribute='Vectors')
 
-  !!!! Register the data arrays that evolve with time.
-
-  associate (scalar_mold => 0.0_r8, vector_mold => [real(r8) :: 0, 0, 0])
-    do j = 0, nproc-1
-      hcell_scalar(j) = vizfile%register_temporal_cell_data(hblk(j), 'cell-scalar', scalar_mold)
-      hcell_vector(j) = vizfile%register_temporal_cell_data(hblk(j), 'cell-vector', vector_mold)
-      hpoint_scalar(j) = vizfile%register_temporal_point_data(hblk(j), 'point-scalar', scalar_mold)
-      hpoint_vector(j) = vizfile%register_temporal_point_data(hblk(j), 'point-vector', vector_mold)
-      hfield_value(j) = vizfile%register_temporal_field_data(hblk(j), 'field-value', scalar_mold)
-      hfield_scalar(j) = vizfile%register_temporal_field_data(hblk(j), 'field-scalar', scalar_mold)
-      hfield_vector(j) = vizfile%register_temporal_field_data(hblk(j), 'field-vector', scalar_mold)
-    end do
-  end associate
-
-  !!!! Write the datasets for the first time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  call get_scalar_cell_data(points_a, cnode, xcnode, scalar_cell_data)
+  call get_vector_point_data(points_b, vector_point_data)
 
   call vizfile%start_time_step(0.0_r8)
-
-  y = points ! restore initial node coordinates
-  do j = 0, nproc-1
-    if (abs(rank-j) <= 1) then
-      call get_scalar_cell_data(y, cnode, xcnode, s)
-      call vizfile%write_cell_data(hblk(j), hcell_scalar(j), s)
-      call get_vector_cell_data(y, cnode, xcnode, v)
-      call vizfile%write_cell_data(hblk(j), hcell_vector(j), v)
-      call get_scalar_point_data(y, s)
-      call vizfile%write_point_data(hblk(j), hpoint_scalar(j), s)
-      call get_vector_point_data(y, v)
-      call vizfile%write_point_data(hblk(j), hpoint_vector(j), v)
-    else ! pass 0-sized data
-      call vizfile%write_cell_data(hblk(j), hcell_scalar(j), s0)
-      call vizfile%write_cell_data(hblk(j), hcell_vector(j),  v0)
-      call vizfile%write_point_data(hblk(j), hpoint_scalar(j), s0)
-      call vizfile%write_point_data(hblk(j), hpoint_vector(j),  v0)
-    end if
-    fs = [real(j+1, r8), real(j+2, r8)]
-    fv = reshape([real(j+1, r8), real(j+2, r8), real(j+3, r8), &
-        real(j+11, r8), real(j+12, r8), real(j+13, r8)], [3,2])
-    call vizfile%write_field_data(hblk(j), hfield_value(j), real(100+j, r8))
-    call vizfile%write_field_data(hblk(j), hfield_scalar(j), fs, as_vector=.true.)
-    call vizfile%write_field_data(hblk(j), hfield_vector(j), fv)
-    y(2,:) = y(2,:) + 2 ! everyone shifts up
-  end do
+  call vizfile%write_point_data(hblk_b, hpoint_velocity, vector_point_data)
   call vizfile%finalize_time_step()
-
-  call vizfile%flush()
-
-  !!!! Write the datasets for the second time step !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   call vizfile%start_time_step(1.0_r8)
-
-  y = points ! restore initial node coordinates
-  do j = 0, nproc-1
-    if (abs(rank-j) <= 1) then
-      call get_scalar_cell_data(y, cnode, xcnode, s)
-      call vizfile%write_cell_data(hblk(j), hcell_scalar(j), s+1)
-      call get_vector_cell_data(y, cnode, xcnode, v)
-      call vizfile%write_cell_data(hblk(j), hcell_vector(j), v+1)
-      call get_scalar_point_data(y, s)
-      call vizfile%write_point_data(hblk(j), hpoint_scalar(j), s+1)
-      call get_vector_point_data(y, v)
-      call vizfile%write_point_data(hblk(j), hpoint_vector(j), v+1)
-    else ! pass 0-sized data
-      call vizfile%write_cell_data(hblk(j), hcell_scalar(j), s0)
-      call vizfile%write_cell_data(hblk(j), hcell_vector(j),  v0)
-      call vizfile%write_point_data(hblk(j), hpoint_scalar(j), s0)
-      call vizfile%write_point_data(hblk(j), hpoint_vector(j),  v0)
-    end if
-    fs = [real(10+j, r8), real(20+j, r8), real(30+j, r8)]
-    call vizfile%write_field_data(hblk(j), hfield_scalar(j), fs)
-    y(2,:) = y(2,:) + 2 ! everyone shifts up
-  end do
+  call vizfile%write_point_data(hblk_b, hpoint_velocity, vector_point_data + 1.0_r8)
   call vizfile%finalize_time_step()
 
-  !! At any point you can write a dataset that isn't time dependent, but its name must
-  !! be unique from any other dataset, temporal or not, of the same type (cell or point).
+  call vizfile%write_cell_data(hblk_a, 'static-cell-scalar', -scalar_cell_data, attribute='Scalars')
 
-  y = points ! restore initial node coordinates
-  do j = 0, nproc-1
-    if (abs(rank-j) <= 1) then
-      call get_scalar_cell_data(y, cnode, xcnode, s)
-      call vizfile%write_cell_data(hblk(j), 'static-cell-scalar', s)
-      call get_vector_cell_data(y, cnode, xcnode, v)
-      call vizfile%write_cell_data(hblk(j), 'static-cell-vector', v)
-      call get_scalar_point_data(y, s)
-      call vizfile%write_point_data(hblk(j), 'static-point-scalar', s)
-      call get_vector_point_data(y, v)
-      call vizfile%write_point_data(hblk(j), 'static-point-vector', v)
-    else ! pass 0-sized data
-      call vizfile%write_cell_data(hblk(j), 'static-cell-scalar', s0)
-      call vizfile%write_cell_data(hblk(j), 'static-cell-vector',  v0)
-      call vizfile%write_point_data(hblk(j), 'static-point-scalar', s0)
-      call vizfile%write_point_data(hblk(j), 'static-point-vector',  v0)
-    end if
-    fs = [real(-j-1, r8), real(-j-2, r8), real(-j-3, r8), real(-j-4, r8)]
-    fv = reshape([real(-j-1, r8), real(-j-2, r8), real(-j-3, r8), &
-        real(-j-11, r8), real(-j-12, r8), real(-j-13, r8)], [3,2])
-    y(2,:) = y(2,:) + 2 ! everyone shifts up
-  end do
+  call vizfile%close()
+  call test_env_finalize()
 
-  call vizfile%close
-  call MPI_Finalize(istat)
-
-contains
-
-  ! A 5-tet subdivision of a squished unit cube.
-  subroutine get_mesh_data(points, cnode, xcnode, types)
-    real(r8), allocatable, intent(out) :: points(:,:)
-    integer, allocatable, intent(out) :: cnode(:), xcnode(:)
-    integer(int8), allocatable :: types(:)
-    points = reshape([0,0,0, 1,0,0, 1,1,0, 0,1,0, 0,0,1, 1,0,1, 1,1,1, 0,1,1], shape=[3,8])
-    ! distort to catch C/Fortran index ordering errors
-    points(1,:) = 0.9_r8*points(1,:)
-    points(2,:) = 0.7_r8*points(2,:)
-    points(3,:) = 0.5_r8*points(3,:)
-    cnode = [1,2,4,5, 2,3,4,7, 2,5,6,7, 4,5,7,8, 2,4,5,7]
-    xcnode = [1,5,9,13,17,21]
-    types = spread(VTK_TETRA, dim=1, ncopies=5)
-  end subroutine
-
-  ! Point scalar is the magnitude of the node coordinate
-  subroutine get_scalar_point_data(points, pdata)
-    real(r8), intent(in) :: points(:,:)
-    real(r8), allocatable, intent(out) :: pdata(:)
-    integer :: j
-    allocate(pdata(size(points,dim=2)))
-    do j = 1, size(points,dim=2)
-      pdata(j) = norm2(points(:,j))
-    end do
-  end subroutine
-
-  ! Point vector is the node coordinate itself
-  subroutine get_vector_point_data(points, pdata)
-    real(r8), intent(in) :: points(:,:)
-    real(r8), allocatable, intent(out) :: pdata(:,:)
-    pdata = points
-  end subroutine
-
-  ! Cell scalar is the magnitude of the cell centroid
-  subroutine get_scalar_cell_data(points, cnode, xcnode, cdata)
-    real(r8), intent(in) :: points(:,:)
-    integer, intent(in) :: cnode(:), xcnode(:)
-    real(r8), allocatable, intent(out) :: cdata(:)
-    integer :: j
-    allocate(cdata(size(xcnode)-1))
-    do j = 1, size(cdata)
-      associate(pid => cnode(xcnode(j):xcnode(j+1)-1))
-        cdata(j) = norm2(sum(points(:,pid),dim=2)/size(pid))
-      end associate
-    end do
-  end subroutine
-
-  ! Cell vector is the cell centroid
-  subroutine get_vector_cell_data(points, cnode, xcnode, cdata)
-    real(r8), intent(in) :: points(:,:)
-    integer, intent(in) :: cnode(:), xcnode(:)
-    real(r8), allocatable, intent(out) :: cdata(:,:)
-    integer :: j
-    allocate(cdata(size(points,dim=1),size(xcnode)-1))
-    do j = 1, size(cdata,dim=2)
-      associate(pid => cnode(xcnode(j):xcnode(j+1)-1))
-        cdata(:,j) = sum(points(:,pid),dim=2)/size(pid)
-      end associate
-    end do
-  end subroutine
-
-end program
+end program vtkhdf_mb_test
