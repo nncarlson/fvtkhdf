@@ -104,7 +104,9 @@ contains
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
-#ifdef INTEL_BUG20240327
+! NB: Default safe path for gfortran for now; string arrays not currently used.  
+!     See https://github.com/nncarlson/fvtkhdf/issues/47                         
+#if defined(INTEL_BUG20240327) || defined(__GFORTRAN__)
     character(*), intent(in) :: value
 #else
     character(*), intent(in) :: value(..)
@@ -120,7 +122,7 @@ contains
 
     call get_attr_id(ctx, obj_id, name, type_id, shape(value, hsize_t), attr_id)
 
-#ifdef INTEL_BUG20240327
+#if defined(INTEL_BUG20240327) || defined(__GFORTRAN__)
     ierr = H5Awrite(attr_id, type_id, [value])
 #else
     select rank (value)
