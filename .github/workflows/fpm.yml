@@ -35,8 +35,13 @@ jobs:
         apt-get update
         apt-get install -y pkg-config
 
-    - name: Install fpm
+    - name: Ensure fpm is available
       run: |
+        if command -v fpm >/dev/null 2>&1; then
+          fpm --version
+          exit 0
+        fi
+
         python3 - <<'PY'
         import os
         import shutil

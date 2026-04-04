@@ -20,6 +20,16 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Ensure VTK Python reader is available
+      run: |
+        if python3 -c "import vtk" >/dev/null 2>&1; then
+          python3 -c "import vtk; print(vtk.vtkVersion.GetVTKVersion())"
+          exit 0
+        fi
+
+        python3 -m pip install --break-system-packages vtk==9.6.1
+        python3 -c "import vtk; print(vtk.vtkVersion.GetVTKVersion())"
+
     - name: Configure CMake
       run: |
         if [ "${{ matrix.mpi }}" = "ON" ]; then
