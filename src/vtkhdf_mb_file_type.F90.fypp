@@ -316,6 +316,7 @@ contains
         allocate(tmp(0:n))
         do j = 0, n-1
           call move_alloc(this%blocks(j)%b, tmp(j)%b)
+          call move_alloc(this%blocks(j)%name, tmp(j)%name)
         end do
         allocate(tmp(n)%b)
         tmp(n)%name = internal_name

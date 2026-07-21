@@ -28,6 +28,7 @@ endfunction()
 
 vtkhdf_add_test_target(vtkhdf_mb_test vtkhdf_mb_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_basic_blocks_test vtkhdf_mb_basic_blocks_test.F90)
+vtkhdf_add_test_target(vtkhdf_mb_duplicate_block_name_test vtkhdf_mb_duplicate_block_name_test.F90)
 vtkhdf_add_test_target(vtkhdf_ug_test vtkhdf_ug_test.F90)
 vtkhdf_add_test_target(vtkhdf_ug_static_test vtkhdf_ug_static_test.F90)
 vtkhdf_add_test_target(vtkhdf_ug_fixed_file_test vtkhdf_ug_fixed_test.F90)
@@ -42,6 +43,7 @@ vtkhdf_add_test_target(vtkhdf_chunk_test vtkhdf_chunk_test.F90)
 
 vtkhdf_add_runtime_test(vtkhdf_mb_fixture_file vtkhdf_mb_test)
 vtkhdf_add_runtime_test(vtkhdf_mb_basic_blocks_file_type vtkhdf_mb_basic_blocks_test)
+vtkhdf_add_runtime_test(vtkhdf_mb_duplicate_block_name_file_type vtkhdf_mb_duplicate_block_name_test)
 vtkhdf_add_runtime_test(vtkhdf_ug_fixture_file vtkhdf_ug_test)
 vtkhdf_add_runtime_test(vtkhdf_ug_static_file_type vtkhdf_ug_static_test)
 vtkhdf_add_runtime_test(vtkhdf_ug_fixed_file_type vtkhdf_ug_fixed_file_test)
@@ -207,6 +209,24 @@ if(H5DUMP_EXECUTABLE)
   set_tests_properties(vtkhdf_mb_group_1_name PROPERTIES
     DEPENDS vtkhdf_mb_fixture_file
     PASS_REGULAR_EXPRESSION "\"Block-B\""
+  )
+
+  add_test(
+    NAME vtkhdf_mb_duplicate_block_name_first_link
+    COMMAND ${H5DUMP_EXECUTABLE} -n ${CMAKE_CURRENT_BINARY_DIR}/mb_duplicate_block_name_test.vtkhdf
+  )
+  set_tests_properties(vtkhdf_mb_duplicate_block_name_first_link PROPERTIES
+    DEPENDS vtkhdf_mb_duplicate_block_name_file_type
+    PASS_REGULAR_EXPRESSION "link +/VTKHDF/Assembly/Repeated_Block -> /VTKHDF/Group_0"
+  )
+
+  add_test(
+    NAME vtkhdf_mb_duplicate_block_name_second_link
+    COMMAND ${H5DUMP_EXECUTABLE} -n ${CMAKE_CURRENT_BINARY_DIR}/mb_duplicate_block_name_test.vtkhdf
+  )
+  set_tests_properties(vtkhdf_mb_duplicate_block_name_second_link PROPERTIES
+    DEPENDS vtkhdf_mb_duplicate_block_name_file_type
+    PASS_REGULAR_EXPRESSION "link +/VTKHDF/Assembly/Repeated_Block_1 -> /VTKHDF/Group_2"
   )
 
   if(ENABLE_MPI)
