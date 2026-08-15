@@ -13,9 +13,9 @@ while also supporting serial workflows. By utilizing HDF5 as the underlying
 storage mechanism, **fVTKHDF** provides a more scalable alternative to older
 VTK ASCII or XML formats.
 
-* Targets version 2.6 of the [VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html).
+* Targets version 2.8 of the [VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html).
 * ParaView 5.13 and 6.0 are expected to work for most generated files, but
-  ParaView 6.1+ is recommended for full VTKHDF 2.6 support.
+  ParaView 6.1+ is recommended for full VTKHDF 2.8 support.
 
 **Dataset Support**
 
