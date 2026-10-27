@@ -38,10 +38,10 @@ program vtkhdf_mb_basic_blocks_test
   points_b = points_a
   call shift_points(points_b, dy=1.0_r8)
 
-  hblk_a = vizfile%add_block('Block-A', mode=UG_FIXED_MESH)
+  hblk_a = vizfile%add_block('Block-A', mode=VTKHDF_FIXED_MESH)
   call vizfile%write_mesh(hblk_a, points_a, cnode, xcnode, types)
 
-  hblk_b = vizfile%add_block('Block-B', mode=UG_FIXED_MESH)
+  hblk_b = vizfile%add_block('Block-B', mode=VTKHDF_FIXED_MESH)
   call vizfile%write_mesh(hblk_b, points_b, cnode, xcnode, types)
 
   call get_scalar_point_data(points_a, scalar_point_data)

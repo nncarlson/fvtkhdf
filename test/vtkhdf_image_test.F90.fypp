@@ -1,0 +1,672 @@
+! ImageData contract fixtures: deterministic values encode global placement.
+#:set nums = [('int8','integer(int8)'), ('int32','integer(int32)'), ('int64','integer(int64)'), ('real32','real(real32)'), ('real64','real(real64)')]
+program vtkhdf_image_test
+  use,intrinsic :: iso_fortran_env
+  use vtkhdf_image_file_type
+  use vtkhdf_test_env
+  use vtkhdf_ug_file_type, only: vtkhdf_ug_file
+  use vtkhdf_structured_type, only: vtkhdf_structured
+  use vtkhdf_ctx_type, only: vtkhdf_ctx
+  use vtkhdf_h5_c_binding
+  use vtkhdf_file_modes, only: VTKHDF_MOVING_MESH
+#ifdef USE_MPI
+  use mpi
+#endif
+  implicit none
+  type(vtkhdf_ug_file) :: ug
+  type(vtkhdf_image_file) :: file
+  type(vtkhdf_cell_data_handle) :: cell_var, other_var, numeric_cells(2,5)
+  type(vtkhdf_point_data_handle) :: numeric_points(2,5)
+  type(vtkhdf_point_data_handle) :: point_var
+  type(vtkhdf_field_data_handle) :: field_var, history_var, ug_field_var, ug_history_var
+  type(vtkhdf_field_data_handle) :: variable_fields(4), ug_variable_fields(4), never_written, ug_never_written
+  integer :: rank, nproc, stat, j, step
+  integer(int32) :: bounds(2,3), dims(3), lower(3)
+  character(:), allocatable :: errmsg
+  character(32) :: filename
+  real(real64) :: matrix(3,3)
+  real(real64), allocatable :: empty(:,:,:)
+
+  call test_env_init(rank,nproc)
+  lower = [2,-3,4]
+  dims = [7,5,4]
+  bounds(1,:) = lower
+  bounds(2,:) = lower+dims-1
+  matrix = reshape([1.0_real64,0.2_real64,0.0_real64, 0.4_real64,2.0_real64,0.3_real64, &
+      0.1_real64,0.5_real64,1.5_real64],[3,3])
+  call create_ug_reference('image_fields_static_ug.vtkhdf',VTKHDF_STATIC)
+  call create_file('image_static.vtkhdf',chunk_bytes=64_int64)
+  call file%write_mesh(bounds,[1.0_real64,2.0_real64,3.0_real64], &
+      [0.5_real64,0.25_real64,2.0_real64],matrix)
+#:for kind, decl in nums
+  call static_${kind}$(lower,dims)
+#:endfor
+  call collision_fields()
+  call file%close()
+  call ug%close()
+  ! Exercise singleton x/y/z and lines parallel to every axis.
+  do j = 1, 7
+    lower = 0
+    dims = [7,5,4]
+    select case (j)
+    case (1)
+      dims(3) = 1
+    case (2)
+      dims(1) = 1
+    case (3)
+      dims(2) = 1
+    case (4)
+      dims = [7,1,1]
+    case (5)
+      dims = [1,5,1]
+    case (6)
+      dims = [1,1,4]
+    case (7)
+      lower = [-2,-3,-4]
+    end select
+    bounds(1,:) = lower
+    bounds(2,:) = lower+dims-1
+    write(filename,'(a,i0,a)') 'image_dim_',j,'.vtkhdf'
+    call create_file(trim(filename), VTKHDF_STATIC)
+    call file%write_mesh(bounds,[0.0,0.0,0.0],[1.0,1.0,1.0])
+    call simple_fields(lower,dims)
+    call file%close()
+  end do
+  lower = 0
+  dims = [7,5,4]
+  bounds(1,:) = lower
+  bounds(2,:) = dims-1
+  call create_ug_reference('image_fields_temporal_ug.vtkhdf',VTKHDF_FIXED_MESH)
+  call create_file('image_temporal.vtkhdf',VTKHDF_FIXED_MESH,64_int64)
+  call file%write_mesh(bounds,[0.0_real64,0.0_real64,0.0_real64],[1.0_real64,1.0_real64,1.0_real64])
+  cell_var = file%register_temporal_cell_data('temperature',0.0_real64,attribute='Scalars')
+  other_var = file%register_temporal_cell_data('other',0_int64)
+  point_var = file%register_temporal_point_data('velocity',[0.0_real32,0.0_real32,0.0_real32],attribute='Vectors')
+  field_var = file%register_temporal_field_data('energy',0.0_real64)
+  history_var = file%register_temporal_field_data('history',0_int32)
+  ug_field_var = ug%register_temporal_field_data('energy',0.0_real64)
+  ug_history_var = ug%register_temporal_field_data('history',0_int32)
+  call static_temporal('static_early')
+  do step = 0, 4
+    call file%start_time_step(real(step,real64))
+    call ug%start_time_step(real(step,real64))
+    if (step == 0 .or. step == 2) call temporal_cell(step)
+    if (step == 0 .or. step == 3) call temporal_point(step)
+    if (step == 0 .or. step == 4) call temporal_other(step)
+    if (step == 1 .or. step == 3) call file%write_field_data(field_var,real(step+rank*100,real64))
+    if (step == 1) call file%write_field_data(history_var,[10+rank,20+rank],as_vector=.true.)
+    if (step == 3) call file%write_field_data(history_var,reshape([1,2,3,4,5,6]+rank,[2,3]))
+    if (step == 1 .or. step == 3) call ug%write_field_data(ug_field_var,real(step+rank*100,real64))
+    if (step == 1) call ug%write_field_data(ug_history_var,[10+rank,20+rank],as_vector=.true.)
+    if (step == 3) call ug%write_field_data(ug_history_var,reshape([1,2,3,4,5,6]+rank,[2,3]))
+    if (step /= 4) call file%finalize_time_step()
+    if (step == 2) call static_temporal('static_late')
+  end do
+  ! CLOSE finalizes an open step; repeated CLOSE is harmless.
+  call file%flush()
+  call file%close()
+  call file%close()
+  call ug%close()
+  ! All-empty explicit calls still reserve a snapshot. Only its layout is
+  ! tested, because the caller deliberately supplies no complete field.
+  call create_file('image_empty.vtkhdf',VTKHDF_FIXED_MESH)
+  call file%write_mesh(bounds,[0.0,0.0,0.0],[1.0,1.0,1.0])
+  cell_var = file%register_temporal_cell_data('empty',0.0_real64)
+  allocate(empty(0,0,0))
+  call file%start_time_step(0.0)
+  bounds(2,1) = -1
+  call file%write_cell_data(cell_var,empty,array_origin=[0,0,0],write_bounds=bounds)
+  call file%write_cell_data(cell_var,empty,array_origin=[0,0,0],write_bounds=bounds)
+  ! START also finalizes the previous step. A new all-empty call must reserve
+  ! another slice even though a preceding snapshot already exists.
+  call file%start_time_step(1.0)
+  call file%write_cell_data(cell_var,empty,array_origin=[0,0,0],write_bounds=bounds)
+  call file%start_time_step(2.0)
+  call file%close()
+  bounds(1,:) = 0
+  bounds(2,:) = [2,1,1]
+  call create_file('image_numeric_temporal.vtkhdf',VTKHDF_FIXED_MESH)
+  call file%write_mesh(bounds,[0.0,0.0,0.0],[1.0,1.0,1.0])
+#:for index in range(1,6)
+#:set kind, decl = nums[index-1]
+  numeric_cells(1,${index}$) = file%register_temporal_cell_data('${kind}$-scalar',${'0.0' if kind.startswith('real') else '0'}$_${kind}$)
+  numeric_cells(2,${index}$) = file%register_temporal_cell_data('${kind}$-vector',[${'0.0' if kind.startswith('real') else '0'}$_${kind}$,${'0.0' if kind.startswith('real') else '0'}$_${kind}$])
+  numeric_points(1,${index}$) = file%register_temporal_point_data('${kind}$-scalar',${'0.0' if kind.startswith('real') else '0'}$_${kind}$)
+  numeric_points(2,${index}$) = file%register_temporal_point_data('${kind}$-vector',[${'0.0' if kind.startswith('real') else '0'}$_${kind}$,${'0.0' if kind.startswith('real') else '0'}$_${kind}$])
+#:endfor
+  call file%start_time_step(0.0)
+#:for index in range(1,6)
+#:set kind, decl = nums[index-1]
+  call numeric_${kind}$(${index}$)
+#:endfor
+  call file%start_time_step(1.0)
+  call file%close()
+  ! FieldData changes component/tuple counts independently, including after
+  ! omission and empty writes. Non-root values differ to check root ownership.
+  call create_file('image_fields_variable.vtkhdf',VTKHDF_FIXED_MESH,64_int64)
+  call file%write_mesh(bounds,[0.,0.,0.],[1.,1.,1.])
+  call create_ug_reference('image_fields_variable_ug.vtkhdf',VTKHDF_FIXED_MESH)
+#:for index in range(1,5)
+#:set kind, decl = nums[index]
+  variable_fields(${index}$) = file%register_temporal_field_data('${kind}$',${'0.0' if kind.startswith('real') else '0'}$_${kind}$)
+  ug_variable_fields(${index}$) = ug%register_temporal_field_data('${kind}$',${'0.0' if kind.startswith('real') else '0'}$_${kind}$)
+#:endfor
+  never_written = file%register_temporal_field_data('never_written',0_int32)
+  ug_never_written = ug%register_temporal_field_data('never_written',0_int32)
+  do step = 0, 10
+    call file%start_time_step(real(step))
+    call ug%start_time_step(real(step))
+#:for index in range(1,5)
+#:set kind, decl = nums[index]
+    call variable_${kind}$(variable_fields(${index}$),ug_variable_fields(${index}$),step)
+#:endfor
+  end do
+  call file%close()
+  call ug%close()
+  call nested_groups()
+  call registration_names()
+  call naming_parity()
+  call test_env_finalize()
+contains
+  subroutine registration_names()
+    type(vtkhdf_cell_data_handle) :: cells(4), static_cells(3)
+    type(vtkhdf_point_data_handle) :: points(4)
+    type(vtkhdf_field_data_handle) :: fields(2)
+    integer(int32) :: selected(2,3), cell_bounds(2,3), point_bounds(2,3)
+    integer(int32) :: cell_values(2,1,1), point_values(3,2,1)
+    integer :: j, x
+    character(3), parameter :: point_names(4) = ['   ','   ','a/b','a.b']
+    call create_file('image_registration_names.vtkhdf',VTKHDF_FIXED_MESH)
+    point_bounds = reshape([0,2,0,1,0,0],[2,3])
+    call file%write_mesh(point_bounds,[0.,0.,0.],[1.,1.,1.])
+    ! Keep the returned identity when adding blocks after other registrations.
+    selected = 0
+    if (rank /= 0) selected(2,1) = -1
+    call file%write_cell_data('before',reshape([91+rank],[1,1,1]),[0,0,0],selected,handle=static_cells(1))
+    cells(1) = file%register_temporal_cell_data('before',0_int32)
+    cells(2) = file%register_temporal_cell_data('before',0_int32)
+    cells(3) = file%register_temporal_cell_data('after',0_int32)
+    cells(4) = file%register_temporal_cell_data('after',0_int32)
+    do j = 1, 4
+      points(j) = file%register_temporal_point_data(point_names(j),0_int32)
+    end do
+    do j = 1, 2
+      fields(j) = file%register_temporal_field_data('label',0_int32)
+    end do
+    selected(:,1) = 1
+    if (rank /= 0) selected(2,1) = 0
+    call file%write_cell_data(static_cells(1),reshape([92+rank],[1,1,1]),[1,0,0],selected)
+    ! A static field may also be created after temporal registrations.
+    do x = 0, 1
+      selected = 0
+      selected(:,1) = x
+      if (rank /= 0) selected(2,1) = x-1
+      if (x == 0) then
+        call file%write_cell_data('after',reshape([93+rank],[1,1,1]),[x,0,0],selected,handle=static_cells(2))
+      else
+        call file%write_cell_data(static_cells(2),reshape([94+rank],[1,1,1]),[x,0,0],selected)
+      end if
+    end do
+    ! The same static label creates a distinct field, also addressed by handle.
+    do x = 0, 1
+      selected = 0
+      selected(:,1) = x
+      if (rank /= 0) selected(2,1) = x-1
+      if (x == 0) then
+        call file%write_cell_data('before',reshape([95+rank],[1,1,1]),[x,0,0],selected,handle=static_cells(3))
+      else
+        call file%write_cell_data(static_cells(3),reshape([96+rank],[1,1,1]),[x,0,0],selected)
+      end if
+    end do
+    cell_bounds = reshape([0,1,0,0,0,0],[2,3])
+    if (rank /= 0) then
+      cell_bounds(2,1) = -1
+      point_bounds(2,1) = -1
+    end if
+    call file%start_time_step(0.0)
+    do j = 1, 4
+      cell_values = 10+j+rank
+      point_values = 20+j+rank
+      call file%write_cell_data(cells(j),cell_values,[0,0,0],cell_bounds)
+      call file%write_point_data(points(j),point_values,[0,0,0],point_bounds)
+    end do
+    do j = 1, 2
+      call file%write_field_data(fields(j),int(30+j+rank,int32))
+    end do
+    call file%start_time_step(1.0)
+    call file%close()
+    call create_file('image_static_names.vtkhdf')
+    point_bounds = reshape([0,2,0,1,0,0],[2,3])
+    call file%write_mesh(point_bounds,[0.,0.,0.],[1.,1.,1.])
+    cell_bounds = reshape([0,1,0,0,0,0],[2,3])
+    if (rank /= 0) then
+      cell_bounds(2,1) = -1
+      point_bounds(2,1) = -1
+    end if
+    ! A one-block write needs no handle. Repeating its label always creates
+    ! another field, even when its numeric kind or component count differs.
+    cell_values = 41+rank
+    point_values = 51+rank
+    call file%write_cell_data('label',cell_values,[0,0,0],cell_bounds)
+    call file%write_cell_data('label',real(cell_values+1,real32),[0,0,0],cell_bounds)
+    call file%write_point_data('label',point_values,[0,0,0],point_bounds)
+    call file%write_point_data('label',spread(point_values+1,dim=1,ncopies=2),[0,0,0],point_bounds)
+    call file%write_field_data('label',61+rank)
+    call file%write_field_data('label',62+rank)
+    call file%close()
+  end subroutine
+
+  ! The same labels must produce the same dataset names and Name attributes
+  ! in UG and ImageData, including collisions between static/temporal fields.
+  subroutine naming_parity()
+    character(12), parameter :: labels(12) = [character(12) :: &
+        '', '', 'a/b', 'a.b', 'a_b_1', 'a b', 'a/b', 'a_b_1', 'trimmed   ', 'trimmed', 'same', 'same']
+    type(vtkhdf_cell_data_handle) :: image_cells(12), ug_cells(12)
+    type(vtkhdf_point_data_handle) :: image_points(12), ug_points(12)
+    type(vtkhdf_field_data_handle) :: image_fields(12), ug_fields(12)
+    integer :: mode, j, value, cells(2,3), points(2,3)
+    integer :: cell_values(1,1,1), point_values(2,2,2)
+    character(:), allocatable :: suffix
+    do mode = VTKHDF_STATIC, VTKHDF_FIXED_MESH
+      suffix = 'static'
+      if (mode == VTKHDF_FIXED_MESH) suffix = 'temporal'
+      call create_ug_reference('image_names_'//suffix//'_ug.vtkhdf',mode)
+      call create_file('image_names_'//suffix//'.vtkhdf',mode)
+      points = reshape([0,1,0,1,0,1],[2,3])
+      call file%write_mesh(points,[0.,0.,0.],[1.,1.,1.])
+      cells = 0
+      if (rank /= 0) then
+        cells(2,1) = -1
+        points(2,1) = -1
+      end if
+      do j = 1, size(labels)
+        value = 100+j+rank
+        if (mode == VTKHDF_FIXED_MESH .and. modulo(j,2) == 0) then
+          image_cells(j) = file%register_temporal_cell_data(labels(j),0)
+          ug_cells(j) = ug%register_temporal_cell_data(labels(j),0)
+          image_points(j) = file%register_temporal_point_data(labels(j),0)
+          ug_points(j) = ug%register_temporal_point_data(labels(j),0)
+        else
+          cell_values = value
+          point_values = value
+          call file%write_cell_data(labels(j),cell_values,[0,0,0],cells)
+          call ug%write_cell_data(labels(j),[value])
+          call file%write_point_data(labels(j),point_values,[0,0,0],points)
+          call ug%write_point_data(labels(j),[value,value,value,value])
+        end if
+        if (mode == VTKHDF_FIXED_MESH) then
+          image_fields(j) = file%register_temporal_field_data(labels(j),0)
+          ug_fields(j) = ug%register_temporal_field_data(labels(j),0)
+        else
+          call file%write_field_data(labels(j),value)
+          call ug%write_field_data(labels(j),value)
+        end if
+      end do
+      if (mode == VTKHDF_FIXED_MESH) then
+        call file%start_time_step(0.)
+        call ug%start_time_step(0.)
+        do j = 1, size(labels)
+          value = 100+j+rank
+          if (modulo(j,2) == 0) then
+            cell_values = value
+            point_values = value
+            call file%write_cell_data(image_cells(j),cell_values,[0,0,0],cells)
+            call ug%write_cell_data(ug_cells(j),[value])
+            call file%write_point_data(image_points(j),point_values,[0,0,0],points)
+            call ug%write_point_data(ug_points(j),[value,value,value,value])
+          end if
+          call file%write_field_data(image_fields(j),value)
+          call ug%write_field_data(ug_fields(j),value)
+        end do
+        call file%start_time_step(1.)
+        call ug%start_time_step(1.)
+      end if
+      call file%close()
+      call ug%close()
+    end do
+  end subroutine
+
+  ! Exercise the structured core beneath an existing group without adding a
+  ! public MultiBlock ImageData API. The core owns only its named child group.
+  subroutine nested_groups()
+    type(vtkhdf_ctx) :: ctx
+    type(vtkhdf_structured) :: static_grid, temporal_grid
+    integer(hid_t) :: file_id, parent_id, fapl
+    integer(int32) :: selected(2,3)
+    integer :: ierr, index
+    integer(int32) :: values(1,1,1)
+#ifdef USE_MPI
+    call ctx%init(MPI_COMM_WORLD)
+#else
+    call ctx%init()
+#endif
+    call ctx%get_fapl(fapl)
+    file_id = H5Fcreate('image_nested.vtkhdf',H5F_ACC_TRUNC,H5P_DEFAULT,fapl)
+    if (file_id < 0) error stop 'failed to create nested fixture'
+    ierr = H5Pclose(fapl)
+    parent_id = H5Gcreate(file_id,'container')
+    if (parent_id < 0) error stop 'failed to create parent group'
+    call static_grid%init(parent_id,'leaf_static',ctx,'ImageData')
+    ! Moving geometry belongs to the future format wrapper. The common core
+    ! can already initialize temporal attribute storage for this mode.
+    call temporal_grid%init(parent_id,'leaf_temporal',ctx,'StructuredGrid',mode=VTKHDF_MOVING_MESH)
+    if (static_grid%root() == temporal_grid%root()) error stop 'leaves share an owner'
+    call static_grid%define_grid(reshape([0,1,0,1,0,0],[2,3]))
+    call temporal_grid%define_grid(reshape([0,1,0,1,0,0],[2,3]))
+    selected = 0
+    if (rank /= 0) selected(2,1) = -1
+    values = 11+rank
+    call static_grid%write_cell_data('value',values,[0,0,0],selected)
+    index = temporal_grid%register_temporal_cell_data('value',0_int32)
+    call temporal_grid%start_time_step(0.0_real64)
+    values = 21+rank
+    call temporal_grid%write_cell_data(index,values,[0,0,0],selected)
+    call temporal_grid%start_time_step(1.0_real64)
+    call static_grid%close()
+    call temporal_grid%close()
+    if (H5Iis_valid(parent_id) <= 0) error stop 'core closed its parent group'
+    if (H5Iis_valid(file_id) <= 0) error stop 'core closed its parent file'
+    ierr = H5Gclose(parent_id)
+    if (ierr < 0) error stop 'failed to close parent group'
+    ierr = H5Fclose(file_id)
+    if (ierr < 0) error stop 'failed to close nested fixture'
+    call ctx%free()
+  end subroutine
+
+#:for kind, decl in nums[1:]
+  subroutine variable_${kind}$(var,ug_var,step)
+    type(vtkhdf_field_data_handle), intent(in) :: var, ug_var
+    integer, intent(in) :: step
+    integer :: j
+    ${decl}$ :: matrix(3,4), empty(0)
+    select case (step)
+    case (1)
+      call file%write_field_data(var,${'real' if kind.startswith('real') else 'int'}$(42+rank,${kind}$))
+      call ug%write_field_data(ug_var,${'real' if kind.startswith('real') else 'int'}$(42+rank,${kind}$))
+    case (2)
+      call file%write_field_data(var,${'real' if kind.startswith('real') else 'int'}$([21,22]+rank,${kind}$))
+      call ug%write_field_data(ug_var,${'real' if kind.startswith('real') else 'int'}$([21,22]+rank,${kind}$))
+    case (3)
+      call file%write_field_data(var,${'real' if kind.startswith('real') else 'int'}$([16,32]+rank,${kind}$),as_vector=.true.)
+      call ug%write_field_data(ug_var,${'real' if kind.startswith('real') else 'int'}$([16,32]+rank,${kind}$),as_vector=.true.)
+    case (4)
+      matrix = reshape(${'real' if kind.startswith('real') else 'int'}$([(j+rank,j=1,12)],${kind}$),[3,4])
+      call file%write_field_data(var,matrix(:,1:4:2))
+      call ug%write_field_data(ug_var,matrix(:,1:4:2))
+    case (6)
+      call file%write_field_data(var,${'real' if kind.startswith('real') else 'int'}$(7+rank,${kind}$))
+      call ug%write_field_data(ug_var,${'real' if kind.startswith('real') else 'int'}$(7+rank,${kind}$))
+    case (7)
+      call file%write_field_data(var,empty)
+      call ug%write_field_data(ug_var,empty)
+    case (9)
+      call file%write_field_data(var,${'real' if kind.startswith('real') else 'int'}$([8,9]+rank,${kind}$),as_vector=.true.)
+      call ug%write_field_data(ug_var,${'real' if kind.startswith('real') else 'int'}$([8,9]+rank,${kind}$),as_vector=.true.)
+    end select
+  end subroutine
+#:endfor
+
+  subroutine create_ug_reference(name,mode)
+    character(*), intent(in) :: name
+    integer, intent(in) :: mode
+#ifdef USE_MPI
+    call ug%create(name,MPI_COMM_WORLD,stat,errmsg,mode=mode)
+#else
+    call ug%create(name,stat,errmsg,mode=mode)
+#endif
+    if (stat /= 0) error stop errmsg
+    call ug%write_mesh(reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,0.,0.,1.],[3,4]), &
+        [1,2,3,4],[1,5],[10_int8])
+  end subroutine
+
+  subroutine create_file(name,mode,chunk_bytes)
+    character(*), intent(in) :: name
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: chunk_bytes
+#ifdef USE_MPI
+    call file%create(name,MPI_COMM_WORLD,stat,errmsg,mode=mode,data_chunk_bytes=chunk_bytes)
+#else
+    call file%create(name,stat,errmsg,mode=mode,data_chunk_bytes=chunk_bytes)
+#endif
+    if (stat /= 0) error stop errmsg
+  end subroutine
+
+  ! Three collective calls distribute three disjoint x slabs. Their owners
+  ! need not follow a Cartesian rank arrangement, and some ranks are empty.
+  subroutine slab(lo,extent,block,phase,selected,owner)
+    integer, intent(in) :: lo(3), extent(3), block, phase
+    integer, intent(out) :: selected(2,3), owner
+    integer :: cuts(0:3)
+    cuts = [0,extent(1)/3,2*extent(1)/3,extent(1)]
+    if (phase > 0) cuts = [0,1,extent(1)-1,extent(1)]
+    selected(1,:) = lo
+    selected(2,:) = lo+extent-1
+    selected(:,1) = [lo(1)+cuts(block-1),lo(1)+cuts(block)-1]
+    owner = modulo(block-1+phase,nproc)
+    if (rank /= owner) selected(2,1) = selected(1,1)-1
+  end subroutine
+
+#:for kind, decl in nums
+  subroutine static_${kind}$(lo,extent)
+    integer, intent(in) :: lo(3), extent(3)
+    ${decl}$, allocatable :: a(:,:,:), v(:,:,:,:)
+    integer :: association, n(3), origin(3), selected(2,3), owner, b, i, j, k, c, q(3)
+    character(:), allocatable :: scalar_name, vector_name
+    type(vtkhdf_cell_data_handle) :: cells(2)
+    type(vtkhdf_point_data_handle) :: points(2)
+    do association = 1, 2
+      n = extent
+      if (association == 1) n = max(1,n-1)
+      ! Actual subscripts deliberately differ from the global logical indices.
+      allocate(a(-4:n(1)-2,2:n(2)+5,-2:n(3)),v(3,n(1)+3,n(2)+4,n(3)+3))
+      origin = lo-[1,2,1]
+      do k = 1, size(a,3)
+        do j = 1, size(a,2)
+          do i = 1, size(a,1)
+            q = origin+[i,j,k]-1
+            a(i-5,j+1,k-3) = ${'real(' if kind.startswith('real') else 'int('}$modulo(q(1)+11*q(2)+37*q(3),101),${kind}$)${'+0.25_'+kind if kind.startswith('real') else ''}$
+            do c = 1, 3
+              v(c,i,j,k) = ${'real(' if kind.startswith('real') else 'int('}$modulo(q(1)+11*q(2)+37*q(3)+19*c,101),${kind}$)${'+0.25_'+kind if kind.startswith('real') else ''}$
+            end do
+          end do
+        end do
+      end do
+      scalar_name = '${kind}$-scalar'
+      vector_name = '${kind}$-vector'
+      do b = 1, 3
+        call slab(lo,n,b,0,selected,owner)
+#:for loc, assoc, handles in [('cell',1,'cells'), ('point',2,'points')]
+        ${'if' if assoc == 1 else 'else if'}$ (association == ${assoc}$) then
+          if (rank == owner) then
+            if (b == 1) then
+              call file%write_${loc}$_data(scalar_name,a,origin,selected,handle=${handles}$(1))
+              call file%write_${loc}$_data(vector_name,v,origin,selected,handle=${handles}$(2))
+            else
+              call file%write_${loc}$_data(${handles}$(1),a,origin,selected)
+              call file%write_${loc}$_data(${handles}$(2),v,origin,selected)
+            end if
+          else
+            if (b == 1) then
+              call file%write_${loc}$_data(scalar_name,a(:-5,:1,:-3),origin,selected,handle=${handles}$(1))
+              call file%write_${loc}$_data(vector_name,v(:,:0,:0,:0),origin,selected,handle=${handles}$(2))
+            else
+              call file%write_${loc}$_data(${handles}$(1),a(:-5,:1,:-3),origin,selected)
+              call file%write_${loc}$_data(${handles}$(2),v(:,:0,:0,:0),origin,selected)
+            end if
+          end if
+#:endfor
+        end if
+      end do
+      deallocate(a,v)
+    end do
+#:if kind != 'int8'
+    call file%write_field_data('${kind}$-value',${'real' if kind.startswith('real') else 'int'}$(7+rank,${kind}$))
+    call ug%write_field_data('${kind}$-value',${'real' if kind.startswith('real') else 'int'}$(7+rank,${kind}$))
+    call file%write_field_data('${kind}$-tuples',${'real' if kind.startswith('real') else 'int'}$([1,2,3]+rank,${kind}$))
+    call ug%write_field_data('${kind}$-tuples',${'real' if kind.startswith('real') else 'int'}$([1,2,3]+rank,${kind}$))
+    call file%write_field_data('${kind}$-vector',${'real' if kind.startswith('real') else 'int'}$([4,5,6]+rank,${kind}$),as_vector=.true.)
+    call ug%write_field_data('${kind}$-vector',${'real' if kind.startswith('real') else 'int'}$([4,5,6]+rank,${kind}$),as_vector=.true.)
+    call file%write_field_data('${kind}$-tensor',reshape(${'real' if kind.startswith('real') else 'int'}$([1,2,3,4,5,6]+rank,${kind}$),[2,3]))
+    call ug%write_field_data('${kind}$-tensor',reshape(${'real' if kind.startswith('real') else 'int'}$([1,2,3,4,5,6]+rank,${kind}$),[2,3]))
+#:endif
+  end subroutine
+#:endfor
+
+  subroutine simple_fields(lo,extent)
+    integer, intent(in) :: lo(3), extent(3)
+    real(real64), allocatable :: a(:,:,:), v(:,:,:,:)
+    integer :: n(3), association, i,j,k,c, selected(2,3)
+    do association = 1, 2
+      n = extent
+      if (association == 1) n = max(1,n-1)
+      allocate(a(n(1),n(2),n(3)),v(2,n(1),n(2),n(3)))
+      do k = 1,n(3)
+        do j = 1,n(2)
+          do i = 1,n(1)
+            a(i,j,k) = lo(1)+i-1+11*(lo(2)+j-1)+37*(lo(3)+k-1)
+            do c = 1,2
+              v(c,i,j,k) = a(i,j,k)+c*1000
+            end do
+          end do
+        end do
+      end do
+      selected(1,:) = lo
+      selected(2,:) = lo+n-1
+      if (rank /= 0) selected(2,1) = lo(1)-1
+      if (association == 1) then
+        if (rank == 0) then
+          ! Default whole-array selection and an explicitly noncontiguous actual.
+          call file%write_cell_data('scalar',a,lo)
+          call file%write_cell_data('vector',v,lo)
+          call file%write_cell_data('noncontiguous',v(1,:,:,:),lo)
+        else
+          call file%write_cell_data('scalar',a(:0,:0,:0),lo,selected)
+          call file%write_cell_data('vector',v(:,:0,:0,:0),lo,selected)
+          call file%write_cell_data('noncontiguous',v(1,:0,:0,:0),lo,selected)
+        end if
+      else
+        call file%write_point_data('scalar',a,lo,selected)
+        call file%write_point_data('vector',v,lo,selected)
+      end if
+      deallocate(a,v)
+    end do
+  end subroutine
+
+#:for kind, decl in nums
+  subroutine numeric_${kind}$(index)
+    integer, intent(in) :: index
+    ${decl}$, allocatable :: a(:,:,:),v(:,:,:,:)
+    integer :: n(3), association, i,j,k,c,selected(2,3)
+    do association = 1,2
+      n = [3,2,2]
+      if (association == 1) n = [2,1,1]
+      allocate(a(n(1),n(2),n(3)),v(2,n(1),n(2),n(3)))
+      do k=1,n(3)
+        do j=1,n(2)
+          do i=1,n(1)
+            a(i,j,k) = ${'real' if kind.startswith('real') else 'int'}$(modulo(i-1+11*(j-1)+37*(k-1),101),${kind}$)
+            do c=1,2
+              v(c,i,j,k) = ${'real' if kind.startswith('real') else 'int'}$(modulo(i-1+11*(j-1)+37*(k-1)+19*c,101),${kind}$)
+            end do
+          end do
+        end do
+      end do
+      selected(1,:) = 0
+      selected(2,:) = n-1
+      if (rank /= 0) selected(2,1) = -1
+      if (association == 1) then
+        call file%write_cell_data(numeric_cells(1,index),a,[0,0,0],selected)
+        call file%write_cell_data(numeric_cells(2,index),v,[0,0,0],selected)
+      else
+        call file%write_point_data(numeric_points(1,index),a,[0,0,0],selected)
+        call file%write_point_data(numeric_points(2,index),v,[0,0,0],selected)
+      end if
+      deallocate(a,v)
+    end do
+  end subroutine
+#:endfor
+
+  subroutine collision_fields()
+    type(vtkhdf_cell_data_handle) :: first, second
+    real :: a(6,4,3)
+    integer :: selected(2,3), b
+    a = 1
+    do b = 1,2
+      selected(1,:) = [2,-3,4]
+      selected(2,:) = [7,0,6]
+      selected(:,1) = [2+3*(b-1),4+3*(b-1)]
+      if (rank /= 0) selected(2,1) = selected(1,1)-1
+      if (b == 1) then
+        call file%write_cell_data('a/b',a,[2,-3,4],selected,handle=first)
+        call file%write_cell_data('a.b',2*a,[2,-3,4],selected,handle=second)
+      else
+        call file%write_cell_data(first,a,[2,-3,4],selected)
+        call file%write_cell_data(second,2*a,[2,-3,4],selected)
+      end if
+    end do
+  end subroutine
+
+  subroutine static_temporal(name)
+    character(*), intent(in) :: name
+    real(real64) :: a(6,4,3)
+    integer :: selected(2,3)
+    a = 17
+    selected(1,:) = 0
+    selected(2,:) = [5,3,2]
+    if (rank /= 0) selected(2,1) = -1
+    call file%write_cell_data(name,a,[0,0,0],selected)
+  end subroutine
+
+  subroutine temporal_cell(phase)
+    integer, intent(in) :: phase
+    real(real64) :: a(6,4,3)
+    integer :: i,j,k,b,owner,selected(2,3)
+    do k=1,3
+      do j=1,4
+        do i=1,6
+          a(i,j,k) = i-1+11*(j-1)+37*(k-1)+phase*1000
+        end do
+      end do
+    end do
+    do b=1,3
+      call slab([0,0,0],[6,4,3],b,phase,selected,owner)
+      call file%write_cell_data(cell_var,a,[0,0,0],selected)
+    end do
+  end subroutine
+
+  subroutine temporal_other(phase)
+    integer, intent(in) :: phase
+    integer(int64) :: a(6,4,3)
+    integer :: i,j,k,b,owner,selected(2,3)
+    do k=1,3
+      do j=1,4
+        do i=1,6
+          a(i,j,k) = i-1+11*(j-1)+37*(k-1)+phase*1000
+        end do
+      end do
+    end do
+    do b=1,3
+      call slab([0,0,0],[6,4,3],b,phase,selected,owner)
+      call file%write_cell_data(other_var,a,[0,0,0],selected)
+    end do
+  end subroutine
+
+  subroutine temporal_point(phase)
+    integer, intent(in) :: phase
+    real(real32) :: a(3,7,5,4)
+    integer :: i,j,k,c,b,owner,selected(2,3)
+    do k=1,4
+      do j=1,5
+        do i=1,7
+          do c=1,3
+            a(c,i,j,k) = i-1+11*(j-1)+37*(k-1)+phase*1000+c*10000
+          end do
+        end do
+      end do
+    end do
+    do b=1,3
+      call slab([0,0,0],[7,5,4],b,phase,selected,owner)
+      call file%write_point_data(point_var,a,[0,0,0],selected)
+    end do
+  end subroutine
+end program

@@ -46,6 +46,10 @@ File Creation and Management
 
 Block Definition
 ----------------
+The shared ``VTKHDF_*`` mode constants are exported by
+``vtkhdf_mb_file_type``. The original ``UG_*`` names remain available as
+compatibility aliases.
+
 .. code-block:: fortran
 
    use vtkhdf_mb_file_type
@@ -55,9 +59,9 @@ Block Definition
 ``block = file%add_block(name [, mode])``
    Define a new UnstructuredGrid block and return its handle.
 
-   ``mode`` is one of ``UG_STATIC``, ``UG_FIXED_MESH``,
-   ``UG_MOVING_MESH``, or ``UG_DYNAMIC_MESH`` and defaults to
-   ``UG_STATIC``.
+   ``mode`` is one of ``VTKHDF_STATIC``, ``VTKHDF_FIXED_MESH``,
+   ``VTKHDF_MOVING_MESH``, or ``VTKHDF_DYNAMIC_MESH`` and defaults to
+   ``VTKHDF_STATIC``.
 
    The block name is normalized in the same way as ``vtkhdf_ug_file`` dataset
    names. The original name is preserved as the value of the block group
@@ -67,7 +71,7 @@ Block Definition
    later block-scoped calls.
 
 The file is temporal if at least one block uses a temporal UG mode
-(``UG_FIXED_MESH``, ``UG_MOVING_MESH``, or ``UG_DYNAMIC_MESH``). All
+(``VTKHDF_FIXED_MESH``, ``VTKHDF_MOVING_MESH``, or ``VTKHDF_DYNAMIC_MESH``). All
 temporal blocks share calls to ``start_time_step`` and ``finalize_time_step``.
 
 Mesh Data
@@ -83,7 +87,7 @@ Mesh Data
 
 ``call file%write_mesh_topology(block, cnode, xcnode, types)``
    Write only mesh topology for the block identified by ``block``. This is
-   mainly used with ``UG_MOVING_MESH`` or ``UG_DYNAMIC_MESH`` when geometry
+   mainly used with ``VTKHDF_MOVING_MESH`` or ``VTKHDF_DYNAMIC_MESH`` when geometry
    is written separately.
 
 ``call file%write_mesh_geometry(block, points)``

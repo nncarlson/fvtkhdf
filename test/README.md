@@ -89,3 +89,63 @@ skipped.
 The pure Fortran executable tests are the best candidates for eventual `fpm`
 coverage. The Python reader smoke tests, `h5dump`-based checks, and `CTest`
 `WILL_FAIL` negative tests are CMake-first by design.
+
+## ImageData Checks
+
+`vtkhdf_image_file_type` produces static, temporal, dimensionality, numeric-kind,
+and all-empty snapshot fixtures in serial and MPI configurations. It includes
+halo selections, differing Fortran actual bounds, repeated field names,
+sanitization collisions, changed decomposition, unequal block counts padded
+with zero-sized contributions, late static fields, and every generated numeric
+kind for both scalar and multicomponent temporal data.
+Registration-name checks exercise duplicate and blank labels, sanitization
+collisions, and static/temporal label collisions in both creation orders.
+Readback verifies that each returned handle writes its own dataset and that
+name-based static writes create distinct fields. Static cell/point handles
+assemble additional blocks, including empty first contributions, for every
+numeric kind and both scalar and multicomponent data. A UG/ImageData parity fixture
+checks the same labels in every association, with blank names, trimming,
+sanitization collisions, caller-supplied suffixes, and mixed static/temporal
+fields; HDF5 metadata and VTK readback must agree. Repeated static names
+may have different numeric kinds or component counts; static FieldData writes
+remain complete, independent values.
+
+`vtkhdf_image_layout` requires NumPy and h5py. It independently checks values,
+dataset rank/order, chunks, 32-bit WholeExtent, 64-bit offsets, and snapshot
+counts. It compares static and temporal FieldData datasets and metadata with
+UG reference files, including variable shape, initial omission, and reuse.
+An internal structured-core fixture creates independently named static and
+temporal leaves under an existing HDF5 group, checks their data and temporal
+offsets, and verifies that closing the leaves leaves the parent handles open.
+Its temporal leaf exercises moving-mode attribute storage independently of
+the ImageData wrapper's more restrictive mode policy.
+Independent temporal FieldData checks cover all four numeric kinds, growth
+and reduction of component counts, varying tuple counts, noncontiguous input,
+empty writes, fields never written, and non-root ranks supplying different
+values. Both dataset axes must be extendible and offsets must count tuples.
+
+`vtkhdf_image_reader_*` checks geometry, physical coordinates, every static
+numeric kind, and temporal point/cell values with `vtkHDFReader`. Independent
+known-layout capability probes skip positive-extent and nontrailing-singleton
+checks on affected readers (including VTK 9.7.0/9.7.1). Layout checks remain
+enabled. Complete mesh-associated validation was performed with a VTK source
+build reporting 9.7.20261022. The temporal FieldData reader test strictly checks
+component counts, tuple counts, types, and every value for both ImageData and
+UG files; it does not skip a malformed FieldData result.
+
+The expected-failure ImageData tests cover local selection validity, type and
+component consistency, ordering, missing initial snapshots, foreign handles,
+FieldData restrictions and repeated writes to one FieldData handle in a step,
+and MPI metadata disagreement.
+Creation rejects moving, dynamic, and invalid ImageData modes, including
+disagreement between MPI ranks about otherwise supported modes.
+Tests intentionally do not diagnose global coverage or overlap.
+
+UG, MultiBlock, and ImageData file wrappers own public field handles; their cores
+use registry indices. Foreign-file handle checks cover cell, point, and field
+data in UG and MultiBlock, including matching field and block indices, alongside
+the existing ImageData ownership check.
+
+See [the writer implementation guide](../doc/implementation.md) for the common
+organization of the UG and structured cores and the responsibilities of their
+shared data modules.

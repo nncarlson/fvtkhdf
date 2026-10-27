@@ -1,0 +1,77 @@
+!!
+!! VTKHDF_DATA_HANDLE_TYPES
+!!
+!! This module defines the cell, point, and field data handle types shared by
+!! the file interfaces. Handles identify fields; block placement is supplied
+!! separately at each write.
+!!
+!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
+!! SPDX-License-Identifier: BSD-2-Clause
+!!
+
+#:set locations = ['cell', 'point', 'field']
+
+module vtkhdf_data_handle_types
+
+  use,intrinsic :: iso_fortran_env, only: int64
+  implicit none
+  private
+
+  public :: set_block_index, get_block_index, set_data_handle, get_data_index
+
+#:for loc in locations
+  type, public :: vtkhdf_${loc}$_data_handle
+    private
+    integer :: index = -1
+    ! BLOCK_INDEX is interpreted only by the MultiBlock front end.
+    integer :: block_index = -1
+    ! Root HDF5 group ID of the owning VTK dataset (an individual leaf block
+    ! within a MultiBlock file). File wrappers use this only to check
+    ! handle ownership during the open writer's lifetime.
+    integer(int64) :: owner = -1
+  end type
+#:endfor
+
+#:for op in ['set_block_index', 'get_block_index', 'set_data_handle', 'get_data_index']
+  interface ${op}$
+#:for loc in locations
+    module procedure ${op}$_${loc}$
+#:endfor
+  end interface
+#:endfor
+
+contains
+
+#:for loc in locations
+  subroutine set_block_index_${loc}$(handle, block_index)
+    type(vtkhdf_${loc}$_data_handle), intent(inout) :: handle
+    integer, intent(in) :: block_index
+    handle%block_index = block_index
+  end subroutine
+
+  pure function get_block_index_${loc}$(handle) result(block_index)
+    type(vtkhdf_${loc}$_data_handle), intent(in) :: handle
+    integer :: block_index
+    block_index = handle%block_index
+  end function
+
+  subroutine set_data_handle_${loc}$(handle, index, owner)
+    type(vtkhdf_${loc}$_data_handle), intent(out) :: handle
+    integer, intent(in) :: index
+    integer(int64), intent(in), optional :: owner
+    handle%index = index
+    if (present(owner)) handle%owner = owner
+  end subroutine
+
+  pure function get_data_index_${loc}$(handle, owner) result(index)
+    type(vtkhdf_${loc}$_data_handle), intent(in) :: handle
+    integer(int64), intent(in), optional :: owner
+    integer :: index
+    index = handle%index
+    if (present(owner)) then
+      if (owner /= handle%owner) index = -1
+    end if
+  end function
+
+#:endfor
+end module

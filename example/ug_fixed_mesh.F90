@@ -32,13 +32,13 @@ program ug_fixed_mesh_example
 
   ! Create file with support for time-dependent data but fixed mesh.
 #ifdef USE_MPI
-  call file%create('example.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_FIXED_MESH)
+  call file%create('example.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_FIXED_MESH)
   if (stat /= 0) then
     call MPI_Finalize(stat)
     error stop errmsg
   end if
 #else
-  call file%create('example.vtkhdf', stat, errmsg, mode=UG_FIXED_MESH)
+  call file%create('example.vtkhdf', stat, errmsg, mode=VTKHDF_FIXED_MESH)
   if (stat /= 0) error stop errmsg
 #endif
 

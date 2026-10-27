@@ -29,6 +29,25 @@ VTK ASCII or XML formats.
 
   * Supports point-centered, cell-centered, and field data.
 
+* **ImageData:** Fixed regular-grid geometry with static and temporal
+  point/cell arrays assembled from rectangular blocks, including halo
+  exclusion, multiple blocks per rank, and empty collective contributions.
+
+  * Uses explicit three-dimensional spatial array shapes and component-first
+    multicomponent arrays.
+  * Temporal fields support complete replacement or whole-field reuse.
+  * FieldData retains the existing UG semantics.
+  * For VTK 9.7.0/9.7.1 and ParaView builds using the affected reader, use
+    **zero-based global point bounds** on every axis and trailing singleton
+    axes: `(nx,ny,1)` for 2D or `(nx,1,1)` for 1D. Positive local block indices
+    and a nonzero physical origin are supported.
+  * These geometry reader issues are fixed in the
+    [tested upstream development source](https://github.com/Kitware/VTK/commit/9f0588e2fe0d10573555834a66ac3dab95be4114).
+    fVTKHDF preserves the supplied global bounds; it does not rebase them or
+    offer a compatibility mode. See the [ImageData manual](doc/sphinx/image.rst)
+    for details. The first VTK/ParaView release containing the fixes has not
+    been verified.
+
 * **MultiBlockDataSet (MB):** Supports a flat assembly/collection of
   UnstructuredGrid blocks.
 
@@ -104,7 +123,7 @@ target_link_libraries(my_simulation PRIVATE fVTKHDF::fvtkhdf)
 Here is a minimal serial example that writes a **VTKHDF** UnstructuredGrid
 dataset for an unstructured mesh consisting of a single tetrahedral cell
 with a scalar field. More complete examples (serial and MPI-parallel,
-UnstructuredGrid and MultiBlockDataSet) are provided in the `example`
+UnstructuredGrid, ImageData, and MultiBlockDataSet) are provided in the `example`
 directory.
 
 ```fortran
@@ -135,7 +154,7 @@ program quick_start
   temperature = [100.0, 200.0, 300.0, 400.0] ! Point data
 
   ! 3. Create and Write
-  call myfile%create("simple.vtkhdf", stat, errmsg, mode=UG_STATIC)
+  call myfile%create("simple.vtkhdf", stat, errmsg, mode=VTKHDF_STATIC)
   if (stat /= 0) error stop errmsg
 
   ! Write the mesh topology (Static Mesh)

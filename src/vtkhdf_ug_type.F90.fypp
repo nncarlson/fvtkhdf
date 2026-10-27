@@ -4,8 +4,8 @@
 !! This module defines an internal derived type used to manage an HDF5 tree
 !! storing an UnstructuredGrid VTKHDF dataset. It serves as a core component of
 !! the VTKHDF_MB_FILE and VTKHDF_UG_file types. This implementation supports
-!! static and time-dependent point, cell, and field data, but assumes a single
-!! static mesh.
+!! static and time-dependent point, cell, and field data with static, moving,
+!! or dynamic unstructured meshes.
 !!
 !! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
@@ -20,15 +20,13 @@
 
 #include "vtkhdf_assert.inc"
 
-#:set int_specs  = [ {"kind":"int8",   "decl":"integer(int8)"}, &
-                   & {"kind":"int32",  "decl":"integer(int32)"}, &
-                   & {"kind":"int64",  "decl":"integer(int64)"} ]
-#:set real_specs = [ {"kind":"real32", "decl":"real(real32)"}, &
-                   & {"kind":"real64", "decl":"real(real64)"} ]
-#:set num_specs = int_specs + real_specs
-#:set int_specs_no_int8 = [s for s in int_specs if s["kind"] != "int8"]
-#:set num_specs_no_int8 = [s for s in num_specs if s["kind"] != "int8"]
-#:set locations = ["cell", "point"]
+#:set ints = [('int8','integer(int8)','H5T_NATIVE_UINT8'), ('int32','integer(int32)','H5T_NATIVE_INT32'), ('int64','integer(int64)','H5T_NATIVE_INT64')]
+#:set reals = [('real32','real(real32)','H5T_NATIVE_FLOAT'), ('real64','real(real64)','H5T_NATIVE_DOUBLE')]
+#:set nums = ints + reals
+#:set ints_no_int8 = ints[1:]
+#:set nums_no_int8 = nums[1:]
+#:set locations = ['cell', 'point']
+#:set mesh_locations = [('cell','ncell'), ('point','nnode')]
 
 module vtkhdf_ug_type
 
@@ -36,46 +34,34 @@ module vtkhdf_ug_type
   use,intrinsic :: iso_c_binding, only: c_sizeof
   use vtkhdf_h5_c_binding
   use vtkhdf_h5
+  use vtkhdf_data_names, only: resolve_data_name
+  use vtkhdf_data_support
+  use vtkhdf_file_modes
   use vtkhdf_ctx_type
   use vtkhdf_h5e_context_type
   implicit none
   private
 
-  public :: set_block_index, get_block_index
+  public :: VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
 
-  !! UnstructuredGrid dataset modes
-  integer, parameter, public :: UG_STATIC       = 0
-  integer, parameter, public :: UG_FIXED_MESH   = 1
-  integer, parameter, public :: UG_MOVING_MESH  = 2
-  integer, parameter, public :: UG_DYNAMIC_MESH = 3
+  !! Compatibility aliases for the original UnstructuredGrid mode names.
+  integer, parameter, public :: UG_STATIC       = VTKHDF_STATIC
+  integer, parameter, public :: UG_FIXED_MESH   = VTKHDF_FIXED_MESH
+  integer, parameter, public :: UG_MOVING_MESH  = VTKHDF_MOVING_MESH
+  integer, parameter, public :: UG_DYNAMIC_MESH = VTKHDF_DYNAMIC_MESH
 
-  !! NB: BLOCK_INDEX is only interpreted by the multiblock front-end.
-  !! Carrying that metadata in these shared handles is not ideal from a
-  !! layering perspective, but it keeps a single public handle type across
-  !! UG and MB while allowing MB to verify block/variable consistency.
-  type, public :: vtkhdf_cell_data_handle
-    private
-    integer :: index = -1
-    integer :: block_index = -1
+  type, extends(data_var_item) :: mesh_data_var
+    integer(int64) :: last_entity_count = 0
   end type
 
-  type, public :: vtkhdf_point_data_handle
-    private
-    integer :: index = -1
-    integer :: block_index = -1
-  end type
-
-  type, public :: vtkhdf_field_data_handle
-    private
-    integer :: index = -1
-    integer :: block_index = -1
+  type, extends(data_groups) :: mesh_data_list
+    type(mesh_data_var), allocatable :: vars(:)
   end type
 
   type, public :: vtkhdf_ug
     private
     type(vtkhdf_ctx) :: ctx ! unowned copy
     integer(hid_t) :: root_id=H5I_INVALID_HID
-    integer(hid_t) :: cgrp_id=H5I_INVALID_HID, pgrp_id=H5I_INVALID_HID, fgrp_id=H5I_INVALID_HID
     integer(int64) :: data_chunk_bytes = 128_int64*1024
     integer(int64) :: nnode = 0, ncell = 0, nnode_tot = 0, ncell_tot = 0, maxval_cnode = 0
     integer :: npart = 1
@@ -84,185 +70,75 @@ module vtkhdf_ug_type
     integer :: nsteps = -1
     logical :: step_open = .false., mesh_locked = .false.
     integer(hid_t) :: steps_id=H5I_INVALID_HID
-    integer(hid_t) :: cogrp_id=H5I_INVALID_HID, pogrp_id=H5I_INVALID_HID
-    integer(hid_t) :: fogrp_id=H5I_INVALID_HID, fsgrp_id=H5I_INVALID_HID
     logical :: geometry_written_this_step = .false., geometry_defined = .false.
     logical :: topology_written_this_step = .false., topology_defined = .false.
     integer(int64) :: point_offset = 0, points_next_offset = 0
     integer(int64) :: conn_offset = 0, conn_next_offset = 0
     integer(int64) :: cell_offset = 0, cells_next_offset = 0
     integer(int64) :: part_offset = 0, part_next_offset = 0
-    type(data_var_item), allocatable :: cell_vars(:)
-    type(data_var_item), allocatable :: point_vars(:)
-    type(data_var_item), allocatable :: field_vars(:)
+    type(mesh_data_list) :: cell_data, point_data
+    type(field_data_list) :: field_data
   contains
-    procedure :: init
-    procedure :: close
-    procedure, private :: reserve_cell_data_name
-    procedure, private :: reserve_point_data_name
-    procedure, private :: reserve_field_data_name
-    procedure, private :: unique_cell_data_name
-    procedure, private :: unique_point_data_name
-    procedure, private :: unique_field_data_name
-#:for r in real_specs
-#:for i in int_specs_no_int8
-    generic :: write_mesh => write_mesh_${r["kind"]}$_${i["kind"]}$
-    procedure, private :: write_mesh_${r["kind"]}$_${i["kind"]}$
+    procedure :: init, close, root
+    procedure :: temporal_enabled, step_is_open, set_block_metadata
+#:for rkind, rdecl, rh5type in reals
+#:for ikind, idecl, ih5type in ints_no_int8
+    generic :: write_mesh => write_mesh_${rkind}$_${ikind}$
+    procedure, private :: write_mesh_${rkind}$_${ikind}$
 #:endfor
 #:endfor
-#:for i in int_specs_no_int8
-    generic :: write_mesh_topology => write_mesh_topology_${i["kind"]}$
-    procedure, private :: write_mesh_topology_${i["kind"]}$
+#:for ikind, idecl, ih5type in ints_no_int8
+    generic :: write_mesh_topology => write_mesh_topology_${ikind}$
+    procedure, private :: write_mesh_topology_${ikind}$
 #:endfor
-#:for r in real_specs
-    generic :: write_mesh_geometry => write_mesh_geometry_${r["kind"]}$
-    procedure, private :: write_mesh_geometry_${r["kind"]}$
+#:for rkind, rdecl, rh5type in reals
+    generic :: write_mesh_geometry => write_mesh_geometry_${rkind}$
+    procedure, private :: write_mesh_geometry_${rkind}$
 #:endfor
-    procedure :: start_time_step
-    procedure :: finalize_time_step
-    procedure :: set_block_metadata
-    procedure :: temporal_enabled
-    procedure :: step_is_open
-#:for s in num_specs
-#:for loc in locations
-    generic :: write_${loc}$_data => write_${loc}$_data_${s["kind"]}$
-    procedure, private :: write_${loc}$_data_${s["kind"]}$
-    generic :: write_${loc}$_data => write_temporal_${loc}$_data_${s["kind"]}$
-    procedure, private :: write_temporal_${loc}$_data_${s["kind"]}$
-    generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${s["kind"]}$
-    procedure, private :: register_temporal_${loc}$_data_${s["kind"]}$
+#:for loc, count in mesh_locations
+#:for kind, decl, h5type in nums
+    generic :: write_${loc}$_data => write_${loc}$_data_${kind}$
+    procedure, private :: write_${loc}$_data_${kind}$
 #:endfor
 #:endfor
-#:for s in num_specs_no_int8
-    generic :: write_field_data => write_field_data_${s["kind"]}$
-    procedure, private :: write_field_data_${s["kind"]}$
-    generic :: write_field_data => write_temporal_field_data_${s["kind"]}$
-    procedure, private :: write_temporal_field_data_${s["kind"]}$
-    generic :: register_temporal_field_data => register_temporal_field_data_${s["kind"]}$
-    procedure, private :: register_temporal_field_data_${s["kind"]}$
+#:for kind, decl, h5type in nums_no_int8
+    generic :: write_field_data => write_field_data_${kind}$
+    procedure, private :: write_field_data_${kind}$
+#:endfor
+#:for loc, count in mesh_locations
+#:for kind, decl, h5type in nums
+    generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${kind}$
+    procedure, private :: register_temporal_${loc}$_data_${kind}$
+#:endfor
+#:endfor
+#:for kind, decl, h5type in nums_no_int8
+    generic :: register_temporal_field_data => register_temporal_field_data_${kind}$
+    procedure, private :: register_temporal_field_data_${kind}$
+#:endfor
+#:for loc, count in mesh_locations
+#:for kind, decl, h5type in nums
+    generic :: write_${loc}$_data => write_indexed_${loc}$_data_${kind}$
+    procedure, private :: write_indexed_${loc}$_data_${kind}$
+#:endfor
+#:endfor
+#:for kind, decl, h5type in nums_no_int8
+    generic :: write_field_data => write_temporal_field_data_${kind}$
+    procedure, private :: write_temporal_field_data_${kind}$
+#:endfor
+    procedure :: start_time_step, finalize_time_step
+    procedure, private :: reset_local
+#:for loc, group in [('cell','CellData'), ('point','PointData')]
+    procedure, private :: reserve_${loc}$_data_name
 #:endfor
     final :: vtkhdf_ug_delete
   end type
 
-  type :: data_var_item
-    character(:), allocatable :: dataset_name
-    logical :: is_temporal = .false.
-    integer(int64) :: offset = 0
-    integer(int64) :: next_offset = 0
-    integer(int64) :: last_entity_count = 0
-    integer(int32) :: ncomp = 1
-    integer(int32) :: tuples = 0
-    logical :: wrote_this_step = .false.
-  end type
-
-  interface set_block_index
-    module procedure set_cell_block_index
-    module procedure set_point_block_index
-    module procedure set_field_block_index
-  end interface
-
-  interface get_block_index
-    module procedure get_cell_block_index
-    module procedure get_point_block_index
-    module procedure get_field_block_index
-  end interface
-
-  integer(int64), parameter :: STEPS_CHUNK_SIZE = 512
-
 contains
 
-  subroutine set_cell_block_index(handle, block_index)
-    type(vtkhdf_cell_data_handle), intent(inout) :: handle
-    integer, intent(in) :: block_index
-    handle%block_index = block_index
-  end subroutine
+  ! Initialization and cleanup.
 
-  subroutine set_point_block_index(handle, block_index)
-    type(vtkhdf_point_data_handle), intent(inout) :: handle
-    integer, intent(in) :: block_index
-    handle%block_index = block_index
-  end subroutine
-
-  subroutine set_field_block_index(handle, block_index)
-    type(vtkhdf_field_data_handle), intent(inout) :: handle
-    integer, intent(in) :: block_index
-    handle%block_index = block_index
-  end subroutine
-
-  pure function get_cell_block_index(handle) result(block_index)
-    type(vtkhdf_cell_data_handle), intent(in) :: handle
-    integer :: block_index
-    block_index = handle%block_index
-  end function
-
-  pure function get_point_block_index(handle) result(block_index)
-    type(vtkhdf_point_data_handle), intent(in) :: handle
-    integer :: block_index
-    block_index = handle%block_index
-  end function
-
-  pure function get_field_block_index(handle) result(block_index)
-    type(vtkhdf_field_data_handle), intent(in) :: handle
-    integer :: block_index
-    block_index = handle%block_index
-  end function
-
-  pure function temporal_enabled(this) result(enabled)
-    class(vtkhdf_ug), intent(in) :: this
-    logical :: enabled
-    enabled = this%is_temporal
-  end function
-
-  pure function step_is_open(this) result(is_open)
-    class(vtkhdf_ug), intent(in) :: this
-    logical :: is_open
-    is_open = this%step_open
-  end function
-
-  !! Finalizer for VTKHDF_UG_FILE objects. We free heap memory we own but avoid
-  !! doing things that may require syncronization with other ranks (MPI/PHDF5)
-  !! because implicit finalization occurs it is not guaranteed to be collective
-  !! or ordered with respect to other ranks when it occurs. This can leak HDF5
-  !! IDs, but that is unavoidable. Users should always use CLOSE to do a proper
-  !! collective cleanup.
-
-  impure elemental subroutine vtkhdf_ug_delete(this)
-    type(vtkhdf_ug), intent(inout) :: this
-    this%cogrp_id = H5I_INVALID_HID
-    this%pogrp_id = H5I_INVALID_HID
-    this%fogrp_id = H5I_INVALID_HID
-    this%fsgrp_id = H5I_INVALID_HID
-    this%steps_id = H5I_INVALID_HID
-    this%cgrp_id  = H5I_INVALID_HID
-    this%pgrp_id  = H5I_INVALID_HID
-    this%fgrp_id  = H5I_INVALID_HID
-    this%root_id  = H5I_INVALID_HID
-  end subroutine
-
-  subroutine close(this)
-    class(vtkhdf_ug), intent(inout) :: this
-    integer :: ierr
-    if (this%step_open) call this%finalize_time_step()
-    if (H5Iis_valid(this%cogrp_id) > 0) ierr = H5Gclose(this%cogrp_id)
-    if (H5Iis_valid(this%pogrp_id) > 0) ierr = H5Gclose(this%pogrp_id)
-    if (H5Iis_valid(this%fogrp_id) > 0) ierr = H5Gclose(this%fogrp_id)
-    if (H5Iis_valid(this%fsgrp_id) > 0) ierr = H5Gclose(this%fsgrp_id)
-    if (H5Iis_valid(this%steps_id) > 0) ierr = H5Gclose(this%steps_id)
-    if (H5Iis_valid(this%cgrp_id) > 0) ierr = H5Gclose(this%cgrp_id)
-    if (H5Iis_valid(this%pgrp_id) > 0) ierr = H5Gclose(this%pgrp_id)
-    if (H5Iis_valid(this%fgrp_id) > 0) ierr = H5Gclose(this%fgrp_id)
-    if (H5Iis_valid(this%root_id) > 0) ierr = H5Gclose(this%root_id)
-    call finalization(this) ! free local memory
-  contains
-    subroutine finalization(this)
-      class(vtkhdf_ug), intent(out) :: this
-    end subroutine
-  end subroutine
-
-  !! Create a new VTKHDF UnstructuredGrid type group. To create a group
-  !! supporting time-dependent data, specify the optional argument
-  !! TEMPORAL to true; otherwise a static group is created by default.
-
+  !! Create a named UnstructuredGrid dataset group under a file or parent group.
+  !! MODE defaults to static; the file-type caller supplies the writer mode.
   subroutine init(this, loc_id, name, ctx, mode, data_chunk_bytes)
 
     use vtkhdf_version_param
@@ -276,18 +152,18 @@ contains
 
     integer :: mode_
 
-    mode_ = UG_STATIC
+    mode_ = VTKHDF_STATIC
     if (present(mode)) mode_ = mode
-    INSIST(UG_STATIC <= mode_ .and. mode_ <= UG_DYNAMIC_MESH)
+    INSIST(VTKHDF_STATIC <= mode_ .and. mode_ <= VTKHDF_DYNAMIC_MESH)
 
     this%data_chunk_bytes = 128_int64*1024
     if (present(data_chunk_bytes)) this%data_chunk_bytes = data_chunk_bytes
     INSIST(this%data_chunk_bytes > 0)
 
-    this%is_temporal = (mode_ > UG_STATIC)
-    this%allow_geometry_change = (mode_ >= UG_MOVING_MESH)
-    this%allow_topology_change = (mode_ >= UG_DYNAMIC_MESH)
-    this%allow_static_point_cell_data = (mode_ <= UG_FIXED_MESH)
+    this%is_temporal = (mode_ > VTKHDF_STATIC)
+    this%allow_geometry_change = (mode_ >= VTKHDF_MOVING_MESH)
+    this%allow_topology_change = (mode_ >= VTKHDF_DYNAMIC_MESH)
+    this%allow_static_point_cell_data = (mode_ <= VTKHDF_FIXED_MESH)
     this%allow_static_field_data = .not.this%is_temporal
 
     this%ctx = ctx
@@ -300,30 +176,30 @@ contains
     call h5_write_attr(this%ctx, this%root_id, 'Version', vtkhdf_version)
     call h5_write_attr(this%ctx, this%root_id, 'Type', 'UnstructuredGrid')
 
-    this%cgrp_id = H5Gcreate(this%root_id, 'CellData')
-    INSIST(this%ctx%global_all(this%cgrp_id >= 0))
+    this%cell_data%group_id = H5Gcreate(this%root_id, 'CellData')
+    INSIST(this%ctx%global_all(this%cell_data%group_id >= 0))
 
-    this%pgrp_id = H5Gcreate(this%root_id, 'PointData')
-    INSIST(this%ctx%global_all(this%pgrp_id >= 0))
+    this%point_data%group_id = H5Gcreate(this%root_id, 'PointData')
+    INSIST(this%ctx%global_all(this%point_data%group_id >= 0))
 
-    this%fgrp_id = H5Gcreate(this%root_id, 'FieldData')
-    INSIST(this%ctx%global_all(this%fgrp_id >= 0))
+    this%field_data%group_id = H5Gcreate(this%root_id, 'FieldData')
+    INSIST(this%ctx%global_all(this%field_data%group_id >= 0))
 
     if (this%is_temporal) then
       this%steps_id = H5Gcreate(this%root_id, 'Steps')
       INSIST(this%ctx%global_all(this%steps_id >= 0))
 
-      this%cogrp_id = H5Gcreate(this%steps_id, 'CellDataOffsets')
-      INSIST(this%ctx%global_all(this%cogrp_id >= 0))
+      this%cell_data%offsets_id = H5Gcreate(this%steps_id, 'CellDataOffsets')
+      INSIST(this%ctx%global_all(this%cell_data%offsets_id >= 0))
 
-      this%pogrp_id = H5Gcreate(this%steps_id, 'PointDataOffsets')
-      INSIST(this%ctx%global_all(this%pogrp_id >= 0))
+      this%point_data%offsets_id = H5Gcreate(this%steps_id, 'PointDataOffsets')
+      INSIST(this%ctx%global_all(this%point_data%offsets_id >= 0))
 
-      this%fogrp_id = H5Gcreate(this%steps_id, 'FieldDataOffsets')
-      INSIST(this%ctx%global_all(this%fogrp_id >= 0))
+      this%field_data%offsets_id = H5Gcreate(this%steps_id, 'FieldDataOffsets')
+      INSIST(this%ctx%global_all(this%field_data%offsets_id >= 0))
 
-      this%fsgrp_id = H5Gcreate(this%steps_id, 'FieldDataSizes')
-      INSIST(this%ctx%global_all(this%fsgrp_id >= 0))
+      this%field_data%sizes_id = H5Gcreate(this%steps_id, 'FieldDataSizes')
+      INSIST(this%ctx%global_all(this%field_data%sizes_id >= 0))
 
       this%nsteps = 0
       call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps)
@@ -352,6 +228,58 @@ contains
 
   end subroutine init
 
+  subroutine close(this)
+    class(vtkhdf_ug), intent(inout) :: this
+    integer :: ierr
+    if (this%root_id < 0) return
+    if (this%step_open) call this%finalize_time_step()
+    call close_data_groups(this%cell_data)
+    call close_data_groups(this%point_data)
+    call close_field_data(this%field_data)
+    if (H5Iis_valid(this%steps_id) > 0) ierr = H5Gclose(this%steps_id)
+    if (H5Iis_valid(this%root_id) > 0) ierr = H5Gclose(this%root_id)
+    call this%reset_local()
+  end subroutine
+
+  !! Finalizer for VTKHDF_UG_FILE objects. We free heap memory we own but avoid
+  !! doing things that may require syncronization with other ranks (MPI/PHDF5)
+  !! because implicit finalization occurs it is not guaranteed to be collective
+  !! or ordered with respect to other ranks when it occurs. This can leak HDF5
+  !! IDs, but that is unavoidable. Users should always use CLOSE to do a proper
+  !! collective cleanup.
+  impure elemental subroutine vtkhdf_ug_delete(this)
+    type(vtkhdf_ug), intent(inout) :: this
+    this%cell_data%offsets_id = H5I_INVALID_HID
+    this%point_data%offsets_id = H5I_INVALID_HID
+    this%field_data%offsets_id = H5I_INVALID_HID
+    this%field_data%sizes_id = H5I_INVALID_HID
+    this%steps_id = H5I_INVALID_HID
+    this%cell_data%group_id  = H5I_INVALID_HID
+    this%point_data%group_id  = H5I_INVALID_HID
+    this%field_data%group_id  = H5I_INVALID_HID
+    this%root_id  = H5I_INVALID_HID
+  end subroutine
+
+  function root(this) result(id)
+    class(vtkhdf_ug), intent(in) :: this
+    integer(hid_t) :: id
+    id = this%root_id
+  end function
+
+  pure function temporal_enabled(this) result(enabled)
+    class(vtkhdf_ug), intent(in) :: this
+    logical :: enabled
+    enabled = this%is_temporal
+  end function
+
+  pure function step_is_open(this) result(is_open)
+    class(vtkhdf_ug), intent(in) :: this
+    logical :: is_open
+    is_open = this%step_open
+  end function
+
+  ! Geometry.
+
   subroutine set_block_metadata(this, index, name)
     class(vtkhdf_ug), intent(inout) :: this
     integer, intent(in) :: index
@@ -361,25 +289,23 @@ contains
     call h5_write_attr(this%ctx, this%root_id, 'Name', name)
   end subroutine set_block_metadata
 
+#:for rkind, rdecl, rh5type in reals
+#:for ikind, idecl, ih5type in ints_no_int8
   !! Write the unstructured mesh to the file. The mesh is described in the
   !! conventional manner by the POINTS, CNODE, and XCNODE arrays. The
   !! additional array TYPES specifies the VTK cell types. This procedure
   !! must be called before any of the following procedures.
-
   !! NB: Paraview and/or the VTKHDF reader currently has a problem handling
   !! 0-sized parts (see https://gitlab.kitware.com/vtk/vtk/-/issues/19923).
   !! As a workaround, we omit any empty part by not contributing anything
   !! at all to the NumberOf* and Offsets datasets instead of the 0 we
   !! normally would. Other datasets like Connectivity already contribute
   !! nothing for empty parts.
-#:for r in real_specs
-#:for i in int_specs_no_int8
-
-  subroutine write_mesh_${r["kind"]}$_${i["kind"]}$(this, points, cnode, xcnode, types)
+  subroutine write_mesh_${rkind}$_${ikind}$(this, points, cnode, xcnode, types)
 
     class(vtkhdf_ug), intent(inout) :: this
-    ${r["decl"]}$, intent(in) :: points(:,:)
-    ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
+    ${rdecl}$, intent(in) :: points(:,:)
+    ${idecl}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
 
     INSIST(this%root_id >= 0)
@@ -389,13 +315,14 @@ contains
   end subroutine
 
 #:endfor
-#:endfor
-#:for i in int_specs_no_int8
 
-  subroutine write_mesh_topology_${i["kind"]}$(this, cnode, xcnode, types)
+#:endfor
+
+#:for ikind, idecl, ih5type in ints_no_int8
+  subroutine write_mesh_topology_${ikind}$(this, cnode, xcnode, types)
 
     class(vtkhdf_ug), intent(inout) :: this
-    ${i["decl"]}$, intent(in) :: cnode(:), xcnode(:)
+    ${idecl}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
 
     integer(int64) :: idum(0)
@@ -428,7 +355,7 @@ contains
 
     if (this%is_temporal) then ! topology datasets are extendable
       if (define_datasets) then
-        associate (mold => int(0,kind(cnode)), chunk_size => data_chunk_size(this, c_sizeof(int(0,kind(cnode)))))
+        associate (mold => int(0,kind(cnode)), chunk_size => data_chunk_size(this%data_chunk_bytes, c_sizeof(int(0,kind(cnode)))))
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Connectivity', mold, chunk_size)
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Offsets', mold, chunk_size)
         end associate
@@ -436,7 +363,7 @@ contains
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'NumberOfConnectivityIds', mold, chunk_size)
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'NumberOfCells', mold, chunk_size)
         end associate
-        associate (mold => 0_int8, chunk_size => data_chunk_size(this, c_sizeof(0_int8)))
+        associate (mold => 0_int8, chunk_size => data_chunk_size(this%data_chunk_bytes, c_sizeof(0_int8)))
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Types', mold, chunk_size)
         end associate
       end if
@@ -485,7 +412,7 @@ contains
         call h5_${mode}$_dataset(this%ctx, this%root_id, 'Connectivity', cnode-1)  ! 0-based indexing
       else
         block
-          ${i["decl"]}$ :: idum(0)
+          ${idecl}$ :: idum(0)
           call h5_${mode}$_dataset(this%ctx, this%root_id, 'Connectivity', idum)
         end block
       endif
@@ -502,29 +429,29 @@ contains
       else
 #ifdef GNU_PR123899
         block
-          ${i["decl"]}$ :: idum(0)
+          ${idecl}$ :: idum(0)
           call h5_${mode}$_dataset(this%ctx, this%root_id, 'Offsets', idum)
         end block
 #else
-        call h5_${mode}$_dataset(this%ctx, this%root_id, 'Offsets', [${i["decl"]}$::])
+        call h5_${mode}$_dataset(this%ctx, this%root_id, 'Offsets', [${idecl}$::])
 #endif
       end if
 
     end subroutine ${mode}$_datasets
 
 #:endfor
-  end subroutine write_mesh_topology_${i["kind"]}$
+  end subroutine write_mesh_topology_${ikind}$
 
 #:endfor
-#:for r in real_specs
 
-  subroutine write_mesh_geometry_${r["kind"]}$(this, points)
+#:for rkind, rdecl, rh5type in reals
+  subroutine write_mesh_geometry_${rkind}$(this, points)
 
     class(vtkhdf_ug), intent(inout) :: this
-    ${r["decl"]}$, intent(in) :: points(:,:)
+    ${rdecl}$, intent(in) :: points(:,:)
 
     logical :: define_datasets
-    ${r["decl"]}$ :: point(size(points,dim=1))
+    ${rdecl}$ :: point(size(points,dim=1))
 
     INSIST(this%root_id >= 0)
     INSIST(.not.this%mesh_locked)
@@ -551,7 +478,7 @@ contains
 
     if (this%is_temporal) then ! geometry datasets are extendable
       if (define_datasets) then
-        associate (mold => point, chunk_size => data_chunk_size(this, c_sizeof(point)))
+        associate (mold => point, chunk_size => data_chunk_size(this%data_chunk_bytes, c_sizeof(point)))
           call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Points', mold, chunk_size)
         end associate
         associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
@@ -590,20 +517,18 @@ contains
           this%ctx%global_all((this%ncell == 0) .eqv. (this%nnode == 0)) ! see 0-sized part NB
     end if
 
-  end subroutine write_mesh_geometry_${r["kind"]}$
+  end subroutine write_mesh_geometry_${rkind}$
 
 #:endfor
-  !! Writes the cell data ARRAY to a new CellData group dataset NAME. In the
-  !! case of a temporal file supporting time-dependent datasets, this dataset
-  !! is static and not associated with any time step. Note that VTK only
-  !! supports scalar and vector-valued mesh data (rank-1 and 2 ARRAY); this
-  !! should be a compile time constraint implemented by the public API.
-#:for s in num_specs
 
-  subroutine write_cell_data_${s["kind"]}$(this, name, array, attribute)
+  ! Static data.
+
+#:for loc, count in mesh_locations
+#:for kind, decl, h5type in nums
+  subroutine write_${loc}$_data_${kind}$(this, name, array, attribute)
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: array(..)
+    ${decl}$, intent(in) :: array(..)
     character(*), intent(in), optional :: attribute
     integer, allocatable :: dims(:)
     integer :: var_index
@@ -612,210 +537,131 @@ contains
     INSIST(this%geometry_defined)
     INSIST(this%topology_defined)
     dims = shape(array)
-    INSIST(this%ctx%global_all(dims(size(dims)) == this%ncell))
-    call this%reserve_cell_data_name(name, external_name, internal_name, var_index)
-    call h5_write_dataset(this%ctx, this%cgrp_id, internal_name, array)
-    call write_data_name_attr(this%ctx, this%cgrp_id, internal_name, external_name, attribute)
+    INSIST(this%ctx%global_all(dims(size(dims)) == this%${count}$))
+    call this%reserve_${loc}$_data_name(name, external_name, internal_name, var_index)
+    call h5_write_dataset(this%ctx, this%${loc}$_data%group_id, internal_name, array)
+    call write_data_name_attr(this%ctx, this%${loc}$_data%group_id, internal_name, external_name, attribute)
   end subroutine
 #:endfor
-
-  !! Writes the point data ARRAY to a new PointData group dataset NAME. In the
-  !! case of a temporal file supporting time-dependent datasets, this dataset
-  !! is static and not associated with any time step. Note that VTK only
-  !! supports scalar and vector-valued mesh data (rank-1 and 2 ARRAY); this
-  !! should be a compile time constraint implemented by the public API.
-#:for s in num_specs
-
-  subroutine write_point_data_${s["kind"]}$(this, name, array, attribute)
-    class(vtkhdf_ug), intent(inout) :: this
-    character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: array(..)
-    character(*), intent(in), optional :: attribute
-    integer, allocatable :: dims(:)
-    integer :: var_index
-    character(:), allocatable :: external_name, internal_name
-    INSIST(this%allow_static_point_cell_data)
-    INSIST(this%geometry_defined)
-    INSIST(this%topology_defined)
-    dims = shape(array)
-    INSIST(this%ctx%global_all(dims(size(dims)) == this%nnode))
-    call this%reserve_point_data_name(name, external_name, internal_name, var_index)
-    call h5_write_dataset(this%ctx, this%pgrp_id, internal_name, array)
-    call write_data_name_attr(this%ctx, this%pgrp_id, internal_name, external_name, attribute)
-  end subroutine
 #:endfor
 
+#:for kind, decl, h5type in nums_no_int8
   !! Writes the field data ARRAY to a new FieldData group dataset NAME. In the
   !! case of a temporal file supporting time-dependent datasets, this dataset
   !! is static and not associated with any time step.
-#:for s in num_specs_no_int8
-
-  subroutine write_field_data_${s["kind"]}$(this, name, array, as_vector)
+  subroutine write_field_data_${kind}$(this, name, array, as_vector)
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: array(..)
+    ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
-    integer, allocatable :: dims(:)
-    integer :: var_index
-    logical :: as_vector_
-    character(:), allocatable :: external_name, internal_name
     INSIST(this%allow_static_field_data)
-    as_vector_ = .false.
-    if (present(as_vector)) as_vector_ = as_vector
-    dims = shape(array)
-    INSIST(size(dims) <= 2)
-    call this%reserve_field_data_name(name, external_name, internal_name, var_index)
-    select rank (array)
-    rank (0)
-      INSIST(.not.as_vector_)
-      call h5_write_dataset(this%ctx, this%fgrp_id, internal_name, [array], root=0)
-    rank (1)
-      if (as_vector_) then
-        call h5_write_dataset(this%ctx, this%fgrp_id, internal_name, reshape(array, [size(array), 1]), root=0)
-      else
-        call h5_write_dataset(this%ctx, this%fgrp_id, internal_name, array, root=0)
-      end if
-    rank (2)
-      INSIST(.not.as_vector_)
-      call h5_write_dataset(this%ctx, this%fgrp_id, internal_name, array, root=0)
-    rank default
-      INSIST(.false.)
-    end select
-    call write_data_name_attr(this%ctx, this%fgrp_id, internal_name, external_name)
+    call write_field_data(this%ctx, this%field_data, name, array, as_vector)
   end subroutine
+
 #:endfor
 
-  !! Register NAME as a time-dependent Cell/PointData group dataset. This
-  !! writes no data, but configures a new extendable HDF5 dataset for future
-  !! writing.
-  !!
-  !! MOLD determines the dataset's fixed leading dimensions:
-  !! - For scalar-valued cell data: MOLD is a scalar;
-  !! - For vector-valued cell data: MOLD is a 1D array whose size equals the
-  !!   number of components.
-  !!
-  !! The type and kind of MOLD defines the HDF5 datatype, and its value is
-  !! ignored. The last dimension of written data will correspond to the mesh
-  !! entity, making it the extendable (slowest-varying) dimension of the
-  !! dataset. All MPI ranks must provide identical MOLD characteristics.
-#:for s in num_specs
+  ! Temporal registration.
 
-  function register_temporal_cell_data_${s["kind"]}$(this, name, mold, attribute) result(handle)
+#:for loc, count in mesh_locations
+#:for kind, decl, h5type in nums
+  integer function register_temporal_${loc}$_data_${kind}$(this, name, mold, attribute) result(index)
 
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: mold(..)
+    ${decl}$, intent(in) :: mold(..)
     character(*), intent(in), optional :: attribute
-    type(vtkhdf_cell_data_handle) :: handle
 
-    integer :: var_index
     character(:), allocatable :: external_name, internal_name
 
     INSIST(this%nsteps >= 0) ! must be configured for temporal
     INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
 
-    call this%reserve_cell_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
+    call this%reserve_${loc}$_data_name(name, external_name, internal_name, index, is_temporal=.true.)
 
     !! Dataset for the cell data
-    associate (chunk_size => data_chunk_size(this, c_sizeof(mold)))
-      call h5_create_unlimited_dataset(this%ctx, this%cgrp_id, internal_name, mold, chunk_size)
+    associate (chunk_size => data_chunk_size(this%data_chunk_bytes, c_sizeof(mold)))
+      call h5_create_unlimited_dataset(this%ctx, this%${loc}$_data%group_id, internal_name, mold, chunk_size)
     end associate
-    call write_data_name_attr(this%ctx, this%cgrp_id, internal_name, external_name, attribute)
+    call write_data_name_attr(this%ctx, this%${loc}$_data%group_id, internal_name, external_name, attribute)
 
     !! Dataset for its time step offsets
     associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
-      call h5_create_unlimited_dataset(this%ctx, this%cogrp_id, internal_name, mold, chunk_size)
+      call h5_create_unlimited_dataset(this%ctx, this%${loc}$_data%offsets_id, internal_name, mold, chunk_size)
     end associate
 
-    handle%index = var_index
 
-  end function register_temporal_cell_data_${s["kind"]}$
+  end function register_temporal_${loc}$_data_${kind}$
+#:endfor
 #:endfor
 
-  !! Register NAME as a time-dependent PointData group dataset. This writes
-  !! no data, but configures a new extendable HDF5 dataset for future writing.
-  !!
-  !! MOLD determines the dataset's fixed leading dimensions:
-  !! - For scalar-valued point data: MOLD is a scalar;
-  !! - For vector-valued point data: MOLD is a 1D array whose size equals the
-  !!   number of components.
-  !!
-  !! The type and kind of MOLD defines the HDF5 datatype, and its value is
-  !! ignored. The last dimension of written data will correspond to the point
-  !! index, making it the extendable (slowest-varying) dimension of the dataset.
-  !! All MPI ranks must provide identical MOLD characteristics.
-#:for s in num_specs
-
-  function register_temporal_point_data_${s["kind"]}$(this, name, mold, attribute) result(handle)
-
-    class(vtkhdf_ug), intent(inout) :: this
-    character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: mold(..)
-    character(*), intent(in), optional :: attribute
-    type(vtkhdf_point_data_handle) :: handle
-
-    integer :: var_index
-    character(:), allocatable :: external_name, internal_name
-
-    INSIST(this%nsteps >= 0) ! must be configured for temporal
-    INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
-
-    call this%reserve_point_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
-
-    !! Dataset for the point data
-    associate (chunk_size => data_chunk_size(this, c_sizeof(mold)))
-      call h5_create_unlimited_dataset(this%ctx, this%pgrp_id, internal_name, mold, chunk_size)
-    end associate
-    call write_data_name_attr(this%ctx, this%pgrp_id, internal_name, external_name, attribute)
-
-    !! Dataset for its time step offsets
-    associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
-      call h5_create_unlimited_dataset(this%ctx, this%pogrp_id, internal_name, mold, chunk_size)
-    end associate
-
-    handle%index = var_index
-
-  end function register_temporal_point_data_${s["kind"]}$
-#:endfor
-
+#:for kind, decl, h5type in nums_no_int8
   !! Register NAME as a time-dependent FieldData group dataset. This writes no
   !! data, but configures a new extendable HDF5 dataset and step metadata
   !! datasets for future writing.
-#:for s in num_specs_no_int8
-
-  function register_temporal_field_data_${s["kind"]}$(this, name, mold) result(handle)
-
+  integer function register_temporal_field_data_${kind}$(this, name, mold) result(index)
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: mold
-    type(vtkhdf_field_data_handle) :: handle
+    ${decl}$, intent(in) :: mold
+    INSIST(this%nsteps == 0)
+    index = register_temporal_field_data(this%ctx, this%field_data, name, mold, &
+        this%data_chunk_bytes)
+  end function register_temporal_field_data_${kind}$
 
-    integer :: var_index
-    character(:), allocatable :: external_name, internal_name
-
-    INSIST(this%nsteps >= 0) ! must be configured for temporal
-    INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
-
-    call this%reserve_field_data_name(name, external_name, internal_name, var_index, is_temporal=.true.)
-
-    !! Flattened temporal field data stream and per-step metadata
-    associate (chunk_size_data => data_chunk_size(this, c_sizeof(mold)))
-      call h5_create_unlimited_dataset(this%ctx, this%fgrp_id, internal_name, mold, chunk_size_data)
-    end associate
-    associate (chunk_size => STEPS_CHUNK_SIZE)
-      call h5_create_unlimited_dataset(this%ctx, this%fogrp_id, internal_name, 0_int64, chunk_size)
-      call h5_create_unlimited_dataset(this%ctx, this%fsgrp_id, internal_name, [0_int32, 0_int32], chunk_size)
-    end associate
-    call write_data_name_attr(this%ctx, this%fgrp_id, internal_name, external_name)
-
-    handle%index = var_index
-
-  end function register_temporal_field_data_${s["kind"]}$
 #:endfor
+
+  ! Writes by index.
+
+#:for loc, count in mesh_locations
+#:for kind, decl, h5type in nums
+  subroutine write_indexed_${loc}$_data_${kind}$(this, index, array)
+
+    class(vtkhdf_ug), intent(inout) :: this
+    integer, intent(in) :: index
+    ${decl}$, intent(in) :: array(..)
+
+    integer, allocatable :: dims(:)
+
+    INSIST(this%nsteps > 0)
+    INSIST(this%step_open)
+    INSIST(this%geometry_defined)
+    INSIST(this%topology_defined)
+
+    dims = shape(array)
+    INSIST(size(dims) >= 1 .and. size(dims) <= 3)
+    INSIST(dims(size(dims)) == this%${count}$)
+    INSIST(index >= 1)
+    INSIST(allocated(this%${loc}$_data%vars))
+    INSIST(index <= size(this%${loc}$_data%vars))
+    INSIST(this%${loc}$_data%vars(index)%is_temporal)
+    INSIST(.not.this%${loc}$_data%vars(index)%wrote_this_step) ! no double writing in a single step
+    this%${loc}$_data%vars(index)%offset = this%${loc}$_data%vars(index)%next_offset
+    call h5_append_to_dataset(this%ctx, this%${loc}$_data%group_id, this%${loc}$_data%vars(index)%dataset_name, array)
+    this%${loc}$_data%vars(index)%next_offset = this%${loc}$_data%vars(index)%next_offset + this%${count}$_tot
+    this%${loc}$_data%vars(index)%last_entity_count = this%${count}$
+    this%${loc}$_data%vars(index)%wrote_this_step = .true. ! dataset has been written for this step
+
+    this%mesh_locked = .true. ! set barrier for changing the mesh
+
+  end subroutine write_indexed_${loc}$_data_${kind}$
+#:endfor
+#:endfor
+
+#:for kind, decl, h5type in nums_no_int8
+  subroutine write_temporal_field_data_${kind}$(this, index, array, as_vector)
+    class(vtkhdf_ug), intent(inout) :: this
+    integer, intent(in) :: index
+    ${decl}$, intent(in) :: array(..)
+    logical, intent(in), optional :: as_vector
+    INSIST(this%step_open)
+    call write_temporal_field_data(this%ctx, this%field_data, index, array, as_vector)
+  end subroutine write_temporal_field_data_${kind}$
+
+#:endfor
+
+  ! Time stepping.
 
   !! Mark the start of a new time step with time value TIME. Subsequent output
   !! of time-dependent datasets will be associated with this time step.
-
   subroutine start_time_step(this, time)
 
     class(vtkhdf_ug), intent(inout) :: this
@@ -834,9 +680,9 @@ contains
       this%topology_written_this_step = .false.
     end if
 
-    call reset_data_step_flags(this%point_vars)
-    call reset_data_step_flags(this%cell_vars)
-    call reset_data_step_flags(this%field_vars)
+    call reset_data_step_flags(this%point_data%vars)
+    call reset_data_step_flags(this%cell_data%vars)
+    call reset_data_step_flags(this%field_data%vars)
     this%step_open = .true.
     this%mesh_locked = .false. ! release barrier for changing the mesh
 
@@ -853,20 +699,20 @@ contains
 
     INSIST(this%geometry_defined .and. this%topology_defined)
 
-    if (allocated(this%cell_vars)) then
-      do j = 1, size(this%cell_vars)
-        if (this%cell_vars(j)%is_temporal) then
-          if (this%cell_vars(j)%wrote_this_step) cycle
-          INSIST(this%ctx%global_all(this%cell_vars(j)%last_entity_count == this%ncell))
+    if (allocated(this%cell_data%vars)) then
+      do j = 1, size(this%cell_data%vars)
+        if (this%cell_data%vars(j)%is_temporal) then
+          if (this%cell_data%vars(j)%wrote_this_step) cycle
+          INSIST(this%ctx%global_all(this%cell_data%vars(j)%last_entity_count == this%ncell))
         end if
       end do
     end if
 
-    if (allocated(this%point_vars)) then
-      do j = 1, size(this%point_vars)
-        if (this%point_vars(j)%is_temporal) then
-          if (this%point_vars(j)%wrote_this_step) cycle
-          INSIST(this%ctx%global_all(this%point_vars(j)%last_entity_count == this%nnode))
+    if (allocated(this%point_data%vars)) then
+      do j = 1, size(this%point_data%vars)
+        if (this%point_data%vars(j)%is_temporal) then
+          if (this%point_data%vars(j)%wrote_this_step) cycle
+          INSIST(this%ctx%global_all(this%point_data%vars(j)%last_entity_count == this%nnode))
         end if
       end do
     end if
@@ -893,355 +739,53 @@ contains
     call h5_append_to_dataset(this%ctx, this%steps_id, 'PartOffsets', this%part_offset, root=0)
 
     !! Cell and point data offsets for each temporal dataset for this timestep
-    call append_data_offsets(this%ctx, this%pogrp_id, this%point_vars)
-    call append_data_offsets(this%ctx, this%cogrp_id, this%cell_vars)
-    call append_field_data_metadata(this%ctx, this%fogrp_id, this%fsgrp_id, this%field_vars)
+    call append_data_offsets(this%ctx, this%point_data%offsets_id, this%point_data%vars)
+    call append_data_offsets(this%ctx, this%cell_data%offsets_id, this%cell_data%vars)
+    call append_field_data_metadata(this%ctx, this%field_data)
     this%step_open = .false.
 
     INSIST(this%geometry_defined .and. this%topology_defined)
 
   end subroutine finalize_time_step
 
-  !! Write the cell-based ARRAY to the time-dependent CellData group dataset
-  !! NAME. The data is associated with the current time step. The type and
-  !! leading dimensions of ARRAY must match the MOLD provided during the
-  !! registration of NAME. The last (or only) dimension of ARRAY must
-  !  correspond to the local number of cells on this MPI rank.
-#:for s in num_specs
+  ! Registry and storage helpers.
 
-  subroutine write_temporal_cell_data_${s["kind"]}$(this, var, array)
-
-    class(vtkhdf_ug), intent(inout) :: this
-    type(vtkhdf_cell_data_handle), intent(in) :: var
-    ${s["decl"]}$, intent(in) :: array(..)
-
-    integer, allocatable :: dims(:)
-
-    INSIST(this%nsteps > 0)
-    INSIST(this%step_open)
-    INSIST(this%geometry_defined)
-    INSIST(this%topology_defined)
-
-    dims = shape(array)
-    INSIST(size(dims) >= 1 .and. size(dims) <= 3)
-    INSIST(dims(size(dims)) == this%ncell)
-    INSIST(var%index >= 1)
-    INSIST(allocated(this%cell_vars))
-    INSIST(var%index <= size(this%cell_vars))
-    INSIST(this%cell_vars(var%index)%is_temporal)
-    INSIST(.not.this%cell_vars(var%index)%wrote_this_step) ! no double writing in a single step
-    this%cell_vars(var%index)%offset = this%cell_vars(var%index)%next_offset
-    call h5_append_to_dataset(this%ctx, this%cgrp_id, this%cell_vars(var%index)%dataset_name, array)
-    this%cell_vars(var%index)%next_offset = this%cell_vars(var%index)%next_offset + this%ncell_tot
-    this%cell_vars(var%index)%last_entity_count = this%ncell
-    this%cell_vars(var%index)%wrote_this_step = .true. ! dataset has been written for this step
-
-    this%mesh_locked = .true. ! set barrier for changing the mesh
-
-  end subroutine write_temporal_cell_data_${s["kind"]}$
-#:endfor
-
-  !! Write the point-based ARRAY to the time-dependent PointData group dataset
-  !! NAME. The data is associated with the current time step. The type and
-  !! leading dimensions of ARRAY must match the MOLD provided during the
-  !! registration of NAME. The last (or only) dimension of ARRAY must
-  !  correspond to the local number of points on this MPI rank.
-#:for s in num_specs
-
-  subroutine write_temporal_point_data_${s["kind"]}$(this, var, array)
-
-    class(vtkhdf_ug), intent(inout) :: this
-    type(vtkhdf_point_data_handle), intent(in) :: var
-    ${s["decl"]}$, intent(in) :: array(..)
-
-    integer, allocatable :: dims(:)
-
-    INSIST(this%nsteps > 0)
-    INSIST(this%step_open)
-    INSIST(this%geometry_defined)
-    INSIST(this%topology_defined)
-
-    dims = shape(array)
-    INSIST(size(dims) >= 1 .and. size(dims) <= 3)
-    INSIST(dims(size(dims)) == this%nnode)
-    INSIST(var%index >= 1)
-    INSIST(allocated(this%point_vars))
-    INSIST(var%index <= size(this%point_vars))
-    INSIST(this%point_vars(var%index)%is_temporal)
-    INSIST(.not.this%point_vars(var%index)%wrote_this_step) ! no double writing in a single step
-    this%point_vars(var%index)%offset = this%point_vars(var%index)%next_offset
-    call h5_append_to_dataset(this%ctx, this%pgrp_id, this%point_vars(var%index)%dataset_name, array)
-    this%point_vars(var%index)%next_offset = this%point_vars(var%index)%next_offset + this%nnode_tot
-    this%point_vars(var%index)%last_entity_count = this%nnode
-    this%point_vars(var%index)%wrote_this_step = .true. ! dataset has been written for this step
-
-    this%mesh_locked = .true. ! set barrier for changing the mesh
-
-  end subroutine write_temporal_point_data_${s["kind"]}$
-#:endfor
-
-#:for s in num_specs_no_int8
-  subroutine write_temporal_field_data_${s["kind"]}$(this, var, array, as_vector)
-
-    class(vtkhdf_ug), intent(inout) :: this
-    type(vtkhdf_field_data_handle), intent(in) :: var
-    ${s["decl"]}$, intent(in) :: array(..)
-    logical, intent(in), optional :: as_vector
-
-    integer, allocatable :: dims(:)
-    integer(int64) :: block_len
-    logical :: as_vector_
-
-    as_vector_ = .false.
-    if (present(as_vector)) as_vector_ = as_vector
-    INSIST(this%nsteps > 0)
-    INSIST(this%step_open)
-
-    dims = shape(array)
-    INSIST(size(dims) <= 2)
-    INSIST(var%index >= 1)
-    INSIST(allocated(this%field_vars))
-    INSIST(var%index <= size(this%field_vars))
-    INSIST(this%field_vars(var%index)%is_temporal)
-    INSIST(.not.this%field_vars(var%index)%wrote_this_step) ! no double writing in a single step
-
-    select rank (array)
-    rank (0)
-      INSIST(.not.as_vector_)
-      this%field_vars(var%index)%ncomp = 1
-      this%field_vars(var%index)%tuples = 1
-      call h5_append_to_dataset(this%ctx, this%fgrp_id, this%field_vars(var%index)%dataset_name, [array], root=0)
-    rank (1)
-      if (as_vector_) then
-        this%field_vars(var%index)%ncomp = size(array, kind=int32)
-        this%field_vars(var%index)%tuples = 1
-      else
-        this%field_vars(var%index)%ncomp = 1
-        this%field_vars(var%index)%tuples = size(array, kind=int32)
-      end if
-      call h5_append_to_dataset(this%ctx, this%fgrp_id, this%field_vars(var%index)%dataset_name, array, root=0)
-    rank (2)
-      INSIST(.not.as_vector_)
-      this%field_vars(var%index)%ncomp = size(array, dim=1, kind=int32)
-      this%field_vars(var%index)%tuples = size(array, dim=2, kind=int32)
-      call h5_append_to_dataset(this%ctx, this%fgrp_id, this%field_vars(var%index)%dataset_name, &
-          reshape(array, [size(array)]), root=0)
-    rank default
-      INSIST(.false.)
-    end select
-
-    this%field_vars(var%index)%offset = this%field_vars(var%index)%next_offset
-    block_len = int(this%field_vars(var%index)%ncomp, int64) * int(this%field_vars(var%index)%tuples, int64)
-    this%field_vars(var%index)%next_offset = this%field_vars(var%index)%next_offset + block_len
-    this%field_vars(var%index)%wrote_this_step = .true.
-
-  end subroutine write_temporal_field_data_${s["kind"]}$
-#:endfor
-
-  subroutine reserve_cell_data_name(this, name, external_name, internal_name, index, is_temporal)
+#:for loc, group in [('cell','CellData'), ('point','PointData')]
+  subroutine reserve_${loc}$_data_name(this, name, external_name, internal_name, index, is_temporal)
     class(vtkhdf_ug), intent(inout) :: this
     character(*), intent(in) :: name
     character(:), allocatable, intent(out) :: external_name, internal_name
     integer, intent(out) :: index
     logical, intent(in), optional :: is_temporal
-    logical :: temporal_flag
-    temporal_flag = .false.
-    if (present(is_temporal)) temporal_flag = is_temporal
-    external_name = trim(name)
-    if (external_name == '') external_name = 'Unnamed_CellData'
-    internal_name = this%unique_cell_data_name(sanitized_name(external_name))
-    call append_data_var(this%cell_vars, internal_name, temporal_flag, index)
-  end subroutine
-
-  subroutine reserve_point_data_name(this, name, external_name, internal_name, index, is_temporal)
-    class(vtkhdf_ug), intent(inout) :: this
-    character(*), intent(in) :: name
-    character(:), allocatable, intent(out) :: external_name, internal_name
-    integer, intent(out) :: index
-    logical, intent(in), optional :: is_temporal
-    logical :: temporal_flag
-    temporal_flag = .false.
-    if (present(is_temporal)) temporal_flag = is_temporal
-    external_name = trim(name)
-    if (external_name == '') external_name = 'Unnamed_PointData'
-    internal_name = this%unique_point_data_name(sanitized_name(external_name))
-    call append_data_var(this%point_vars, internal_name, temporal_flag, index)
-  end subroutine
-
-  subroutine reserve_field_data_name(this, name, external_name, internal_name, index, is_temporal)
-    class(vtkhdf_ug), intent(inout) :: this
-    character(*), intent(in) :: name
-    character(:), allocatable, intent(out) :: external_name, internal_name
-    integer, intent(out) :: index
-    logical, intent(in), optional :: is_temporal
-    logical :: temporal_flag
-    temporal_flag = .false.
-    if (present(is_temporal)) temporal_flag = is_temporal
-    external_name = trim(name)
-    if (external_name == '') external_name = 'Unnamed_FieldData'
-    internal_name = this%unique_field_data_name(sanitized_name(external_name))
-    call append_data_var(this%field_vars, internal_name, temporal_flag, index)
-  end subroutine
-
-  !! Replace blacklisted characters in NAME with underscore.
-  !! This version replicates the behavior of vtkHDFWriter.
-  pure function sanitized_name(name) result(clean_name)
-    character(*), intent(in) :: name
-    character(len_trim(name)) :: clean_name
-    character(*), parameter :: BLACKLIST = '/. '
-    integer :: n
-    clean_name = trim(name)
-    n = scan(clean_name, BLACKLIST)
-    do while (n > 0)
-      clean_name(n:n) = '_'
-      n = scan(clean_name, BLACKLIST)
-    end do
-  end function
-
-  function unique_cell_data_name(this, name) result(unique_name)
-    class(vtkhdf_ug), intent(in) :: this
-    character(*), intent(in) :: name
-    character(:), allocatable :: unique_name
-    unique_name = unique_data_name(this%cell_vars, name)
-  end function
-
-  function unique_point_data_name(this, name) result(unique_name)
-    class(vtkhdf_ug), intent(in) :: this
-    character(*), intent(in) :: name
-    character(:), allocatable :: unique_name
-    unique_name = unique_data_name(this%point_vars, name)
-  end function
-
-  function unique_field_data_name(this, name) result(unique_name)
-    class(vtkhdf_ug), intent(in) :: this
-    character(*), intent(in) :: name
-    character(:), allocatable :: unique_name
-    unique_name = unique_data_name(this%field_vars, name)
-  end function
-
-  !! Return a name that is distinct from the existing data names.
-  !! The returned name equals the input name (trimmed) if there are
-  !! no name clashes. Otherwise a unique name is generated by appending
-  !! a suffix of the form '_N' to the input name, where N is some
-  !! non-negative integer.
-  function unique_data_name(vars, name) result(unique_name)
-    type(data_var_item), allocatable, intent(in) :: vars(:)
-    character(*), intent(in) :: name
-    character(:), allocatable :: unique_name
-    integer :: n , suffix
-    character(8) :: string
-    n = 1
-    suffix = 1
-    unique_name = trim(name)
-    if (.not.allocated(vars)) return ! no existing names
-    do while (n <= size(vars))
-      if (unique_name == vars(n)%dataset_name) then ! clash
-        write(string,'(i0)') suffix
-        unique_name = trim(name) // '_' // trim(string)
-        suffix = suffix + 1
-        n = 1 ! restart search from the beginning with new name
-      else ! no clash; move to next
-        n = n + 1
-      end if
-    end do
-  end function
-
-  subroutine append_data_var(vars, dataset_name, is_temporal, index)
-    type(data_var_item), allocatable, intent(inout) :: vars(:)
-    character(*), intent(in) :: dataset_name
-    logical, intent(in) :: is_temporal
-    integer, intent(out) :: index
-    type(data_var_item), allocatable :: tmp(:)
-    integer :: n
-    if (.not.allocated(vars)) then
-      allocate(vars(1))
-      index = 1
+    type(mesh_data_var) :: var
+    call resolve_data_name(name, 'Unnamed_${group}$', external_name, internal_name, this%${loc}$_data%vars)
+    var%dataset_name = internal_name
+    if (present(is_temporal)) var%is_temporal = is_temporal
+    if (allocated(this%${loc}$_data%vars)) then
+      this%${loc}$_data%vars = [this%${loc}$_data%vars,var]
     else
-      n = size(vars)
-      allocate(tmp(n+1))
-      tmp(:n) = vars
-      call move_alloc(tmp, vars)
-      index = n + 1
+      allocate(this%${loc}$_data%vars(1),source=var)
     end if
-    vars(index)%dataset_name = dataset_name
-    vars(index)%is_temporal = is_temporal
-    vars(index)%offset = 0
-    vars(index)%next_offset = 0
-    vars(index)%last_entity_count = 0
-    ! Initial temporal field state represents an empty value.
-    vars(index)%ncomp = 1
-    vars(index)%tuples = 0
-    vars(index)%wrote_this_step = .false.
+    index = size(this%${loc}$_data%vars)
   end subroutine
 
-  subroutine reset_data_step_flags(vars)
-    type(data_var_item), allocatable, intent(inout) :: vars(:)
-    integer :: j
-    if (.not.allocated(vars)) return
-    do j = 1, size(vars)
-      if (.not.vars(j)%is_temporal) cycle
-      vars(j)%wrote_this_step = .false.
-    end do
-  end subroutine
+#:endfor
 
   subroutine append_data_offsets(ctx, grp_id, vars)
     type(vtkhdf_ctx), intent(in) :: ctx
     integer(hid_t), intent(in) :: grp_id
-    type(data_var_item), allocatable, intent(inout) :: vars(:)
+    type(mesh_data_var), allocatable, intent(in) :: vars(:)
     integer :: j
     if (grp_id < 0) return
     if (.not.allocated(vars)) return
     do j = 1, size(vars)
       if (.not.vars(j)%is_temporal) cycle
-      vars(j)%wrote_this_step = .false.
       call h5_append_to_dataset(ctx, grp_id, vars(j)%dataset_name, vars(j)%offset, root=0)
     end do
   end subroutine
 
-  subroutine append_field_data_metadata(ctx, offset_grp_id, size_grp_id, vars)
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: offset_grp_id, size_grp_id
-    type(data_var_item), allocatable, intent(inout) :: vars(:)
-    integer :: j
-    integer(int32) :: sizes(2,1)
-    if (offset_grp_id < 0 .or. size_grp_id < 0) return
-    if (.not.allocated(vars)) return
-    do j = 1, size(vars)
-      if (.not.vars(j)%is_temporal) cycle
-      ! If not written this step, repeat current offset/size (initially empty).
-      vars(j)%wrote_this_step = .false.
-      sizes(:,1) = [vars(j)%ncomp, vars(j)%tuples]
-      call h5_append_to_dataset(ctx, offset_grp_id, vars(j)%dataset_name, vars(j)%offset, root=0)
-      call h5_append_to_dataset(ctx, size_grp_id, vars(j)%dataset_name, sizes, root=0)
-    end do
+  subroutine reset_local(this)
+    class(vtkhdf_ug), intent(out) :: this
   end subroutine
-
-  subroutine write_data_name_attr(ctx, grp_id, dataset_name, external_name, attribute)
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer(hid_t), intent(in) :: grp_id
-    character(*), intent(in) :: dataset_name, external_name
-    character(*), intent(in), optional :: attribute
-    character(:), allocatable :: trimmed_attribute
-    integer(hid_t) :: dset_id
-    integer :: ierr
-    dset_id = H5Dopen(grp_id, dataset_name)
-    INSIST(ctx%global_all(dset_id >= 0))
-    call h5_write_attr(ctx, dset_id, 'Name', external_name)
-    if (present(attribute)) then
-      trimmed_attribute = trim(attribute)
-      if (trimmed_attribute /= '') call h5_write_attr(ctx, dset_id, 'Attribute', trimmed_attribute)
-    end if
-    ierr = H5Dclose(dset_id)
-    INSIST(ctx%global_all(ierr >= 0))
-  end subroutine
-
-  !!!! CHUNK SIZE HELPER !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-  pure function data_chunk_size(this, value_bytes) result(chunk_size)
-    class(vtkhdf_ug), intent(in) :: this
-    integer(int64), intent(in) :: value_bytes
-    integer(int64) :: chunk_size
-    chunk_size = max(1_int64, this%data_chunk_bytes / value_bytes)
-  end function
 
 end module vtkhdf_ug_type

@@ -31,6 +31,8 @@ module vtkhdf_ctx_type
     procedure :: init
     procedure :: free
     procedure :: global_any, global_all
+    generic :: identical => identical_int32, identical_int64, identical_real64, identical_string
+    procedure, private :: identical_int32, identical_int64, identical_real64, identical_string
     generic :: global_sum => global_sum_int32_0, global_sum_int64_0
     generic :: global_min => global_min_int32_1, global_min_int64_1
     procedure, private :: global_sum_int32_0, global_sum_int64_0
@@ -42,6 +44,45 @@ module vtkhdf_ctx_type
   end type
 
 contains
+
+  !! Small collective metadata checks, independent of the data decomposition.
+#:for kind, decl, mpi_type in [('int32', 'integer(int32)', 'MPI_INT32_T'), ('int64', 'integer(int64)', 'MPI_INT64_T'), ('real64', 'real(real64)', 'MPI_DOUBLE_PRECISION')]
+  logical function identical_${kind}$(this, value) result(same)
+    class(vtkhdf_ctx), intent(in) :: this
+    ${decl}$, intent(in) :: value(:)
+#:if SERIAL
+    same = .true.
+#:else
+    ${decl}$ :: reference(size(value))
+    integer :: ierr
+    reference = value
+    call MPI_Bcast(reference, size(value), ${mpi_type}$, 0, this%comm, ierr)
+    INSIST(ierr == MPI_SUCCESS)
+    same = this%global_all(all(reference == value))
+#:endif
+  end function
+#:endfor
+
+  logical function identical_string(this, value) result(same)
+    class(vtkhdf_ctx), intent(in) :: this
+    character(*), intent(in) :: value
+#:if SERIAL
+    same = .true.
+#:else
+    character(:), allocatable :: reference
+    integer :: n, ierr
+    n = len(value)
+    ! Check length before broadcasting a character buffer of that length.
+    if (.not.this%identical([n])) then
+      same = .false.
+      return
+    end if
+    reference = value
+    call MPI_Bcast(reference, n, MPI_CHARACTER, 0, this%comm, ierr)
+    INSIST(ierr == MPI_SUCCESS)
+    same = this%global_all(reference == value)
+#:endif
+  end function
 
 #:if SERIAL
   subroutine init(this)

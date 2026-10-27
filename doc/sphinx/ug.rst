@@ -27,9 +27,9 @@ File Creation and Management
      With ``USE_MPI_F08=OFF``, only the ``integer`` communicator
      interface is available. In serial builds, ``comm`` is omitted from
      the interface.
-   * ``mode``: one of ``UG_STATIC``, ``UG_FIXED_MESH``,
-     ``UG_MOVING_MESH``, or ``UG_DYNAMIC_MESH``. The default is
-     ``UG_STATIC``.
+   * ``mode``: one of ``VTKHDF_STATIC``, ``VTKHDF_FIXED_MESH``,
+     ``VTKHDF_MOVING_MESH``, or ``VTKHDF_DYNAMIC_MESH``. The default is
+     ``VTKHDF_STATIC``.
    * ``data_chunk_bytes``: target chunk size in bytes for chunked datasets
      storing mesh-sized data. The default is ``128*1024`` (128 KiB).
    * ``stat``: status code. ``stat == 0`` indicates success.
@@ -48,16 +48,21 @@ File Creation and Management
 
 Writer Modes
 ~~~~~~~~~~~~
+The shared mode constants are available through ``vtkhdf_ug_file_type`` or
+directly from ``vtkhdf_file_modes``. The original names ``UG_STATIC``,
+``UG_FIXED_MESH``, ``UG_MOVING_MESH``, and ``UG_DYNAMIC_MESH`` remain available
+as compatibility aliases with the same values.
+
 The ``mode`` argument selects one of four workflows:
 
-* ``UG_STATIC``: single mesh with associated cell/point datasets; field
+* ``VTKHDF_STATIC``: single mesh with associated cell/point datasets; field
   datasets; no time stepping (static).
-* ``UG_FIXED_MESH``: single fixed mesh; cell/point datasets may be static
+* ``VTKHDF_FIXED_MESH``: single fixed mesh; cell/point datasets may be static
   (independent of time step) or temporal (changing with time step); field
   datasets must be temporal.
-* ``UG_MOVING_MESH``: fixed mesh topology with temporal geometry;
+* ``VTKHDF_MOVING_MESH``: fixed mesh topology with temporal geometry;
   all datasets must be temporal.
-* ``UG_DYNAMIC_MESH``: temporal mesh topology and geometry;
+* ``VTKHDF_DYNAMIC_MESH``: temporal mesh topology and geometry;
   all datasets must be temporal.
 
 In temporal modes, registration determines which datasets participate in time
@@ -78,8 +83,8 @@ calling MPI rank.
    Write the full mesh, geometry and topology.
 
 ``call file%write_mesh_topology(cnode, xcnode, types)``
-   Write only topology. This is mainly used with ``UG_MOVING_MESH`` or
-   ``UG_DYNAMIC_MESH`` when geometry is written separately.
+   Write only topology. This is mainly used with ``VTKHDF_MOVING_MESH`` or
+   ``VTKHDF_DYNAMIC_MESH`` when geometry is written separately.
 
 ``call file%write_mesh_geometry(points)``
    Write only geometry.
@@ -109,8 +114,8 @@ The array arguments are the same in all cases:
 Temporal Mesh Data
 ~~~~~~~~~~~~~~~~~~
 The mesh must be written before any associated mesh-centered data is written.
-In ``UG_STATIC`` and ``UG_FIXED_MESH`` modes, this means one initial call to
-``write_mesh``. In ``UG_MOVING_MESH`` and ``UG_DYNAMIC_MESH`` modes the mesh
+In ``VTKHDF_STATIC`` and ``VTKHDF_FIXED_MESH`` modes, this means one initial call to
+``write_mesh``. In ``VTKHDF_MOVING_MESH`` and ``VTKHDF_DYNAMIC_MESH`` modes the mesh
 may be written, or not, every time step. This is subject to the following rules:
 
 * The mesh must be written once prior to writing temporal mesh-centered
@@ -266,6 +271,15 @@ same static/temporal pattern, but with some notable differences:
 * The shape (rank and extents) of temporal field data may vary from step
   to step.
 
+Temporal FieldData is stored as a two-dimensional HDF5 dataset in
+tuple-by-component order. Both dimensions are extendible. New writes append
+tuples and, when necessary, expand the component dimension. Earlier tuples
+then have unused padding columns. No maximum component count is required at
+registration. Per-step ``FieldDataSizes`` metadata specifies the actual
+component and tuple counts; ``FieldDataOffsets`` is measured in tuple rows.
+Padding is excluded by these sizes, and omitted writes reuse the preceding
+offset and sizes.
+
 .. code-block:: fortran
 
    use vtkhdf_ug_file_type
@@ -274,7 +288,7 @@ same static/temporal pattern, but with some notable differences:
 
 ``call file%write_field_data(name, array [, as_vector])``
    Write ``array`` to a new static field dataset ``name``.
-   This is allowed only when the selected ``mode`` is ``UG_STATIC``.
+   This is allowed only when the selected ``mode`` is ``VTKHDF_STATIC``.
 
 ``field_var = file%register_temporal_field_data(name, mold)``
    Register ``name`` as a temporal field dataset and return an opaque handle.
@@ -296,7 +310,7 @@ same static/temporal pattern, but with some notable differences:
 Workflow by Mode
 ----------------
 
-.. rubric:: ``UG_STATIC``
+.. rubric:: ``VTKHDF_STATIC``
 
 * Write the mesh once with ``write_mesh``.
 * Then write static datasets by name:
@@ -307,7 +321,7 @@ Workflow by Mode
 
 Time stepping and temporal registration are not allowed.
 
-.. rubric:: ``UG_FIXED_MESH``
+.. rubric:: ``VTKHDF_FIXED_MESH``
 
 * Write the mesh once with ``write_mesh``.
 * Write static cell and point data (may be done at any time after the mesh)
@@ -334,7 +348,7 @@ Time stepping and temporal registration are not allowed.
 
   * ``call file%finalize_time_step``
 
-.. rubric:: ``UG_MOVING_MESH``
+.. rubric:: ``VTKHDF_MOVING_MESH``
 
 * Write topology once with ``write_mesh_topology``.
 
@@ -360,7 +374,7 @@ The number of points must be constant across time steps.
 
 Static datasets are not allowed in this mode.
 
-.. rubric:: ``UG_DYNAMIC_MESH``
+.. rubric:: ``VTKHDF_DYNAMIC_MESH``
 
 * Write initial mesh with ``write_mesh``, or wait until the first step.
 

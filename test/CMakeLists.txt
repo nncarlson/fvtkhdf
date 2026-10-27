@@ -12,13 +12,13 @@ endfunction()
 function(vtkhdf_add_runtime_test test_name target)
   if(ENABLE_MPI)
     add_test(${test_name} ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
-             ${CMAKE_CURRENT_BINARY_DIR}/${target} ${MPIEXEC_POSTFLAGS})
+             ${CMAKE_CURRENT_BINARY_DIR}/${target} ${MPIEXEC_POSTFLAGS} ${ARGN})
     set_tests_properties(${test_name} PROPERTIES
       PROCESSORS 4
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
   else()
-    add_test(${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${target})
+    add_test(${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${target} ${ARGN})
     set_tests_properties(${test_name} PROPERTIES
       PROCESSORS 1
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -40,6 +40,7 @@ vtkhdf_add_test_target(vtkhdf_mb_fail_late_block_test vtkhdf_mb_fail_late_block_
 vtkhdf_add_test_target(vtkhdf_moving_ug_test vtkhdf_moving_ug_test.F90)
 vtkhdf_add_test_target(vtkhdf_dynamic_ug_test vtkhdf_dynamic_ug_test.F90)
 vtkhdf_add_test_target(vtkhdf_chunk_test vtkhdf_chunk_test.F90)
+vtkhdf_add_test_target(vtkhdf_fail_foreign_data_handle_test vtkhdf_fail_foreign_data_handle_test.F90)
 
 vtkhdf_add_runtime_test(vtkhdf_mb_fixture_file vtkhdf_mb_test)
 vtkhdf_add_runtime_test(vtkhdf_mb_basic_blocks_file_type vtkhdf_mb_basic_blocks_test)
@@ -65,6 +66,14 @@ set_tests_properties(
   PROPERTIES
   WILL_FAIL TRUE
 )
+
+foreach(format ug mb)
+  foreach(association cell point field)
+    set(test_name vtkhdf_${format}_fail_foreign_${association}_handle)
+    vtkhdf_add_runtime_test(${test_name} vtkhdf_fail_foreign_data_handle_test ${format} ${association})
+    set_tests_properties(${test_name} PROPERTIES WILL_FAIL TRUE)
+  endforeach()
+endforeach()
 
 set_tests_properties(vtkhdf_chunk_settings PROPERTIES
   FIXTURES_SETUP vtkhdf_chunk_files
@@ -371,3 +380,52 @@ add_executable(test_leak test_leak.F90)
 target_link_libraries(test_leak PRIVATE vtkhdf_test_support)
 add_test(NAME test_leak COMMAND ${CMAKE_CURRENT_BINARY_DIR}/test_leak)
 set_tests_properties(test_leak PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# ImageData fixtures and contract failures.
+add_fypp_sources(IMAGE_TEST_SRC SOURCES vtkhdf_image_test.F90.fypp FLAGS --line-numbering)
+vtkhdf_add_test_target(vtkhdf_image_test "${IMAGE_TEST_SRC}")
+vtkhdf_add_runtime_test(vtkhdf_image_file_type vtkhdf_image_test)
+set_tests_properties(vtkhdf_image_file_type PROPERTIES FIXTURES_SETUP vtkhdf_image_files)
+vtkhdf_add_test_target(vtkhdf_image_fail_test vtkhdf_image_fail_test.F90)
+foreach(case bounds source type components late outside_step missing field_duplicate
+             before_mesh register_before_mesh field_static wrong_handle static_type
+             static_components ug_duplicate mode_moving mode_dynamic mode_invalid)
+  vtkhdf_add_runtime_test(vtkhdf_image_fail_${case} vtkhdf_image_fail_test ${case})
+  set_tests_properties(vtkhdf_image_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+endforeach()
+if(ENABLE_MPI)
+  foreach(case geometry_mismatch name_mismatch mode_mismatch)
+    vtkhdf_add_runtime_test(vtkhdf_image_fail_${case} vtkhdf_image_fail_test ${case})
+    set_tests_properties(vtkhdf_image_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+  endforeach()
+endif()
+
+add_test(NAME vtkhdf_image_layout
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_image_check.py
+          layout ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(vtkhdf_image_layout PROPERTIES
+  FIXTURES_REQUIRED vtkhdf_image_files SKIP_RETURN_CODE 77)
+foreach(case static temporal temporal_fielddata registration_names numeric dim_1 dim_2 dim_3 dim_4 dim_5 dim_6 dim_7)
+  add_test(NAME vtkhdf_image_reader_${case}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_image_check.py
+            reader ${CMAKE_CURRENT_BINARY_DIR} ${case})
+  set_tests_properties(vtkhdf_image_reader_${case} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_image_files SKIP_RETURN_CODE 77)
+endforeach()
+
+if(ENABLE_MPI)
+  # Two ranks own unequal numbers of blocks, including multiple blocks on
+  # one rank. Keep these output files separate from the four-rank fixture.
+  set(IMAGE_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/image-two-rank)
+  file(MAKE_DIRECTORY ${IMAGE_TWO_RANK_DIR})
+  add_test(NAME vtkhdf_image_two_rank
+    COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
+            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_image_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_image_two_rank PROPERTIES PROCESSORS 2
+    WORKING_DIRECTORY ${IMAGE_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_image_two_rank_files)
+  add_test(NAME vtkhdf_image_two_rank_layout
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_image_check.py
+            layout ${IMAGE_TWO_RANK_DIR})
+  set_tests_properties(vtkhdf_image_two_rank_layout PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_image_two_rank_files SKIP_RETURN_CODE 77)
+endif()

@@ -38,6 +38,22 @@ module vtkhdf_h5
   private
 
   public :: h5_write_attr, h5_create_unlimited_dataset, h5_write_dataset, h5_append_to_dataset
+  public :: h5_create_region_dataset, h5_reserve_snapshot, h5_write_region
+  public :: h5_create_field_dataset, h5_append_field_data
+
+  interface h5_append_field_data
+#:for s in num_specs
+    procedure append_field_data_${s["kind"]}$
+#:endfor
+  end interface
+
+  interface h5_write_region
+#:for s in num_specs
+#:for rank in [3, 4]
+    procedure write_region_${s["kind"]}$_${rank}$
+#:endfor
+#:endfor
+  end interface
 
   interface h5_write_attr
 #:for s in num_specs
@@ -65,6 +81,231 @@ module vtkhdf_h5
   end interface
 
 contains
+
+  !! Temporal FieldData keeps a component axis, even for scalar values.
+  !! Both axes may grow: rows append tuples, columns accommodate new component
+  !! counts. HDF5 fills unwritten columns; FieldDataSizes excludes that padding.
+  subroutine h5_create_field_dataset(ctx, loc_id, name, type_id, chunk_size)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    integer(hid_t), intent(in) :: loc_id, type_id
+    character(*), intent(in) :: name
+    integer(hsize_t), intent(in) :: chunk_size
+    integer(hid_t) :: space_id, dcpl_id, dset_id
+    integer :: ierr
+    INSIST(ctx%identical([chunk_size]))
+    INSIST(chunk_size > 0)
+    space_id = H5Screate([0_hsize_t,1_hsize_t], [H5S_UNLIMITED,H5S_UNLIMITED])
+    INSIST(space_id >= 0)
+    dcpl_id = H5Pcreate(H5P_DATASET_CREATE)
+    INSIST(dcpl_id >= 0)
+    ierr = H5Pset_chunk(dcpl_id, 2, [chunk_size,1_hsize_t])
+    INSIST(ierr >= 0)
+    dset_id = H5Dcreate(loc_id, name, type_id, space_id, dcpl_id=dcpl_id)
+    INSIST(ctx%global_all(dset_id >= 0))
+    ierr = H5Dclose(dset_id)
+    ierr = H5Pclose(dcpl_id)
+    ierr = H5Sclose(space_id)
+  end subroutine
+
+  subroutine field_data_spaces(ctx, loc_id, name, type_id, ncomp, ntuples, &
+      dset_id, mem_space, file_space)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    integer(hid_t), intent(in) :: loc_id, type_id
+    character(*), intent(in) :: name
+    integer, intent(in) :: ncomp, ntuples
+    integer(hid_t), intent(out) :: dset_id, mem_space, file_space
+    integer(hid_t) :: stored_type
+    integer(hsize_t) :: dims(2), count(2), start(2)
+    integer :: ierr
+    INSIST(ctx%identical([ncomp,ntuples]))
+    INSIST(ncomp >= 0 .and. ntuples >= 0)
+    dset_id = H5Dopen(loc_id, name)
+    INSIST(ctx%global_all(dset_id >= 0))
+    stored_type = H5Dget_type(dset_id)
+    INSIST(stored_type >= 0)
+    INSIST(ctx%global_all(H5Tequal(stored_type,type_id) > 0))
+    ierr = H5Tclose(stored_type)
+    file_space = H5Dget_space(dset_id)
+    INSIST(file_space >= 0)
+    INSIST(H5Sget_simple_extent_ndims(file_space) == 2)
+    ierr = H5Sget_simple_extent_dims(file_space, dims)
+    INSIST(ierr >= 0)
+    ierr = H5Sclose(file_space)
+    count = [int(ntuples,hsize_t),int(ncomp,hsize_t)]
+    start = [dims(1),0_hsize_t]
+    INSIST(count(1) <= huge(dims(1))-dims(1))
+    dims = [dims(1)+count(1),max(dims(2),count(2))]
+    ierr = H5Dset_extent(dset_id, dims)
+    INSIST(ctx%global_all(ierr >= 0))
+    file_space = H5Dget_space(dset_id)
+    INSIST(file_space >= 0)
+    if (ctx%rank == 0 .and. all(count > 0)) then
+      mem_space = H5Screate(count)
+      ierr = H5Sselect_hyperslab(file_space, H5S_SELECT_SET, start, count)
+    else
+      mem_space = H5Screate(H5S_NULL)
+      ierr = H5Sselect_none(file_space)
+    end if
+    INSIST(mem_space >= 0)
+    INSIST(ctx%global_all(ierr >= 0))
+  end subroutine
+
+#:for s in num_specs
+  !! Only rank zero's values are referenced. Raw Fortran component-first
+  !! arrays have the same memory order as tuple-by-component file selections.
+  subroutine append_field_data_${s["kind"]}$(ctx, loc_id, name, array, ncomp, ntuples)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    integer(hid_t), intent(in) :: loc_id
+    character(*), intent(in) :: name
+    ${s["decl"]}$, intent(in) :: array(..)
+    integer, intent(in) :: ncomp, ntuples
+    ${s["decl"]}$ :: dummy
+    integer(hid_t) :: dset_id, mem_space, file_space, dxpl
+    integer :: ierr
+    call field_data_spaces(ctx, loc_id, name, ${s["h5type"]}$, ncomp, ntuples, &
+        dset_id, mem_space, file_space)
+    call ctx%get_dxpl(dxpl)
+    if (ctx%rank == 0 .and. ncomp > 0 .and. ntuples > 0) then
+      select rank (array)
+      rank (0)
+        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, [array], mem_space, file_space, dxpl)
+      rank (1)
+        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, array, mem_space, file_space, dxpl)
+      rank (2)
+        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, array, mem_space, file_space, dxpl)
+      rank default
+        INSIST(.false.)
+      end select
+    else
+      dummy = 0
+      ierr = H5Dwrite(dset_id, ${s["h5type"]}$, [dummy], mem_space, file_space, dxpl)
+    end if
+    INSIST(ctx%global_all(ierr >= 0))
+    ierr = H5Pclose(dxpl)
+    ierr = H5Sclose(mem_space)
+    ierr = H5Sclose(file_space)
+    ierr = H5Dclose(dset_id)
+  end subroutine
+#:endfor
+
+  !! DIMS, MAXDIMS, and the file selections below are in HDF5 (C) order.
+  !! Build chunks along the fastest dimensions first, bounded by the byte
+  !! target. Temporal chunks contain exactly one snapshot.
+  subroutine h5_create_region_dataset(ctx, loc_id, name, type_id, dims, value_bytes, &
+      chunk_bytes, dset_id, maxdims)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    integer(hid_t), intent(in) :: loc_id, type_id
+    character(*), intent(in) :: name
+    integer(hsize_t), intent(in) :: dims(:), value_bytes, chunk_bytes
+    integer(hid_t), intent(out) :: dset_id
+    integer(hsize_t), intent(in), optional :: maxdims(:)
+    integer(hsize_t) :: chunks(size(dims)), remaining
+    integer(hid_t) :: space_id, dcpl_id
+    integer :: j, first, ierr
+    INSIST(all(dims >= 0))
+    INSIST(value_bytes > 0 .and. chunk_bytes > 0)
+    first = 1
+    if (present(maxdims)) then
+      INSIST(size(maxdims) == size(dims))
+      if (maxdims(1) == H5S_UNLIMITED) first = 2
+    end if
+    chunks = 1
+    remaining = max(1_hsize_t, chunk_bytes / value_bytes)
+    do j = size(dims), first, -1
+      INSIST(dims(j) > 0)
+      chunks(j) = min(dims(j), remaining)
+      remaining = max(1_hsize_t, remaining / chunks(j))
+    end do
+    space_id = H5Screate(dims, maxdims)
+    INSIST(space_id >= 0)
+    dcpl_id = H5Pcreate(H5P_DATASET_CREATE)
+    INSIST(dcpl_id >= 0)
+    ierr = H5Pset_chunk(dcpl_id, size(chunks), chunks)
+    INSIST(ierr >= 0)
+    dset_id = H5Dcreate(loc_id, name, type_id, space_id, dcpl_id=dcpl_id)
+    INSIST(ctx%global_all(dset_id >= 0))
+    ierr = H5Sclose(space_id)
+    ierr = H5Pclose(dcpl_id)
+  end subroutine
+
+  !! Allocate a single new time slice. Transfers into that slice are separate.
+  subroutine h5_reserve_snapshot(ctx, dset_id, offset)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    integer(hid_t), intent(in) :: dset_id
+    integer(hsize_t), intent(out) :: offset
+    integer(hid_t) :: space_id
+    integer(hsize_t), allocatable :: dims(:)
+    integer :: ierr, ndims
+    space_id = H5Dget_space(dset_id)
+    INSIST(space_id >= 0)
+    ndims = H5Sget_simple_extent_ndims(space_id)
+    INSIST(ndims > 0)
+    allocate(dims(ndims))
+    ierr = H5Sget_simple_extent_dims(space_id, dims)
+    INSIST(ierr >= 0)
+    ierr = H5Sclose(space_id)
+    offset = dims(1)
+    INSIST(offset < huge(offset))
+    dims(1) = offset + 1
+    ierr = H5Dset_extent(dset_id, dims)
+    INSIST(ctx%global_all(ierr >= 0))
+  end subroutine
+
+  subroutine region_spaces(ctx, dset_id, mem_dims, mem_start, mem_count, file_start, file_count, &
+      mem_space, file_space)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    integer(hid_t), intent(in) :: dset_id
+    integer(hsize_t), intent(in) :: mem_dims(:), mem_start(:), mem_count(:), file_start(:), file_count(:)
+    integer(hid_t), intent(out) :: mem_space, file_space
+    integer :: ierr, n
+    file_space = H5Dget_space(dset_id)
+    INSIST(file_space >= 0)
+    if (any(mem_count == 0)) then
+      mem_space = H5Screate(H5S_NULL)
+      ierr = H5Sselect_none(file_space)
+    else
+      n = size(mem_dims)
+      mem_space = H5Screate(mem_dims(n:1:-1))
+      INSIST(mem_space >= 0)
+      ierr = H5Sselect_hyperslab(mem_space, H5S_SELECT_SET, mem_start(n:1:-1), mem_count(n:1:-1))
+      INSIST(ierr >= 0)
+      ierr = H5Sselect_hyperslab(file_space, H5S_SELECT_SET, file_start, file_count)
+    end if
+    INSIST(mem_space >= 0)
+    INSIST(ctx%global_all(ierr >= 0))
+  end subroutine
+
+#:for s in num_specs
+#:for rank in [3, 4]
+  !! A contiguous dummy permits C address transfer. Noncontiguous actual
+  !! arguments may cause a compiler temporary; halos inside ARRAY are selected
+  !! with the HDF5 memory dataspace, without packing an interior array.
+  subroutine write_region_${s["kind"]}$_${rank}$(ctx, dset_id, array, mem_start, mem_count, &
+      file_start, file_count)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    integer(hid_t), intent(in) :: dset_id
+    ${s["decl"]}$, contiguous, intent(in) :: array(${','.join([':']*rank)}$)
+    integer(hsize_t), intent(in) :: mem_start(${rank}$), mem_count(${rank}$), file_start(:), file_count(:)
+    ${s["decl"]}$ :: dummy
+    integer(hid_t) :: mem_space, file_space, dxpl
+    integer :: ierr
+    call region_spaces(ctx, dset_id, shape(array,hsize_t), mem_start, mem_count, file_start, file_count, &
+        mem_space, file_space)
+    call ctx%get_dxpl(dxpl)
+    if (any(mem_count == 0)) then
+      dummy = 0
+      ierr = H5Dwrite(dset_id, ${s["h5type"]}$, [dummy], mem_space, file_space, dxpl)
+    else
+      ierr = H5Dwrite(dset_id, ${s["h5type"]}$, array, mem_space, file_space, dxpl)
+    end if
+    INSIST(ctx%global_all(ierr >= 0))
+    ierr = H5Pclose(dxpl)
+    ierr = H5Sclose(mem_space)
+    ierr = H5Sclose(file_space)
+  end subroutine
+#:endfor
+#:endfor
+
 #:for s in num_specs
 
   subroutine write_attr_${s["kind"]}$(ctx, obj_id, name, value)

@@ -21,10 +21,10 @@ program vtkhdf_ug_test
 #ifdef USE_MPI
   call MPI_Init(stat)
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, stat)
-  call vizfile%create('dyn_ug_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_DYNAMIC_MESH)
+  call vizfile%create('dyn_ug_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_DYNAMIC_MESH)
 #else
   rank = 0
-  call vizfile%create('dyn_ug_test.vtkhdf', stat, errmsg, mode=UG_DYNAMIC_MESH)
+  call vizfile%create('dyn_ug_test.vtkhdf', stat, errmsg, mode=VTKHDF_DYNAMIC_MESH)
 #endif
   if (stat /= 0) error stop errmsg
 

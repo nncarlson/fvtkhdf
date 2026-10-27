@@ -26,11 +26,17 @@ SRC_COPY_FILES = (
     "vtkhdf_vtk_cell_types.F90",
     "vtkhdf_h5_c_binding.F90",
     "vtkhdf_version_param.F90",
+    "vtkhdf_file_modes.F90",
+    "vtkhdf_data_names.F90",
     "vtkhdf_h5e_context_type.F90",
     "vtkhdf_h5_c_shim.c",
 )
 
 FYPP_FILES = (
+    "vtkhdf_data_support.F90.fypp",
+    "vtkhdf_data_handle_types.F90.fypp",
+    "vtkhdf_structured_type.F90.fypp",
+    "vtkhdf_image_file_type.F90.fypp",
     "vtkhdf_h5.F90.fypp",
     "vtkhdf_ug_type.F90.fypp",
     "vtkhdf_ug_file_type.F90.fypp",

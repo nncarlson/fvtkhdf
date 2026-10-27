@@ -1,0 +1,319 @@
+!!
+!! VTKHDF_IMAGE_FILE_TYPE
+!!
+!! This module defines a derived type for exporting ImageData VTKHDF files
+!! readable by ParaView. It supports fixed regular geometry and static or
+!! time-dependent cell, point, and field data in serial and MPI-parallel builds.
+!!
+!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
+!! SPDX-License-Identifier: BSD-2-Clause
+!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!
+!! NOTES
+!!
+!! The latest specification for the VTKHDF file format is available at:
+!! https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html#
+!!
+
+#include "vtkhdf_assert.inc"
+#:set nums = [('int8','integer(int8)'), ('int32','integer(int32)'), ('int64','integer(int64)'), ('real32','real(real32)'), ('real64','real(real64)')]
+#:set locations = ['cell', 'point']
+
+module vtkhdf_image_file_type
+
+  use,intrinsic :: iso_fortran_env
+  use vtkhdf_h5_c_binding
+  use vtkhdf_h5
+  use vtkhdf_ctx_type
+  use vtkhdf_h5e_context_type
+  use vtkhdf_structured_type
+  use vtkhdf_data_handle_types
+  use vtkhdf_version_param
+  use vtkhdf_file_modes, only: VTKHDF_STATIC, VTKHDF_FIXED_MESH
+  implicit none
+  private
+
+  public :: vtkhdf_version, VTKHDF_STATIC, VTKHDF_FIXED_MESH
+  public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
+
+  type, public :: vtkhdf_image_file
+    private
+    type(vtkhdf_ctx) :: ctx
+    integer(hid_t) :: file_id = H5I_INVALID_HID
+    type(vtkhdf_structured) :: grid
+  contains
+#ifdef USE_MPI_F08
+    generic :: create => create_f08, create_int
+    procedure, private :: create_f08, create_int
+#elif defined(USE_MPI)
+    generic :: create => create_int
+    procedure, private :: create_int
+#else
+    procedure :: create
+#endif
+    procedure, private :: create_impl
+    procedure :: close, flush, finalize_time_step
+    generic :: write_mesh => write_mesh_real32, write_mesh_real64
+    procedure, private :: write_mesh_real32, write_mesh_real64
+    generic :: start_time_step => start_time_step_real32, start_time_step_real64
+    procedure, private :: start_time_step_real32, start_time_step_real64
+#:for kind, decl in nums
+#:for loc in locations
+#:for rank, suffix in [(3,'scalar'), (4,'vector')]
+    generic :: write_${loc}$_data => write_${loc}$_data_${kind}$_${suffix}$, write_indexed_${loc}$_data_${kind}$_${suffix}$
+    procedure, private :: write_${loc}$_data_${kind}$_${suffix}$, write_indexed_${loc}$_data_${kind}$_${suffix}$
+    generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${kind}$_${suffix}$
+    procedure, private :: register_temporal_${loc}$_data_${kind}$_${suffix}$
+#:endfor
+#:endfor
+#:if kind != 'int8'
+#:for suffix in ['value','scalar','vector']
+    generic :: write_field_data => write_field_data_${kind}$_${suffix}$, write_temporal_field_data_${kind}$_${suffix}$
+    procedure, private :: write_field_data_${kind}$_${suffix}$, write_temporal_field_data_${kind}$_${suffix}$
+#:endfor
+    generic :: register_temporal_field_data => register_temporal_field_data_${kind}$
+    procedure, private :: register_temporal_field_data_${kind}$
+#:endif
+#:endfor
+    final :: delete
+  end type
+
+contains
+
+  subroutine delete(this)
+    type(vtkhdf_image_file), intent(inout) :: this
+    this%file_id = H5I_INVALID_HID
+  end subroutine
+
+  subroutine close(this)
+    class(vtkhdf_image_file), intent(inout) :: this
+    integer :: ierr
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%grid%close()
+    if (H5Iis_valid(this%file_id) > 0) ierr = H5Fclose(this%file_id)
+    call err_ctx%restore(0)
+    call this%ctx%free()
+    this%file_id = H5I_INVALID_HID
+  end subroutine
+
+  subroutine flush(this)
+    class(vtkhdf_image_file), intent(inout) :: this
+    integer :: ierr
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    ierr = H5Fflush(this%file_id, H5F_SCOPE_LOCAL)
+    INSIST(ierr >= 0)
+    call err_ctx%restore(0)
+  end subroutine
+
+#ifdef USE_MPI_F08
+  subroutine create_f08(this, filename, comm, stat, errmsg, mode, data_chunk_bytes)
+    use mpi_f08, only: MPI_Comm
+    class(vtkhdf_image_file), intent(out) :: this
+    character(*), intent(in) :: filename
+    type(MPI_Comm), intent(in) :: comm
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
+    call this%create(filename, comm%mpi_val, stat, errmsg, mode, data_chunk_bytes)
+  end subroutine create_f08
+
+#endif
+#ifdef USE_MPI
+  subroutine create_int(this, filename, comm, stat, errmsg, mode, data_chunk_bytes)
+    class(vtkhdf_image_file), intent(out) :: this
+    character(*), intent(in) :: filename
+    integer, intent(in) :: comm
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
+    call this%ctx%init(comm)
+    call this%create_impl(filename, stat, errmsg, mode, data_chunk_bytes)
+  end subroutine create_int
+#else
+  subroutine create(this, filename, stat, errmsg, mode, data_chunk_bytes)
+    class(vtkhdf_image_file), intent(out) :: this
+    character(*), intent(in) :: filename
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
+    call this%ctx%init()
+    call this%create_impl(filename, stat, errmsg, mode, data_chunk_bytes)
+  end subroutine create
+#endif
+
+  subroutine create_impl(this, filename, stat, errmsg, mode, data_chunk_bytes)
+
+    class(vtkhdf_image_file), intent(inout) :: this
+    character(*), intent(in) :: filename
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
+
+    integer(hid_t) :: fapl
+    integer :: ierr, mode_
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    mode_ = VTKHDF_STATIC
+    if (present(mode)) mode_ = mode
+    INSIST(this%ctx%identical([mode_]))
+    INSIST(mode_ == VTKHDF_STATIC .or. mode_ == VTKHDF_FIXED_MESH)
+
+    call init_hdf5
+    call err_ctx%capture
+
+    !! Open the file (read/write), overwrite any existing file
+    call this%ctx%get_fapl(fapl) ! configures for parallel I/O in MPI build
+    this%file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl)
+    ierr = H5Pclose(fapl)
+    if (this%ctx%global_any(this%file_id < 0)) then
+      stat = 1
+      errmsg = 'failed to open file'
+      if (this%file_id > 0) ierr = H5Fclose(this%file_id)
+      this%file_id = H5I_INVALID_HID
+      call this%ctx%free
+      call err_ctx%restore(stat)
+      return
+    end if
+
+    call this%grid%init(this%file_id, 'VTKHDF', this%ctx, 'ImageData', mode_, data_chunk_bytes)
+
+    stat = 0
+    call err_ctx%restore(stat)
+
+  end subroutine create_impl
+
+#:for kind, decl in [('real32','real(real32)'), ('real64','real(real64)')]
+  subroutine write_mesh_${kind}$(this, point_bounds, origin, spacing, direction)
+    class(vtkhdf_image_file), intent(inout) :: this
+    integer(int32), intent(in) :: point_bounds(2,3)
+    ${decl}$, intent(in) :: origin(3), spacing(3)
+    ${decl}$, intent(in), optional :: direction(3,3)
+    real(real64) :: matrix(3,3)
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%grid%define_grid(point_bounds)
+    matrix = reshape([1.0_real64,0.0_real64,0.0_real64, 0.0_real64,1.0_real64,0.0_real64, &
+        0.0_real64,0.0_real64,1.0_real64],[3,3])
+    if (present(direction)) matrix = real(direction,real64)
+    INSIST(this%ctx%identical(real(origin,real64)))
+    INSIST(this%ctx%identical(real(spacing,real64)))
+    INSIST(this%ctx%identical(reshape(matrix,[9])))
+    call h5_write_attr(this%ctx, this%grid%root(), 'WholeExtent', reshape(point_bounds,[6]))
+    call h5_write_attr(this%ctx, this%grid%root(), 'Origin', real(origin,real64))
+    call h5_write_attr(this%ctx, this%grid%root(), 'Spacing', real(spacing,real64))
+    ! VTK stores the nine matrix entries in row-major order.
+    call h5_write_attr(this%ctx, this%grid%root(), 'Direction', reshape(transpose(matrix),[9]))
+    call err_ctx%restore(0)
+  end subroutine
+
+  subroutine start_time_step_${kind}$(this, time)
+    class(vtkhdf_image_file), intent(inout) :: this
+    ${decl}$, intent(in) :: time
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%grid%start_time_step(real(time,real64))
+    call err_ctx%restore(0)
+  end subroutine
+#:endfor
+
+  subroutine finalize_time_step(this)
+    class(vtkhdf_image_file), intent(inout) :: this
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%grid%finalize_time_step()
+    call err_ctx%restore(0)
+  end subroutine
+
+#:for kind, decl in nums
+#:for loc in locations
+#:for rank, suffix in [(3,'scalar'), (4,'vector')]
+  subroutine write_${loc}$_data_${kind}$_${suffix}$(this, name, array, array_origin, write_bounds, attribute, handle)
+    class(vtkhdf_image_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    ${decl}$, contiguous, intent(in) :: array(${','.join([':']*rank)}$)
+    integer(int32), intent(in) :: array_origin(3)
+    integer(int32), intent(in), optional :: write_bounds(2,3)
+    character(*), intent(in), optional :: attribute
+    type(vtkhdf_${loc}$_data_handle), intent(out), optional :: handle
+    integer :: index
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%grid%write_${loc}$_data(name, array, array_origin, write_bounds, attribute, index)
+    if (present(handle)) call set_data_handle(handle, index, this%grid%root())
+    call err_ctx%restore(0)
+  end subroutine
+
+  function register_temporal_${loc}$_data_${kind}$_${suffix}$(this, name, mold, attribute) result(handle)
+    class(vtkhdf_image_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    ${decl}$, intent(in) :: mold${'' if rank == 3 else '(:)'}$
+    character(*), intent(in), optional :: attribute
+    type(vtkhdf_${loc}$_data_handle) :: handle
+    integer :: index
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    index = this%grid%register_temporal_${loc}$_data(name, mold, attribute)
+    call set_data_handle(handle, index, this%grid%root())
+    call err_ctx%restore(0)
+  end function
+
+  subroutine write_indexed_${loc}$_data_${kind}$_${suffix}$(this, var, array, array_origin, write_bounds)
+    class(vtkhdf_image_file), intent(inout) :: this
+    type(vtkhdf_${loc}$_data_handle), intent(in) :: var
+    ${decl}$, contiguous, intent(in) :: array(${','.join([':']*rank)}$)
+    integer(int32), intent(in) :: array_origin(3)
+    integer(int32), intent(in), optional :: write_bounds(2,3)
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%grid%write_${loc}$_data(get_data_index(var,this%grid%root()), array, array_origin, write_bounds)
+    call err_ctx%restore(0)
+  end subroutine
+#:endfor
+#:endfor
+#:if kind != 'int8'
+#:for suffix, shape in [('value',''), ('scalar','(:)'), ('vector','(:,:)')]
+  subroutine write_field_data_${kind}$_${suffix}$(this, name, array, as_vector)
+    class(vtkhdf_image_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    ${decl}$, intent(in) :: array${shape}$
+    logical, intent(in), optional :: as_vector
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%grid%write_field_data(name, array, as_vector)
+    call err_ctx%restore(0)
+  end subroutine
+
+  subroutine write_temporal_field_data_${kind}$_${suffix}$(this, var, array, as_vector)
+    class(vtkhdf_image_file), intent(inout) :: this
+    type(vtkhdf_field_data_handle), intent(in) :: var
+    ${decl}$, intent(in) :: array${shape}$
+    logical, intent(in), optional :: as_vector
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%grid%write_field_data(get_data_index(var,this%grid%root()), array, as_vector)
+    call err_ctx%restore(0)
+  end subroutine
+#:endfor
+
+  function register_temporal_field_data_${kind}$(this, name, mold) result(handle)
+    class(vtkhdf_image_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    ${decl}$, intent(in) :: mold
+    type(vtkhdf_field_data_handle) :: handle
+    integer :: index
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    index = this%grid%register_temporal_field_data(name, mold)
+    call set_data_handle(handle, index, this%grid%root())
+    call err_ctx%restore(0)
+  end function
+#:endif
+#:endfor
+end module vtkhdf_image_file_type

@@ -23,9 +23,9 @@ program vtkhdf_moving_ug_test
   call test_env_init(rank, nproc)
 
 #ifdef USE_MPI
-  call vizfile%create('moving_ug_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_MOVING_MESH)
+  call vizfile%create('moving_ug_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_MOVING_MESH)
 #else
-  call vizfile%create('moving_ug_test.vtkhdf', stat, errmsg, mode=UG_MOVING_MESH)
+  call vizfile%create('moving_ug_test.vtkhdf', stat, errmsg, mode=VTKHDF_MOVING_MESH)
 #endif
   if (stat /= 0) error stop errmsg
 

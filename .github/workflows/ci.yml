@@ -30,6 +30,10 @@ jobs:
         python3 -m pip install --break-system-packages vtk==9.6.1
         python3 -c "import vtk; print(vtk.vtkVersion.GetVTKVersion())"
 
+    - name: Ensure ImageData layout validation dependencies
+      run: |
+        python3 -c "import h5py, numpy" || python3 -m pip install --break-system-packages h5py numpy
+
     - name: Configure CMake
       run: |
         if [ "${{ matrix.mpi }}" = "ON" ]; then

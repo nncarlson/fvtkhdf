@@ -12,6 +12,7 @@ A serial build is also available.
 
    overview
    ug
+   image
    mb
    vtk_cell_types
    stitching

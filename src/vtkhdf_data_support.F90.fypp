@@ -1,0 +1,241 @@
+!!
+!! VTKHDF_DATA_SUPPORT
+!!
+!! This module provides common field records, dataset name attributes, and
+!! FieldData operations for the UnstructuredGrid and structured cores. It also
+!! provides helpers for temporal bookkeeping and HDF5 group cleanup.
+!!
+!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
+!! SPDX-License-Identifier: BSD-2-Clause
+!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!
+!! NOTES
+!!
+!! Cell and point payload storage belongs to the mesh-specific cores.
+!! FieldData storage and temporal metadata use the same implementation in
+!! both cores, with only rank 0 contributing payload values.
+!!
+
+#include "vtkhdf_assert.inc"
+#:set nums = [('int32','integer(int32)','H5T_NATIVE_INT32'), ('int64','integer(int64)','H5T_NATIVE_INT64'), ('real32','real(real32)','H5T_NATIVE_FLOAT'), ('real64','real(real64)','H5T_NATIVE_DOUBLE')]
+module vtkhdf_data_support
+  use,intrinsic :: iso_fortran_env
+  use vtkhdf_h5_c_binding
+  use vtkhdf_h5
+  use vtkhdf_ctx_type
+  use vtkhdf_data_names, only: vtkhdf_named_item, resolve_data_name
+  implicit none
+  private
+  public :: data_var_item, data_groups, field_data_list, STEPS_CHUNK_SIZE
+  public :: write_data_name_attr, reset_data_step_flags, close_data_groups
+  public :: write_field_data, register_temporal_field_data, write_temporal_field_data
+  public :: append_field_data_metadata, close_field_data, data_chunk_size
+
+  integer(int64), parameter :: STEPS_CHUNK_SIZE = 512
+
+  type, extends(vtkhdf_named_item) :: data_var_item
+    logical :: is_temporal = .false., wrote_this_step = .false.
+    integer(int64) :: offset = 0, next_offset = 0
+    integer(int32) :: ncomp = 1, tuples = 0
+  end type
+
+  !! HDF5 groups for one data association; each child supplies its records.
+  type :: data_groups
+    integer(hid_t) :: group_id = H5I_INVALID_HID, offsets_id = H5I_INVALID_HID
+  end type
+
+  type, extends(data_var_item) :: field_data_var
+    integer(hid_t) :: type_id = H5I_INVALID_HID
+  end type
+
+  type, extends(data_groups) :: field_data_list
+    type(field_data_var), allocatable :: vars(:)
+    integer(hid_t) :: sizes_id = H5I_INVALID_HID
+  end type
+
+#:for op in ['write_field_data', 'register_temporal_field_data', 'write_temporal_field_data']
+  interface ${op}$
+#:for kind, decl, h5type in nums
+    module procedure ${op}$_${kind}$
+#:endfor
+  end interface
+#:endfor
+contains
+
+  subroutine close_data_groups(data)
+    class(data_groups), intent(inout) :: data
+    integer :: ierr
+    if (H5Iis_valid(data%offsets_id) > 0) ierr = H5Gclose(data%offsets_id)
+    if (H5Iis_valid(data%group_id) > 0) ierr = H5Gclose(data%group_id)
+    data%offsets_id = H5I_INVALID_HID
+    data%group_id = H5I_INVALID_HID
+  end subroutine
+
+  subroutine close_field_data(data)
+    type(field_data_list), intent(inout) :: data
+    integer :: ierr
+    if (H5Iis_valid(data%sizes_id) > 0) ierr = H5Gclose(data%sizes_id)
+    data%sizes_id = H5I_INVALID_HID
+    call close_data_groups(data)
+  end subroutine
+
+#:for kind, decl, h5type in nums
+  subroutine write_field_data_${kind}$(ctx, data, name, array, as_vector)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    type(field_data_list), intent(inout) :: data
+    character(*), intent(in) :: name
+    ${decl}$, intent(in) :: array(..)
+    logical, intent(in), optional :: as_vector
+    character(:), allocatable :: external_name, internal_name
+    integer :: index
+    logical :: as_vector_
+    as_vector_ = .false.
+    if (present(as_vector)) as_vector_ = as_vector
+    call reserve_field_data_name(data, name, external_name, internal_name, index)
+    select rank (array)
+    rank (0)
+      INSIST(.not.as_vector_)
+      call h5_write_dataset(ctx, data%group_id, internal_name, [array], root=0)
+    rank (1)
+      if (as_vector_) then
+        call h5_write_dataset(ctx, data%group_id, internal_name, reshape(array,[size(array),1]), root=0)
+      else
+        call h5_write_dataset(ctx, data%group_id, internal_name, array, root=0)
+      end if
+    rank (2)
+      INSIST(.not.as_vector_)
+      call h5_write_dataset(ctx, data%group_id, internal_name, array, root=0)
+    rank default
+      INSIST(.false.)
+    end select
+    call write_data_name_attr(ctx, data%group_id, internal_name, external_name)
+  end subroutine
+#:endfor
+
+#:for kind, decl, h5type in nums
+  integer function register_temporal_field_data_${kind}$(ctx, data, name, mold, data_chunk_bytes) result(index)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    type(field_data_list), intent(inout) :: data
+    character(*), intent(in) :: name
+    ${decl}$, intent(in) :: mold
+    integer(int64), intent(in) :: data_chunk_bytes
+    integer(int64) :: chunk_size
+    character(:), allocatable :: external_name, internal_name
+    chunk_size = data_chunk_size(data_chunk_bytes,int(storage_size(mold)/8,int64))
+    call reserve_field_data_name(data, name, external_name, internal_name, index, is_temporal=.true.)
+    data%vars(index)%type_id = ${h5type}$
+    call h5_create_field_dataset(ctx, data%group_id, internal_name, ${h5type}$, chunk_size)
+    call h5_create_unlimited_dataset(ctx, data%offsets_id, internal_name, 0_int64, STEPS_CHUNK_SIZE)
+    call h5_create_unlimited_dataset(ctx, data%sizes_id, internal_name, [0_int32,0_int32], STEPS_CHUNK_SIZE)
+    call write_data_name_attr(ctx, data%group_id, internal_name, external_name)
+  end function
+#:endfor
+
+#:for kind, decl, h5type in nums
+  subroutine write_temporal_field_data_${kind}$(ctx, data, index, array, as_vector)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    type(field_data_list), intent(inout) :: data
+    integer, intent(in) :: index
+    ${decl}$, intent(in) :: array(..)
+    logical, intent(in), optional :: as_vector
+    logical :: as_vector_
+    INSIST(allocated(data%vars))
+    INSIST(index >= 1 .and. index <= size(data%vars))
+    as_vector_ = .false.
+    if (present(as_vector)) as_vector_ = as_vector
+    associate (var => data%vars(index))
+      INSIST(var%is_temporal)
+      INSIST(.not.var%wrote_this_step)
+      INSIST(ctx%global_all(var%type_id == ${h5type}$))
+      select rank (array)
+      rank (0)
+        INSIST(.not.as_vector_)
+        var%ncomp = 1
+        var%tuples = 1
+      rank (1)
+        var%ncomp = merge(size(array),1,as_vector_)
+        var%tuples = merge(1,size(array),as_vector_)
+      rank (2)
+        INSIST(.not.as_vector_)
+        var%ncomp = size(array,1)
+        var%tuples = size(array,2)
+      rank default
+        INSIST(.false.)
+      end select
+      var%offset = var%next_offset
+      call h5_append_field_data(ctx, data%group_id, var%dataset_name, array, var%ncomp, var%tuples)
+      var%next_offset = var%next_offset + int(var%tuples,int64)
+      var%wrote_this_step = .true.
+    end associate
+  end subroutine
+#:endfor
+
+  subroutine reserve_field_data_name(data, name, external_name, internal_name, index, is_temporal)
+    type(field_data_list), intent(inout) :: data
+    character(*), intent(in) :: name
+    character(:), allocatable, intent(out) :: external_name, internal_name
+    integer, intent(out) :: index
+    logical, intent(in), optional :: is_temporal
+    type(field_data_var) :: var
+    call resolve_data_name(name, 'Unnamed_FieldData', external_name, internal_name, data%vars)
+    var%dataset_name = internal_name
+    if (present(is_temporal)) var%is_temporal = is_temporal
+    if (allocated(data%vars)) then
+      data%vars = [data%vars,var]
+    else
+      allocate(data%vars(1),source=var)
+    end if
+    index = size(data%vars)
+  end subroutine
+
+  subroutine reset_data_step_flags(vars)
+    class(data_var_item), intent(inout), optional :: vars(:)
+    integer :: j
+    if (.not.present(vars)) return
+    do j = 1, size(vars)
+      if (vars(j)%is_temporal) vars(j)%wrote_this_step = .false.
+    end do
+  end subroutine
+
+  subroutine append_field_data_metadata(ctx, data)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    type(field_data_list), intent(in) :: data
+    integer :: j
+    integer(int32) :: sizes(2,1)
+    if (.not.allocated(data%vars)) return
+    do j = 1, size(data%vars)
+      associate (var => data%vars(j))
+        if (.not.var%is_temporal) cycle
+        ! Omission repeats the current offset/size, initially an empty value.
+        sizes(:,1) = [var%ncomp,var%tuples]
+        call h5_append_to_dataset(ctx, data%offsets_id, var%dataset_name, var%offset, root=0)
+        call h5_append_to_dataset(ctx, data%sizes_id, var%dataset_name, sizes, root=0)
+      end associate
+    end do
+  end subroutine
+
+  subroutine write_data_name_attr(ctx, grp_id, dataset_name, external_name, attribute)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    integer(hid_t), intent(in) :: grp_id
+    character(*), intent(in) :: dataset_name, external_name
+    character(*), intent(in), optional :: attribute
+    integer(hid_t) :: dset_id
+    integer :: ierr
+    dset_id = H5Dopen(grp_id, dataset_name)
+    INSIST(ctx%global_all(dset_id >= 0))
+    call h5_write_attr(ctx, dset_id, 'Name', external_name)
+    if (present(attribute)) then
+      INSIST(ctx%identical(trim(attribute)))
+      if (attribute /= '') call h5_write_attr(ctx, dset_id, 'Attribute', trim(attribute))
+    end if
+    ierr = H5Dclose(dset_id)
+    INSIST(ctx%global_all(ierr >= 0))
+  end subroutine
+
+  pure function data_chunk_size(data_chunk_bytes, value_bytes) result(chunk_size)
+    integer(int64), intent(in) :: data_chunk_bytes, value_bytes
+    integer(int64) :: chunk_size
+    chunk_size = max(1_int64, data_chunk_bytes/value_bytes)
+  end function
+end module vtkhdf_data_support
