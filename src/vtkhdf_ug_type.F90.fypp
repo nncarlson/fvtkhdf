@@ -34,8 +34,11 @@ module vtkhdf_ug_type
   use,intrinsic :: iso_c_binding, only: c_sizeof
   use vtkhdf_h5_c_binding
   use vtkhdf_h5
-  use vtkhdf_data_names, only: resolve_data_name
+  use vtkhdf_named_record_type, only: resolve_record_name
   use vtkhdf_data_support
+  use vtkhdf_field_data_type, only: field_data_list, write_field_data, &
+                                  register_temporal_field_data, write_temporal_field_data, &
+                                  append_field_data_metadata, close_field_data
   use vtkhdf_file_modes
   use vtkhdf_ctx_type
   use vtkhdf_h5e_context_type
@@ -126,7 +129,6 @@ module vtkhdf_ug_type
     procedure, private :: write_temporal_field_data_${kind}$
 #:endfor
     procedure :: start_time_step, finalize_time_step
-    procedure, private :: reset_local
 #:for loc, group in [('cell','CellData'), ('point','PointData')]
     procedure, private :: reserve_${loc}$_data_name
 #:endfor
@@ -238,7 +240,11 @@ contains
     call close_field_data(this%field_data)
     if (H5Iis_valid(this%steps_id) > 0) ierr = H5Gclose(this%steps_id)
     if (H5Iis_valid(this%root_id) > 0) ierr = H5Gclose(this%root_id)
-    call this%reset_local()
+    call finalize(this) ! finalize via intent(out) this
+  contains
+    subroutine finalize(this)
+      class(vtkhdf_ug), intent(out) :: this
+    end subroutine
   end subroutine
 
   !! Finalizer for VTKHDF_UG_FILE objects. We free heap memory we own but avoid
@@ -635,7 +641,7 @@ contains
     INSIST(this%${loc}$_data%vars(index)%is_temporal)
     INSIST(.not.this%${loc}$_data%vars(index)%wrote_this_step) ! no double writing in a single step
     this%${loc}$_data%vars(index)%offset = this%${loc}$_data%vars(index)%next_offset
-    call h5_append_to_dataset(this%ctx, this%${loc}$_data%group_id, this%${loc}$_data%vars(index)%dataset_name, array)
+    call h5_append_to_dataset(this%ctx, this%${loc}$_data%group_id, this%${loc}$_data%vars(index)%internal_name, array)
     this%${loc}$_data%vars(index)%next_offset = this%${loc}$_data%vars(index)%next_offset + this%${count}$_tot
     this%${loc}$_data%vars(index)%last_entity_count = this%${count}$
     this%${loc}$_data%vars(index)%wrote_this_step = .true. ! dataset has been written for this step
@@ -758,8 +764,8 @@ contains
     integer, intent(out) :: index
     logical, intent(in), optional :: is_temporal
     type(mesh_data_var) :: var
-    call resolve_data_name(name, 'Unnamed_${group}$', external_name, internal_name, this%${loc}$_data%vars)
-    var%dataset_name = internal_name
+    call resolve_record_name(name, 'Unnamed_${group}$', external_name, internal_name, this%${loc}$_data%vars)
+    var%internal_name = internal_name
     if (present(is_temporal)) var%is_temporal = is_temporal
     if (allocated(this%${loc}$_data%vars)) then
       this%${loc}$_data%vars = [this%${loc}$_data%vars,var]
@@ -780,12 +786,8 @@ contains
     if (.not.allocated(vars)) return
     do j = 1, size(vars)
       if (.not.vars(j)%is_temporal) cycle
-      call h5_append_to_dataset(ctx, grp_id, vars(j)%dataset_name, vars(j)%offset, root=0)
+      call h5_append_to_dataset(ctx, grp_id, vars(j)%internal_name, vars(j)%offset, root=0)
     end do
-  end subroutine
-
-  subroutine reset_local(this)
-    class(vtkhdf_ug), intent(out) :: this
   end subroutine
 
 end module vtkhdf_ug_type

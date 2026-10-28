@@ -12,8 +12,9 @@ conventions. There is no runtime cell/point/field selector in these interfaces.
 | --- | --- |
 | File wrappers | Public overloads, file/communicator lifetime, HDF5 error context, public handles and ownership checks |
 | Mesh cores | Geometry, mode/lifecycle policy, mesh-specific cell/point storage and validation |
-| `vtkhdf_data_support` | Common records, name/designation attributes, FieldData operations and metadata, write-flag reset, group cleanup |
-| `vtkhdf_data_names` | External-name defaults, sanitization, and collision resolution |
+| `vtkhdf_data_support` | Common records, name/designation attributes, write-flag reset, group cleanup, chunk sizing |
+| `vtkhdf_field_data_type` | FieldData records, static and temporal writes, registration, metadata, cleanup |
+| `vtkhdf_named_record_type` | Common named records, external-name defaults, sanitization, and collision resolution for data fields and MultiBlock Assembly links |
 | `vtkhdf_h5` | HDF5 dataset creation, append, and region operations |
 
 Both cores contain `cell_data`, `point_data`, and `field_data`. Each association
@@ -42,7 +43,7 @@ individual MultiBlock leaf. Wrappers validate ownership before passing an
 index to the core. MultiBlock additionally checks its block index.
 
 FieldData wrappers check lifecycle policy and delegate creation, registration,
-and writes to `vtkhdf_data_support`. Static FieldData writes supply the complete
+and writes to `vtkhdf_field_data_type`. Static FieldData writes supply the complete
 value. Temporal FieldData uses tuple rows, component/tuple sizes, and omission
 reuse identically in both cores. Only rank 0 supplies the stored value.
 

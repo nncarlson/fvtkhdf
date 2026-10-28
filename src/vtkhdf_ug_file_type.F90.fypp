@@ -336,7 +336,7 @@ contains
     type(vtkhdf_${loc}$_data_handle) :: handle
     call err_ctx%capture !TODO? push this down?
     index = this%ug%register_temporal_${loc}$_data(name, mold, attribute)
-    call set_data_handle(handle, index, this%ug%root())
+    call handle%set(index, this%ug%root())
     call err_ctx%restore(0)
   end function
 #:endfor
@@ -353,7 +353,7 @@ contains
     type(vtkhdf_field_data_handle) :: handle
     call err_ctx%capture
     index = this%ug%register_temporal_field_data(name, mold)
-    call set_data_handle(handle, index, this%ug%root())
+    call handle%set(index, this%ug%root())
     call err_ctx%restore(0)
   end function
 #:endfor
@@ -396,7 +396,7 @@ contains
     ${decl}$, intent(in) :: array${array_shape}$
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    call this%ug%write_${loc}$_data(get_data_index(var,this%ug%root()), array)
+    call this%ug%write_${loc}$_data(var%get_index(this%ug%root()), array)
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -412,7 +412,7 @@ contains
     logical, intent(in), optional :: as_vector
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    call this%ug%write_field_data(get_data_index(var,this%ug%root()), array, as_vector)
+    call this%ug%write_field_data(var%get_index(this%ug%root()), array, as_vector)
     call err_ctx%restore(0)
   end subroutine
 #:endfor

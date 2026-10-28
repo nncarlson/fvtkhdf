@@ -9,18 +9,13 @@
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
 
-#:set locations = ['cell', 'point', 'field']
-
 module vtkhdf_data_handle_types
 
   use,intrinsic :: iso_fortran_env, only: int64
   implicit none
   private
 
-  public :: set_block_index, get_block_index, set_data_handle, get_data_index
-
-#:for loc in locations
-  type, public :: vtkhdf_${loc}$_data_handle
+  type, abstract :: vtkhdf_data_handle
     private
     integer :: index = -1
     ! BLOCK_INDEX is interpreted only by the MultiBlock front end.
@@ -29,49 +24,49 @@ module vtkhdf_data_handle_types
     ! within a MultiBlock file). File wrappers use this only to check
     ! handle ownership during the open writer's lifetime.
     integer(int64) :: owner = -1
+  contains
+    procedure :: set, get_index, set_block_index, get_block_index
   end type
-#:endfor
 
-#:for op in ['set_block_index', 'get_block_index', 'set_data_handle', 'get_data_index']
-  interface ${op}$
-#:for loc in locations
-    module procedure ${op}$_${loc}$
-#:endfor
-  end interface
-#:endfor
+  type, extends(vtkhdf_data_handle), public :: vtkhdf_cell_data_handle
+  end type
+
+  type, extends(vtkhdf_data_handle), public :: vtkhdf_point_data_handle
+  end type
+
+  type, extends(vtkhdf_data_handle), public :: vtkhdf_field_data_handle
+  end type
 
 contains
 
-#:for loc in locations
-  subroutine set_block_index_${loc}$(handle, block_index)
-    type(vtkhdf_${loc}$_data_handle), intent(inout) :: handle
+  subroutine set_block_index(this, block_index)
+    class(vtkhdf_data_handle), intent(inout) :: this
     integer, intent(in) :: block_index
-    handle%block_index = block_index
+    this%block_index = block_index
   end subroutine
 
-  pure function get_block_index_${loc}$(handle) result(block_index)
-    type(vtkhdf_${loc}$_data_handle), intent(in) :: handle
+  pure function get_block_index(this) result(block_index)
+    class(vtkhdf_data_handle), intent(in) :: this
     integer :: block_index
-    block_index = handle%block_index
+    block_index = this%block_index
   end function
 
-  subroutine set_data_handle_${loc}$(handle, index, owner)
-    type(vtkhdf_${loc}$_data_handle), intent(out) :: handle
+  subroutine set(this, index, owner)
+    class(vtkhdf_data_handle), intent(out) :: this
     integer, intent(in) :: index
     integer(int64), intent(in), optional :: owner
-    handle%index = index
-    if (present(owner)) handle%owner = owner
+    this%index = index
+    if (present(owner)) this%owner = owner
   end subroutine
 
-  pure function get_data_index_${loc}$(handle, owner) result(index)
-    type(vtkhdf_${loc}$_data_handle), intent(in) :: handle
+  pure function get_index(this, owner) result(index)
+    class(vtkhdf_data_handle), intent(in) :: this
     integer(int64), intent(in), optional :: owner
     integer :: index
-    index = handle%index
+    index = this%index
     if (present(owner)) then
-      if (owner /= handle%owner) index = -1
+      if (owner /= this%owner) index = -1
     end if
   end function
 
-#:endfor
-end module
+end module vtkhdf_data_handle_types

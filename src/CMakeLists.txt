@@ -2,8 +2,7 @@ include(CMakePackageConfigHelpers)
 
 # --- Source Definitions ---
 set(FYPP_SRC
-  vtkhdf_data_support.F90.fypp
-  vtkhdf_data_handle_types.F90.fypp
+  vtkhdf_field_data_type.F90.fypp
   vtkhdf_structured_type.F90.fypp
   vtkhdf_image_file_type.F90.fypp
   vtkhdf_h5.F90.fypp
@@ -23,12 +22,14 @@ endif()
 add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC} FLAGS --line-numbering ${FYPP_DEFINES})
 
 set(SRC
+  vtkhdf_data_handle_types.F90
+  vtkhdf_data_support.F90
   vtkhdf_assert.F90
   vtkhdf_vtk_cell_types.F90
   vtkhdf_h5_c_binding.F90
   vtkhdf_version_param.F90
   vtkhdf_file_modes.F90
-  vtkhdf_data_names.F90
+  vtkhdf_named_record_type.F90
   vtkhdf_h5e_context_type.F90
 )
 
