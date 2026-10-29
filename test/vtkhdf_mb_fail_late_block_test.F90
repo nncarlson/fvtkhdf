@@ -29,9 +29,9 @@ program vtkhdf_mb_fail_late_block_test
 
   ! Temporal blocks must be defined before time stepping starts.
   hblk = vizfile%add_block('Late-Block', mode=UG_FIXED_MESH)
-  error stop 'late temporal block add unexpectedly succeeded'
 
-  call vizfile%close()
+  ! Return successfully if the expected assertion did not fire. Closing the
+  ! file could trigger an unrelated missing-mesh assertion and mask the failure.
   call test_env_finalize()
 
 end program vtkhdf_mb_fail_late_block_test

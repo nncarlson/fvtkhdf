@@ -40,6 +40,7 @@ module vtkhdf_h5
   public :: h5_write_attr, h5_create_unlimited_dataset, h5_write_dataset, h5_append_to_dataset
   public :: h5_create_region_dataset, h5_reserve_snapshot, h5_write_region
   public :: h5_create_field_dataset, h5_append_field_data
+  public :: h5_write_data_name_attr
 
   interface h5_append_field_data
 #:for s in num_specs
@@ -305,6 +306,25 @@ contains
   end subroutine
 #:endfor
 #:endfor
+
+  !! Preserve the external VTK data label and optional attribute designation.
+  subroutine h5_write_data_name_attr(ctx, grp_id, dataset_name, external_name, attribute)
+    type(vtkhdf_ctx), intent(in) :: ctx
+    integer(hid_t), intent(in) :: grp_id
+    character(*), intent(in) :: dataset_name, external_name
+    character(*), intent(in), optional :: attribute
+    integer(hid_t) :: dset_id
+    integer :: ierr
+    dset_id = H5Dopen(grp_id, dataset_name)
+    INSIST(ctx%global_all(dset_id >= 0))
+    call h5_write_attr(ctx, dset_id, 'Name', external_name)
+    if (present(attribute)) then
+      INSIST(ctx%identical(trim(attribute)))
+      if (attribute /= '') call h5_write_attr(ctx, dset_id, 'Attribute', trim(attribute))
+    end if
+    ierr = H5Dclose(dset_id)
+    INSIST(ctx%global_all(ierr >= 0))
+  end subroutine
 
 #:for s in num_specs
 

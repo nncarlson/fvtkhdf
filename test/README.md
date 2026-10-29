@@ -125,10 +125,11 @@ empty writes, fields never written, and non-root ranks supplying different
 values. Both dataset axes must be extendible and offsets must count tuples.
 
 `vtkhdf_image_reader_*` checks geometry, physical coordinates, every static
-numeric kind, and temporal point/cell values with `vtkHDFReader`. Independent
-known-layout capability probes skip positive-extent and nontrailing-singleton
-checks on affected readers (including VTK 9.7.0/9.7.1). Layout checks remain
-enabled. Complete mesh-associated validation was performed with a VTK source
+numeric kind, and temporal point/cell values with `vtkHDFReader`. Positive-extent
+and nontrailing-singleton checks are skipped for VTK versions earlier than
+9.7.2; they are mandatory for 9.7.2 and later so reader regressions fail the
+tests. Layout checks remain enabled for all versions. Complete mesh-associated
+validation was performed with a VTK source
 build reporting 9.7.20261022. The temporal FieldData reader test strictly checks
 component counts, tuple counts, types, and every value for both ImageData and
 UG files; it does not skip a malformed FieldData result.

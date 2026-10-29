@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import tempfile
 
 SKIP = 77
 KINDS = {
@@ -85,10 +84,10 @@ def dependencies(reader=False):
 
         if reader:
             from vtkmodules.vtkIOHDF import vtkHDFReader
-            from vtkmodules.vtkCommonCore import vtkVersion, vtkObject
+            from vtkmodules.vtkCommonCore import vtkVersion
             from vtkmodules.util.numpy_support import vtk_to_numpy
 
-            return np, h5py, vtkHDFReader, vtkVersion, vtkObject, vtk_to_numpy
+            return np, h5py, vtkHDFReader, vtkVersion, vtk_to_numpy
         return np, h5py
     except ImportError as exc:
         print(f"ImageData validation dependency unavailable: {exc}")
@@ -385,43 +384,8 @@ def check_static_fields(np, group):
         equal(np, group[f"{kind}-tensor"][:], [[1, 2], [3, 4], [5, 6]])
 
 
-def reader_supports(feature):
-    # Probe an independent, known-layout file so a buggy reader is not
-    # mistaken for a writer failure. Never infer support from a version number.
-    np, h5py, Reader, _, Object, _ = dependencies(True)
-    dims = [4, 3, 2] if feature == "positive" else [1, 4, 3]
-    lower = [2, 3, 4] if feature == "positive" else [0, 0, 0]
-    with tempfile.TemporaryDirectory() as directory:
-        path = Path(directory) / "probe.vtkhdf"
-        with h5py.File(path, "w") as f:
-            g = f.create_group("VTKHDF")
-            g.attrs["Type"] = np.bytes_("ImageData")
-            g.attrs["Version"] = np.array([2, 8], dtype="int32")
-            g.attrs["WholeExtent"] = np.array(
-                [[lo, lo + n - 1] for lo, n in zip(lower, dims)], dtype="int32"
-            ).ravel()
-            g.attrs["Origin"] = [0.0, 0.0, 0.0]
-            g.attrs["Spacing"] = [1.0, 1.0, 1.0]
-            g.attrs["Direction"] = np.eye(3).ravel()
-            g.create_group("FieldData")
-            g.create_group("CellData")
-            g.create_group("PointData")["p"] = np.arange(
-                np.prod(dims), dtype="float64"
-            ).reshape(tuple(n for n in dims[::-1] if n > 1))
-        warnings = Object.GetGlobalWarningDisplay()
-        Object.SetGlobalWarningDisplay(False)
-        try:
-            r = Reader()
-            r.SetFileName(str(path))
-            r.Update()
-            a = r.GetOutput().GetPointData().GetArray("p")
-            return a is not None and a.GetNumberOfTuples() == np.prod(dims)
-        finally:
-            Object.SetGlobalWarningDisplay(warnings)
-
-
 def read(path, step=None):
-    *_, Reader, Version, Object, to_numpy = dependencies(True)
+    _, _, Reader, _, to_numpy = dependencies(True)
     r = Reader()
     r.SetFileName(str(path))
     if step is not None:
@@ -437,19 +401,26 @@ def read(path, step=None):
 
 
 def check_reader(directory, case):
-    np, _, _, Version, _, _ = dependencies(True)
-    if case == "static" and not reader_supports("positive"):
+    np, _, _, Version, _ = dependencies(True)
+    version = (
+        Version.GetVTKMajorVersion(),
+        Version.GetVTKMinorVersion(),
+        Version.GetVTKBuildVersion(),
+    )
+    # Both geometry reader fixes are queued for VTK 9.7.2. Require corrected
+    # versions to pass these checks so a reader regression cannot cause a skip.
+    if version < (9, 7, 2) and case == "static":
         print(
-            f"VTK {Version.GetVTKVersion()} cannot read positive nonzero extents; layout checks remain enabled"
+            f"VTK {Version.GetVTKVersion()}: positive nonzero extent checks require VTK 9.7.2; layout checks remain enabled"
         )
         raise SystemExit(SKIP)
     if (
-        case.startswith("dim_")
+        version < (9, 7, 2)
+        and case.startswith("dim_")
         and int(case[4:]) in [2, 3, 5, 6]
-        and not reader_supports("singleton")
     ):
         print(
-            f"VTK {Version.GetVTKVersion()} cannot read nontrailing singleton axes; layout checks remain enabled"
+            f"VTK {Version.GetVTKVersion()}: nontrailing singleton checks require VTK 9.7.2; layout checks remain enabled"
         )
         raise SystemExit(SKIP)
     print("VTK", Version.GetVTKVersion(), case)
@@ -485,7 +456,7 @@ def check_reader(directory, case):
                 assert a is not None and a.GetNumberOfComponents() == components
                 assert a.GetNumberOfTuples() == tuples
                 equal(np, to_numpy(a), np.full(to_numpy(a).shape, value))
-        _, _, Reader, _, _, _ = dependencies(True)
+        _, _, Reader, _, _ = dependencies(True)
         for mode, steps in [("static", [None]), ("temporal", [0, 1])]:
             for suffix in ["", "_ug"]:
                 r = Reader()
@@ -523,7 +494,7 @@ def check_reader(directory, case):
                 assert not errors
         return
     if case == "temporal_fielddata":
-        _, _, Reader, _, _, to_numpy = dependencies(True)
+        _, _, Reader, _, to_numpy = dependencies(True)
 
         def field_data(reader, step):
             reader.SetStep(step)

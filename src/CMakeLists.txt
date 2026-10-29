@@ -29,7 +29,6 @@ set(SRC
   vtkhdf_h5_c_binding.F90
   vtkhdf_version_param.F90
   vtkhdf_file_modes.F90
-  vtkhdf_named_record_type.F90
   vtkhdf_h5e_context_type.F90
 )
 

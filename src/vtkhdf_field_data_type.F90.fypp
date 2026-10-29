@@ -3,6 +3,7 @@
 !!
 !! This module provides FieldData records, static and temporal writes, and
 !! temporal metadata shared by the UnstructuredGrid and structured cores.
+!! These operations are bound to the public FIELD_DATA_LIST type.
 !! Only rank 0 contributes payload values. The mesh cores enforce lifecycle
 !! policy before calling these operations.
 !!
@@ -20,48 +21,49 @@ module vtkhdf_field_data_type
   use vtkhdf_h5_c_binding
   use vtkhdf_h5
   use vtkhdf_ctx_type
-  use vtkhdf_named_record_type, only: resolve_record_name
-  use vtkhdf_data_support, only: data_var_item, data_groups, STEPS_CHUNK_SIZE, &
-                               close_data_groups, write_data_name_attr, data_chunk_size
+  use vtkhdf_data_support, only: data_var_record, data_groups, STEPS_CHUNK_SIZE, &
+                               data_chunk_size, resolve_record_name
   implicit none
   private
 
   public :: field_data_list
-  public :: write_field_data, register_temporal_field_data, write_temporal_field_data
-  public :: append_field_data_metadata, close_field_data
 
-  type, extends(data_var_item) :: field_data_var
+  type, extends(data_var_record) :: field_data_var
     integer(hid_t) :: type_id = H5I_INVALID_HID
   end type
 
   type, extends(data_groups) :: field_data_list
     type(field_data_var), allocatable :: vars(:)
     integer(hid_t) :: sizes_id = H5I_INVALID_HID
-  end type
-
-#:for op in ['write_field_data', 'register_temporal_field_data', 'write_temporal_field_data']
-  interface ${op}$
+  contains
+    procedure :: close => close_field_data
+    procedure :: append_metadata => append_field_data_metadata
+    procedure, private :: reserve_name => reserve_field_data_name
 #:for kind, decl, h5type in nums
-    module procedure ${op}$_${kind}$
+    generic :: write => write_field_data_${kind}$
+    procedure, private :: write_field_data_${kind}$
+    generic :: register_temporal => register_temporal_field_data_${kind}$
+    procedure, private :: register_temporal_field_data_${kind}$
+    generic :: write_temporal => write_temporal_field_data_${kind}$
+    procedure, private :: write_temporal_field_data_${kind}$
 #:endfor
-  end interface
-#:endfor
+  end type
 
 contains
 
-  subroutine close_field_data(data)
-    type(field_data_list), intent(inout) :: data
+  subroutine close_field_data(this)
+    class(field_data_list), intent(inout) :: this
     integer :: ierr
-    if (H5Iis_valid(data%sizes_id) > 0) ierr = H5Gclose(data%sizes_id)
-    data%sizes_id = H5I_INVALID_HID
-    call close_data_groups(data)
+    if (H5Iis_valid(this%sizes_id) > 0) ierr = H5Gclose(this%sizes_id)
+    this%sizes_id = H5I_INVALID_HID
+    call this%data_groups%close()
   end subroutine
 
 #:for kind, decl, h5type in nums
-  subroutine write_field_data_${kind}$(ctx, data, name, array, as_vector)
+  subroutine write_field_data_${kind}$(this, ctx, name, array, as_vector)
 
+    class(field_data_list), intent(inout) :: this
     type(vtkhdf_ctx), intent(in) :: ctx
-    type(field_data_list), intent(inout) :: data
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
@@ -72,60 +74,60 @@ contains
 
     as_vector_ = .false.
     if (present(as_vector)) as_vector_ = as_vector
-    call reserve_field_data_name(data, name, external_name, internal_name, index)
+    call this%reserve_name(name, external_name, internal_name, index)
     select rank (array)
     rank (0)
       INSIST(.not.as_vector_)
-      call h5_write_dataset(ctx, data%group_id, internal_name, [array], root=0)
+      call h5_write_dataset(ctx, this%group_id, internal_name, [array], root=0)
     rank (1)
       if (as_vector_) then
-        call h5_write_dataset(ctx, data%group_id, internal_name, reshape(array,[size(array),1]), root=0)
+        call h5_write_dataset(ctx, this%group_id, internal_name, reshape(array,[size(array),1]), root=0)
       else
-        call h5_write_dataset(ctx, data%group_id, internal_name, array, root=0)
+        call h5_write_dataset(ctx, this%group_id, internal_name, array, root=0)
       end if
     rank (2)
       INSIST(.not.as_vector_)
-      call h5_write_dataset(ctx, data%group_id, internal_name, array, root=0)
+      call h5_write_dataset(ctx, this%group_id, internal_name, array, root=0)
     rank default
       INSIST(.false.)
     end select
-    call write_data_name_attr(ctx, data%group_id, internal_name, external_name)
+    call h5_write_data_name_attr(ctx, this%group_id, internal_name, external_name)
 
   end subroutine write_field_data_${kind}$
 #:endfor
 
 #:for kind, decl, h5type in nums
-  integer function register_temporal_field_data_${kind}$(ctx, data, name, mold, data_chunk_bytes) result(index)
+  integer function register_temporal_field_data_${kind}$(this, ctx, name, mold, data_chunk_bytes) result(index)
+    class(field_data_list), intent(inout) :: this
     type(vtkhdf_ctx), intent(in) :: ctx
-    type(field_data_list), intent(inout) :: data
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: mold
     integer(int64), intent(in) :: data_chunk_bytes
     integer(int64) :: chunk_size
     character(:), allocatable :: external_name, internal_name
     chunk_size = data_chunk_size(data_chunk_bytes,int(storage_size(mold)/8,int64))
-    call reserve_field_data_name(data, name, external_name, internal_name, index, is_temporal=.true.)
-    data%vars(index)%type_id = ${h5type}$
-    call h5_create_field_dataset(ctx, data%group_id, internal_name, ${h5type}$, chunk_size)
-    call h5_create_unlimited_dataset(ctx, data%offsets_id, internal_name, 0_int64, STEPS_CHUNK_SIZE)
-    call h5_create_unlimited_dataset(ctx, data%sizes_id, internal_name, [0_int32,0_int32], STEPS_CHUNK_SIZE)
-    call write_data_name_attr(ctx, data%group_id, internal_name, external_name)
+    call this%reserve_name(name, external_name, internal_name, index, is_temporal=.true.)
+    this%vars(index)%type_id = ${h5type}$
+    call h5_create_field_dataset(ctx, this%group_id, internal_name, ${h5type}$, chunk_size)
+    call h5_create_unlimited_dataset(ctx, this%offsets_id, internal_name, 0_int64, STEPS_CHUNK_SIZE)
+    call h5_create_unlimited_dataset(ctx, this%sizes_id, internal_name, [0_int32,0_int32], STEPS_CHUNK_SIZE)
+    call h5_write_data_name_attr(ctx, this%group_id, internal_name, external_name)
   end function
 #:endfor
 
 #:for kind, decl, h5type in nums
-  subroutine write_temporal_field_data_${kind}$(ctx, data, index, array, as_vector)
+  subroutine write_temporal_field_data_${kind}$(this, ctx, index, array, as_vector)
+    class(field_data_list), intent(inout) :: this
     type(vtkhdf_ctx), intent(in) :: ctx
-    type(field_data_list), intent(inout) :: data
     integer, intent(in) :: index
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
     logical :: as_vector_
-    INSIST(allocated(data%vars))
-    INSIST(index >= 1 .and. index <= size(data%vars))
+    INSIST(allocated(this%vars))
+    INSIST(index >= 1 .and. index <= size(this%vars))
     as_vector_ = .false.
     if (present(as_vector)) as_vector_ = as_vector
-    associate (var => data%vars(index))
+    associate (var => this%vars(index))
       INSIST(var%is_temporal)
       INSIST(.not.var%wrote_this_step)
       INSIST(ctx%global_all(var%type_id == ${h5type}$))
@@ -145,44 +147,44 @@ contains
         INSIST(.false.)
       end select
       var%offset = var%next_offset
-      call h5_append_field_data(ctx, data%group_id, var%internal_name, array, var%ncomp, var%tuples)
+      call h5_append_field_data(ctx, this%group_id, var%internal_name, array, var%ncomp, var%tuples)
       var%next_offset = var%next_offset + int(var%tuples,int64)
       var%wrote_this_step = .true.
     end associate
   end subroutine
 #:endfor
 
-  subroutine reserve_field_data_name(data, name, external_name, internal_name, index, is_temporal)
-    type(field_data_list), intent(inout) :: data
+  subroutine reserve_field_data_name(this, name, external_name, internal_name, index, is_temporal)
+    class(field_data_list), intent(inout) :: this
     character(*), intent(in) :: name
     character(:), allocatable, intent(out) :: external_name, internal_name
     integer, intent(out) :: index
     logical, intent(in), optional :: is_temporal
     type(field_data_var) :: var
-    call resolve_record_name(name, 'Unnamed_FieldData', external_name, internal_name, data%vars)
+    call resolve_record_name(name, 'Unnamed_FieldData', external_name, internal_name, this%vars)
     var%internal_name = internal_name
     if (present(is_temporal)) var%is_temporal = is_temporal
-    if (allocated(data%vars)) then
-      data%vars = [data%vars,var]
+    if (allocated(this%vars)) then
+      this%vars = [this%vars,var]
     else
-      allocate(data%vars(1),source=var)
+      allocate(this%vars(1),source=var)
     end if
-    index = size(data%vars)
+    index = size(this%vars)
   end subroutine
 
-  subroutine append_field_data_metadata(ctx, data)
+  subroutine append_field_data_metadata(this, ctx)
+    class(field_data_list), intent(in) :: this
     type(vtkhdf_ctx), intent(in) :: ctx
-    type(field_data_list), intent(in) :: data
     integer :: j
     integer(int32) :: sizes(2,1)
-    if (.not.allocated(data%vars)) return
-    do j = 1, size(data%vars)
-      associate (var => data%vars(j))
+    if (.not.allocated(this%vars)) return
+    do j = 1, size(this%vars)
+      associate (var => this%vars(j))
         if (.not.var%is_temporal) cycle
         ! Omission repeats the current offset/size, initially an empty value.
         sizes(:,1) = [var%ncomp,var%tuples]
-        call h5_append_to_dataset(ctx, data%offsets_id, var%internal_name, var%offset, root=0)
-        call h5_append_to_dataset(ctx, data%sizes_id, var%internal_name, sizes, root=0)
+        call h5_append_to_dataset(ctx, this%offsets_id, var%internal_name, var%offset, root=0)
+        call h5_append_to_dataset(ctx, this%sizes_id, var%internal_name, sizes, root=0)
       end associate
     end do
   end subroutine

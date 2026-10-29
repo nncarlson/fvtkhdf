@@ -34,5 +34,6 @@ program vtkhdf_ug_fail_late_register_test
   ! Must fail: temporal registration is not allowed after stepping has started.
   hpoint_radius = vizfile%register_temporal_point_data('late-point-radius', 0.0_r8)
 
-  error stop 'expected late registration assertion'
+  ! Return successfully if the expected assertion did not fire.
+  call test_env_finalize()
 end program vtkhdf_ug_fail_late_register_test

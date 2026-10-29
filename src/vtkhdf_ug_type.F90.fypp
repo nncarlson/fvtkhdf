@@ -34,11 +34,8 @@ module vtkhdf_ug_type
   use,intrinsic :: iso_c_binding, only: c_sizeof
   use vtkhdf_h5_c_binding
   use vtkhdf_h5
-  use vtkhdf_named_record_type, only: resolve_record_name
   use vtkhdf_data_support
-  use vtkhdf_field_data_type, only: field_data_list, write_field_data, &
-                                  register_temporal_field_data, write_temporal_field_data, &
-                                  append_field_data_metadata, close_field_data
+  use vtkhdf_field_data_type, only: field_data_list
   use vtkhdf_file_modes
   use vtkhdf_ctx_type
   use vtkhdf_h5e_context_type
@@ -53,7 +50,7 @@ module vtkhdf_ug_type
   integer, parameter, public :: UG_MOVING_MESH  = VTKHDF_MOVING_MESH
   integer, parameter, public :: UG_DYNAMIC_MESH = VTKHDF_DYNAMIC_MESH
 
-  type, extends(data_var_item) :: mesh_data_var
+  type, extends(data_var_record) :: mesh_data_var
     integer(int64) :: last_entity_count = 0
   end type
 
@@ -235,9 +232,9 @@ contains
     integer :: ierr
     if (this%root_id < 0) return
     if (this%step_open) call this%finalize_time_step()
-    call close_data_groups(this%cell_data)
-    call close_data_groups(this%point_data)
-    call close_field_data(this%field_data)
+    call this%cell_data%close()
+    call this%point_data%close()
+    call this%field_data%close()
     if (H5Iis_valid(this%steps_id) > 0) ierr = H5Gclose(this%steps_id)
     if (H5Iis_valid(this%root_id) > 0) ierr = H5Gclose(this%root_id)
     call finalize(this) ! finalize via intent(out) this
@@ -546,7 +543,7 @@ contains
     INSIST(this%ctx%global_all(dims(size(dims)) == this%${count}$))
     call this%reserve_${loc}$_data_name(name, external_name, internal_name, var_index)
     call h5_write_dataset(this%ctx, this%${loc}$_data%group_id, internal_name, array)
-    call write_data_name_attr(this%ctx, this%${loc}$_data%group_id, internal_name, external_name, attribute)
+    call h5_write_data_name_attr(this%ctx, this%${loc}$_data%group_id, internal_name, external_name, attribute)
   end subroutine
 #:endfor
 #:endfor
@@ -561,7 +558,7 @@ contains
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
     INSIST(this%allow_static_field_data)
-    call write_field_data(this%ctx, this%field_data, name, array, as_vector)
+    call this%field_data%write(this%ctx, name, array, as_vector)
   end subroutine
 
 #:endfor
@@ -588,7 +585,7 @@ contains
     associate (chunk_size => data_chunk_size(this%data_chunk_bytes, c_sizeof(mold)))
       call h5_create_unlimited_dataset(this%ctx, this%${loc}$_data%group_id, internal_name, mold, chunk_size)
     end associate
-    call write_data_name_attr(this%ctx, this%${loc}$_data%group_id, internal_name, external_name, attribute)
+    call h5_write_data_name_attr(this%ctx, this%${loc}$_data%group_id, internal_name, external_name, attribute)
 
     !! Dataset for its time step offsets
     associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
@@ -609,7 +606,7 @@ contains
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: mold
     INSIST(this%nsteps == 0)
-    index = register_temporal_field_data(this%ctx, this%field_data, name, mold, &
+    index = this%field_data%register_temporal(this%ctx, name, mold, &
         this%data_chunk_bytes)
   end function register_temporal_field_data_${kind}$
 
@@ -659,7 +656,7 @@ contains
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
     INSIST(this%step_open)
-    call write_temporal_field_data(this%ctx, this%field_data, index, array, as_vector)
+    call this%field_data%write_temporal(this%ctx, index, array, as_vector)
   end subroutine write_temporal_field_data_${kind}$
 
 #:endfor
@@ -686,9 +683,15 @@ contains
       this%topology_written_this_step = .false.
     end if
 
-    call reset_data_step_flags(this%point_data%vars)
-    call reset_data_step_flags(this%cell_data%vars)
-    call reset_data_step_flags(this%field_data%vars)
+    if (allocated(this%point_data%vars)) then
+      call this%point_data%vars%reset_step_flags()
+    end if
+    if (allocated(this%cell_data%vars)) then
+      call this%cell_data%vars%reset_step_flags()
+    end if
+    if (allocated(this%field_data%vars)) then
+      call this%field_data%vars%reset_step_flags()
+    end if
     this%step_open = .true.
     this%mesh_locked = .false. ! release barrier for changing the mesh
 
@@ -747,7 +750,7 @@ contains
     !! Cell and point data offsets for each temporal dataset for this timestep
     call append_data_offsets(this%ctx, this%point_data%offsets_id, this%point_data%vars)
     call append_data_offsets(this%ctx, this%cell_data%offsets_id, this%cell_data%vars)
-    call append_field_data_metadata(this%ctx, this%field_data)
+    call this%field_data%append_metadata(this%ctx)
     this%step_open = .false.
 
     INSIST(this%geometry_defined .and. this%topology_defined)

@@ -32,18 +32,15 @@ module vtkhdf_structured_type
   use vtkhdf_h5_c_binding
   use vtkhdf_h5
   use vtkhdf_ctx_type
-  use vtkhdf_named_record_type, only: resolve_record_name
   use vtkhdf_data_support
-  use vtkhdf_field_data_type, only: field_data_list, write_field_data, &
-                                  register_temporal_field_data, write_temporal_field_data, &
-                                  append_field_data_metadata, close_field_data
+  use vtkhdf_field_data_type, only: field_data_list
   use vtkhdf_version_param
   use vtkhdf_file_modes, only: VTKHDF_STATIC
   implicit none
   private
 
   integer, parameter :: CELL = 1, POINT = 2, FIELD = 3
-  type, extends(data_var_item) :: mesh_data_var
+  type, extends(data_var_record) :: mesh_data_var
     integer(hid_t) :: dataset_id = H5I_INVALID_HID, type_id = H5I_INVALID_HID
     logical :: is_vector = .false.
   end type
@@ -180,9 +177,9 @@ contains
         if (H5Iis_valid(this%${loc}$_data%vars(j)%dataset_id) > 0) ierr = H5Dclose(this%${loc}$_data%vars(j)%dataset_id)
       end do
     end if
-    call close_data_groups(this%${loc}$_data)
+    call this%${loc}$_data%close()
 #:endfor
-    call close_field_data(this%field_data)
+    call this%field_data%close()
     if (H5Iis_valid(this%steps_id) > 0) ierr = H5Gclose(this%steps_id)
     if (H5Iis_valid(this%root_id) > 0) ierr = H5Gclose(this%root_id)
     call finalize(this) ! finalize via intent(out) this
@@ -254,7 +251,7 @@ contains
     call this%reserve_${loc}$_data_name(name, external_name, internal_name, new_index)
     call this%create_${loc}$_var(new_index, ${h5type}$, int(storage_size(array)/8,int64), &
         ncomp, ${'.false.' if rank == 3 else '.true.'}$)
-    call write_data_name_attr(this%ctx, this%${loc}$_data%group_id, internal_name, external_name, attribute)
+    call h5_write_data_name_attr(this%ctx, this%${loc}$_data%group_id, internal_name, external_name, attribute)
     call this%create_${loc}$_offsets(new_index)
     call this%write_${loc}$_data(new_index, array, array_origin, write_bounds)
     if (present(index)) index = new_index
@@ -276,7 +273,7 @@ contains
     INSIST(this%root_id >= 0)
     INSIST(this%nsteps == -1)
     INSIST(this%ctx%identical(trim(name)))
-    call write_field_data(this%ctx, this%field_data, name, array, as_vector)
+    call this%field_data%write(this%ctx, name, array, as_vector)
   end subroutine
 
 #:endfor
@@ -317,7 +314,7 @@ contains
     call this%reserve_${loc}$_data_name(name, external_name, internal_name, index, is_temporal=.true.)
     call this%create_${loc}$_var(index, ${h5type}$, int(storage_size(mold)/8,int64), &
         ncomp, vector)
-    call write_data_name_attr(this%ctx, this%${loc}$_data%group_id, internal_name, external_name, attribute)
+    call h5_write_data_name_attr(this%ctx, this%${loc}$_data%group_id, internal_name, external_name, attribute)
     call this%create_${loc}$_offsets(index)
   end function
 
@@ -334,7 +331,7 @@ contains
     INSIST(this%ctx%identical(trim(name)))
     INSIST(this%ctx%identical([FIELD,0]))
     INSIST(this%ctx%identical([${nums.index((kind,decl,h5type))}$]))
-    index = register_temporal_field_data(this%ctx, this%field_data, name, mold, &
+    index = this%field_data%register_temporal(this%ctx, name, mold, &
         this%data_chunk_bytes)
   end function
 
@@ -376,7 +373,7 @@ contains
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
     INSIST(this%step_open)
-    call write_temporal_field_data(this%ctx, this%field_data, index, array, as_vector)
+    call this%field_data%write_temporal(this%ctx, index, array, as_vector)
   end subroutine
 
 #:endfor
@@ -393,9 +390,15 @@ contains
     this%nsteps = this%nsteps + 1
     call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps)
     call h5_append_to_dataset(this%ctx, this%steps_id, 'Values', time, root=0)
-    call reset_data_step_flags(this%cell_data%vars)
-    call reset_data_step_flags(this%point_data%vars)
-    call reset_data_step_flags(this%field_data%vars)
+    if (allocated(this%cell_data%vars)) then
+      call this%cell_data%vars%reset_step_flags()
+    end if
+    if (allocated(this%point_data%vars)) then
+      call this%point_data%vars%reset_step_flags()
+    end if
+    if (allocated(this%field_data%vars)) then
+      call this%field_data%vars%reset_step_flags()
+    end if
     this%step_open = .true.
   end subroutine
 
@@ -416,7 +419,7 @@ contains
 #:endfor
     call append_data_offsets(this%ctx, this%cell_data%offsets_id, this%cell_data%vars)
     call append_data_offsets(this%ctx, this%point_data%offsets_id, this%point_data%vars)
-    call append_field_data_metadata(this%ctx, this%field_data)
+    call this%field_data%append_metadata(this%ctx)
     this%step_open = .false.
   end subroutine
 

@@ -13,9 +13,33 @@ while also supporting serial workflows. By utilizing HDF5 as the underlying
 storage mechanism, **fVTKHDF** provides a more scalable alternative to older
 VTK ASCII or XML formats.
 
-* Targets version 2.8 of the [VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html).
-* ParaView 5.13 and 6.0 are expected to work for most generated files, but
-  ParaView 6.1+ is recommended for full VTKHDF 2.8 support.
+fVTKHDF targets version 2.8 of the
+[VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html)
+for the dataset types it supports.
+
+**ParaView Compatibility**
+
+**ParaView 6.2 or later is recommended. ParaView 5.13 is the oldest
+compatibility target.** Older ParaView releases support the existing dataset
+types but may ignore newer metadata.
+
+| Output feature | ParaView support |
+| --- | --- |
+| UnstructuredGrid and MultiBlock, including temporal FieldData | 5.13+ expected |
+| ImageData | 5.13+ expected, with the reader limitations below |
+| Dataset attribute designations (`Scalars`, `Vectors`, etc.) | 6.2+ |
+| RectilinearGrid and StructuredGrid (planned) | Will require 6.2+ |
+
+**ImageData reader limitations:** ParaView 6.2.0 includes VTK 9.7.1 and still
+has two geometry reader defects. For affected readers, use **zero-based global
+point bounds** on every axis and trailing singleton axes: `(nx,ny,1)` for 2D
+or `(nx,1,1)` for 1D. Positive local block indices and a nonzero physical origin
+are supported. Both defects are fixed in the
+[tested upstream development source](https://github.com/Kitware/VTK/commit/9f0588e2fe0d10573555834a66ac3dab95be4114)
+and the fixes have been backported and queued for VTK 9.7.2. The corresponding
+ParaView release has not yet been identified. fVTKHDF preserves the supplied
+global bounds and physical origin. See the [ImageData manual](doc/sphinx/image.rst)
+for details.
 
 **Dataset Support**
 
@@ -37,16 +61,6 @@ VTK ASCII or XML formats.
     multicomponent arrays.
   * Temporal fields support complete replacement or whole-field reuse.
   * FieldData retains the existing UG semantics.
-  * For VTK 9.7.0/9.7.1 and ParaView builds using the affected reader, use
-    **zero-based global point bounds** on every axis and trailing singleton
-    axes: `(nx,ny,1)` for 2D or `(nx,1,1)` for 1D. Positive local block indices
-    and a nonzero physical origin are supported.
-  * These geometry reader issues are fixed in the
-    [tested upstream development source](https://github.com/Kitware/VTK/commit/9f0588e2fe0d10573555834a66ac3dab95be4114).
-    fVTKHDF preserves the supplied global bounds; it does not rebase them or
-    offer a compatibility mode. See the [ImageData manual](doc/sphinx/image.rst)
-    for details. The first VTK/ParaView release containing the fixes has not
-    been verified.
 
 * **MultiBlockDataSet (MB):** Supports a flat assembly/collection of
   UnstructuredGrid blocks.

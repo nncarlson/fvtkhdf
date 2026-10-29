@@ -321,15 +321,16 @@ build of that source. The tested snapshot's
 subtracts global lower bounds when forming file offsets and handles each
 singleton axis independently.
 
-A VTK or ParaView build containing those fixes removes the geometry constraints
-above. The first released versions containing them have not been verified;
-no specific future release is promised here. No ParaView release was tested
-for this milestone.
+Both fixes have been backported to the VTK 9.7 release branch and are queued
+for VTK 9.7.2. A VTK or ParaView build containing them removes the geometry
+constraints above. The recorded tests used the development snapshot above;
+no ParaView release was tested for this milestone.
 
 The failures were reproduced with independent small HDF5 fixtures. The test
-suite probes reader capability and skips affected semantic checks while
-retaining direct HDF5 layout checks. A standalone reproducer, measured results,
-and source analysis are recorded in
+suite skips the affected semantic checks for VTK versions earlier than 9.7.2;
+these checks are mandatory for 9.7.2 and later to detect reader regressions.
+Direct HDF5 layout checks run for all versions. A standalone reproducer,
+measured results, and source analysis are recorded in
 ``vtk-9.7.1-vtkhdf-reader-failures.md`` at the repository root.
 
 A complete serial/MPI temporal example is provided in

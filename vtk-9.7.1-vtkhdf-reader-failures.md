@@ -20,9 +20,10 @@ All 18 geometry/association checks pass using the same reproducer with a VTK
 development build reporting `9.7.20261022`, built from
 [commit 9f0588e2fe0d10573555834a66ac3dab95be4114](https://github.com/Kitware/VTK/commit/9f0588e2fe0d10573555834a66ac3dab95be4114).
 The built reader source was checked against that pinned commit. Both geometry
-defects are fixed in that development snapshot. The first fixed released
-version has not been identified, and no specific future VTK or ParaView release
-is claimed to contain the fixes. No ParaView release was tested.
+defects are fixed in that development snapshot. Both fixes have since been
+backported to the VTK 9.7 release branch and are queued for VTK 9.7.2. The
+recorded tests used VTK 9.7.1 and the development snapshot above; no ParaView
+release was tested.
 
 **Correction concerning temporal FieldData:** the earlier investigation also
 found truncation of fVTKHDF's former flattened multicomponent temporal FieldData stream.

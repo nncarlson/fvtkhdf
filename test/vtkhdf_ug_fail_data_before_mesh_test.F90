@@ -24,5 +24,6 @@ program vtkhdf_ug_fail_data_before_mesh_test
   ! Must fail: static data writes require mesh geometry and topology first.
   call vizfile%write_cell_data('cell-radius', [1.0_r8], attribute='Scalars')
 
-  error stop 'expected data-before-mesh assertion'
+  ! Return successfully if the expected assertion did not fire.
+  call test_env_finalize()
 end program vtkhdf_ug_fail_data_before_mesh_test
