@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28..3.30)
 
-project(fVTKHDF VERSION 0.6.1 LANGUAGES Fortran C)
+project(fVTKHDF VERSION 0.7.0 LANGUAGES Fortran C)
 
 # CMake does not currently provide the PIC flag for LLVMFlang on Linux.
 # LLVMFlang 23 requires it for shared-library builds; older tested versions

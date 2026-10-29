@@ -80,6 +80,25 @@ for details.
 ## Documentation
 See the [Reference Manual](https://nncarlson.github.io/fvtkhdf/).
 
+For local documentation work, install `sphinx`, `furo`, and `sphinx-autobuild`,
+then run from the repository root:
+
+```sh
+sphinx-autobuild doc/sphinx build-doc/doc/sphinx/html
+```
+
+Open the local URL printed by the command. Changes to the documentation rebuild
+and reload the preview automatically. No CMake configuration or compiler is
+required. For a single build, use:
+
+```sh
+sphinx-build -b html doc/sphinx build-doc/doc/sphinx/html
+```
+
+CMake builds configured with `-DBUILD_HTML=ON` can also use
+`cmake --build <build-dir> --target docs`.
+
+
 
 ## Installation
 ### Prerequisites
