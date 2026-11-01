@@ -4,11 +4,15 @@ The vtkhdf_mb_file_type module
 This module defines the ``vtkhdf_mb_file`` derived type for writing
 VTKHDF MultiBlockDataSet files.
 
-A MultiBlockDataSet file contains a flat collection of named
-UnstructuredGrid blocks; hierarchical nesting is not supported.
+MultiBlockDataSet is a composite VTK dataset: a container for simple VTK
+datasets. This interface supports a flat collection of named UnstructuredGrid
+blocks; hierarchical nesting and other simple VTK dataset types are not
+supported.
 
-Each block behaves semantically like a ``vtkhdf_ug_file`` dataset; each with
-its own selected mode, mesh and associated cell, point and field datasets.
+Each block has the same semantics as a VTK dataset written by
+``vtkhdf_ug_file``, with its own selected mode, mesh, and associated cell,
+point, and field datasets. Modes and data belong to the individual blocks,
+rather than to the container.
 However, all temporal blocks share a common timeline.
 
 As in ``vtkhdf_ug_file``, partitions correspond 1:1 with MPI ranks.
@@ -102,7 +106,12 @@ Cell, Point, and Field Data
 ---------------------------
 Except for the added block handle, all arguments and semantics are the
 same as for ``vtkhdf_ug_file``; see its description for details omitted
-here.
+here. Field data values, array interpretation, and reuse rules are described
+in :doc:`field_data`.
+
+For field data, ``file`` is a ``vtkhdf_mb_file`` object, and each registration
+or write takes the block handle returned by ``file%add_block`` as its first
+argument, as shown below.
 
 Within each block, cell data, point data, and field data have their
 own namespaces. Names are normalized and deduplicated exactly as in
@@ -110,7 +119,7 @@ own namespaces. Names are normalized and deduplicated exactly as in
 
 If multiple blocks contain mesh-centered datasets with the same name and
 association (cell or point), ParaView treats them as a single variable across
-the composite dataset. Selecting that variable uses the dataset from each
+the composite VTK dataset. Selecting that variable uses the dataset from each
 block that contains it. Datasets with the same name and association should
 therefore represent the same quantity and have compatible structure (e.g.,
 same type and number of components).

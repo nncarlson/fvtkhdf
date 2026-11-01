@@ -11,8 +11,31 @@ A serial build is also available.
    :caption: Reference Manual
 
    overview
-   ug
-   image
-   mb
+   common
+   field_data
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Structured VTK Dataset Types
+
+   Common Interface <structured>
+   ImageData <image>
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Unstructured VTK Dataset Types
+
+   UnstructuredGrid <ug>
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Composite VTK Dataset Types
+
+   MultiBlockDataSet <mb>
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Reference and Guides
+
    vtk_cell_types
    stitching

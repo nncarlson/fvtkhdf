@@ -48,8 +48,8 @@ File Creation and Management
 
 Writer Modes
 ~~~~~~~~~~~~
-The shared mode constants are available through ``vtkhdf_ug_file_type`` or
-directly from ``vtkhdf_file_modes``. The original names ``UG_STATIC``,
+The mode constants are exported by ``vtkhdf_ug_file_type``.
+The original names ``UG_STATIC``,
 ``UG_FIXED_MESH``, ``UG_MOVING_MESH``, and ``UG_DYNAMIC_MESH`` remain available
 as compatibility aliases with the same values.
 
@@ -250,62 +250,8 @@ step must be started before temporal datasets are written.
 
 Field data
 ----------
-Writing field data is similar to cell and point data, and follows the
-same static/temporal pattern, but with some notable differences:
-
-* Field data is not tied to mesh entities, and its writing is not ordered
-  with respect to mesh writing. *Scalars*, rank-1 arrays, and rank-2
-  arrays are supported for ``int32``, ``int64``, ``real32``, and
-  ``real64`` types.
-
-* In MPI builds, all field-data calls remain collective. However, only
-  rank 0 (the root) contributes the written payload, but all ranks must
-  call the same method in the same order and pass ``array`` arguments
-  with matching type, kind, and shape. On non-root ranks ``array`` values
-  are never referenced.
-
-* For rank-1 ``array``, ``as_vector=.true.`` causes the data to interpreted
-  as a rank-2 array with shape (`n`,1). This conforms to how Paraview
-  naturally understands geometric vectors.
-
-* The shape (rank and extents) of temporal field data may vary from step
-  to step.
-
-Temporal FieldData is stored as a two-dimensional HDF5 dataset in
-tuple-by-component order. Both dimensions are extendible. New writes append
-tuples and, when necessary, expand the component dimension. Earlier tuples
-then have unused padding columns. No maximum component count is required at
-registration. Per-step ``FieldDataSizes`` metadata specifies the actual
-component and tuple counts; ``FieldDataOffsets`` is measured in tuple rows.
-Padding is excluded by these sizes, and omitted writes reuse the preceding
-offset and sizes.
-
-.. code-block:: fortran
-
-   use vtkhdf_ug_file_type
-   type(vtkhdf_ug_file) :: file
-   type(vtkhdf_field_data_handle) :: field_var
-
-``call file%write_field_data(name, array [, as_vector])``
-   Write ``array`` to a new static field dataset ``name``.
-   This is allowed only when the selected ``mode`` is ``VTKHDF_STATIC``.
-
-``field_var = file%register_temporal_field_data(name, mold)``
-   Register ``name`` as a temporal field dataset and return an opaque handle.
-   The type and kind of the *scalar* ``mold`` determine the dataset type; its
-   value is ignored. The returned handle is passed to later temporal writes.
-
-``call file%write_field_data(field_var, array [, as_vector])``
-   Write ``array`` to the temporal field dataset identified by the handle
-   ``field_var``, and associate it with the current time step.
-
-   If a temporal field dataset is not written for a time step its most recently
-   written value, if any, is used. Before the first write, ommission yields
-   an empty field data for that step. Writing the same temporal dataset more
-   than once within a single time step is an error.
-
-.. note::
-   String-valued field data is not currently supported by VTKHDF/ParaView.
+See :doc:`field_data` for the shared static and temporal field data interface,
+supported values, array interpretation, and MPI requirements.
 
 Workflow by Mode
 ----------------
