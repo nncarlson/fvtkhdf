@@ -21,7 +21,7 @@ program vtkhdf_image_test
   type(vtkhdf_field_data_handle) :: field_var, history_var, ug_field_var, ug_history_var
   type(vtkhdf_field_data_handle) :: variable_fields(4), ug_variable_fields(4), never_written, ug_never_written
   integer :: rank, nproc, stat, j, step
-  integer(int32) :: bounds(2,3), dims(3), lower(3)
+  integer(int32) :: bounds(3,2), dims(3), lower(3)
   character(:), allocatable :: errmsg
   character(32) :: filename
   real(real64) :: matrix(3,3)
@@ -30,8 +30,8 @@ program vtkhdf_image_test
   call test_env_init(rank,nproc)
   lower = [2,-3,4]
   dims = [7,5,4]
-  bounds(1,:) = lower
-  bounds(2,:) = lower+dims-1
+  bounds(:,1) = lower
+  bounds(:,2) = lower+dims-1
   matrix = reshape([1.0_real64,0.2_real64,0.0_real64, 0.4_real64,2.0_real64,0.3_real64, &
       0.1_real64,0.5_real64,1.5_real64],[3,3])
   call create_ug_reference('image_fields_static_ug.vtkhdf',VTKHDF_STATIC)
@@ -64,8 +64,8 @@ program vtkhdf_image_test
     case (7)
       lower = [-2,-3,-4]
     end select
-    bounds(1,:) = lower
-    bounds(2,:) = lower+dims-1
+    bounds(:,1) = lower
+    bounds(:,2) = lower+dims-1
     write(filename,'(a,i0,a)') 'image_dim_',j,'.vtkhdf'
     call create_file(trim(filename), VTKHDF_STATIC)
     call file%write_mesh(bounds,[0.0,0.0,0.0],[1.0,1.0,1.0])
@@ -74,8 +74,8 @@ program vtkhdf_image_test
   end do
   lower = 0
   dims = [7,5,4]
-  bounds(1,:) = lower
-  bounds(2,:) = dims-1
+  bounds(:,1) = lower
+  bounds(:,2) = dims-1
   call create_ug_reference('image_fields_temporal_ug.vtkhdf',VTKHDF_FIXED_MESH)
   call create_file('image_temporal.vtkhdf',VTKHDF_FIXED_MESH,64_int64)
   call file%write_mesh(bounds,[0.0_real64,0.0_real64,0.0_real64],[1.0_real64,1.0_real64,1.0_real64])
@@ -114,7 +114,7 @@ program vtkhdf_image_test
   cell_var = file%register_temporal_cell_data('empty',0.0_real64)
   allocate(empty(0,0,0))
   call file%start_time_step(0.0)
-  bounds(2,1) = -1
+  bounds(1,2) = -1
   call file%write_cell_data(cell_var,empty,array_origin=[0,0,0],write_bounds=bounds)
   call file%write_cell_data(cell_var,empty,array_origin=[0,0,0],write_bounds=bounds)
   ! START also finalizes the previous step. A new all-empty call must reserve
@@ -123,8 +123,8 @@ program vtkhdf_image_test
   call file%write_cell_data(cell_var,empty,array_origin=[0,0,0],write_bounds=bounds)
   call file%start_time_step(2.0)
   call file%close()
-  bounds(1,:) = 0
-  bounds(2,:) = [2,1,1]
+  bounds(:,1) = 0
+  bounds(:,2) = [2,1,1]
   call create_file('image_numeric_temporal.vtkhdf',VTKHDF_FIXED_MESH)
   call file%write_mesh(bounds,[0.0,0.0,0.0],[1.0,1.0,1.0])
 #:for index in range(1,6)
@@ -172,16 +172,16 @@ contains
     type(vtkhdf_cell_data_handle) :: cells(4), static_cells(3)
     type(vtkhdf_point_data_handle) :: points(4)
     type(vtkhdf_field_data_handle) :: fields(2)
-    integer(int32) :: selected(2,3), cell_bounds(2,3), point_bounds(2,3)
+    integer(int32) :: selected(3,2), cell_bounds(3,2), point_bounds(3,2)
     integer(int32) :: cell_values(2,1,1), point_values(3,2,1)
     integer :: j, x
     character(3), parameter :: point_names(4) = ['   ','   ','a/b','a.b']
     call create_file('image_registration_names.vtkhdf',VTKHDF_FIXED_MESH)
-    point_bounds = reshape([0,2,0,1,0,0],[2,3])
+    point_bounds = reshape([0,0,0,2,1,0],[3,2])
     call file%write_mesh(point_bounds,[0.,0.,0.],[1.,1.,1.])
     ! Keep the returned identity when adding blocks after other registrations.
     selected = 0
-    if (rank /= 0) selected(2,1) = -1
+    if (rank /= 0) selected(1,2) = -1
     call file%write_cell_data('before',reshape([91+rank],[1,1,1]),[0,0,0],selected,handle=static_cells(1))
     cells(1) = file%register_temporal_cell_data('before',0_int32)
     cells(2) = file%register_temporal_cell_data('before',0_int32)
@@ -193,14 +193,14 @@ contains
     do j = 1, 2
       fields(j) = file%register_temporal_field_data('label',0_int32)
     end do
-    selected(:,1) = 1
-    if (rank /= 0) selected(2,1) = 0
+    selected(1,:) = 1
+    if (rank /= 0) selected(1,2) = 0
     call file%write_cell_data(static_cells(1),reshape([92+rank],[1,1,1]),[1,0,0],selected)
     ! A static field may also be created after temporal registrations.
     do x = 0, 1
       selected = 0
-      selected(:,1) = x
-      if (rank /= 0) selected(2,1) = x-1
+      selected(1,:) = x
+      if (rank /= 0) selected(1,2) = x-1
       if (x == 0) then
         call file%write_cell_data('after',reshape([93+rank],[1,1,1]),[x,0,0],selected,handle=static_cells(2))
       else
@@ -210,18 +210,18 @@ contains
     ! The same static label creates a distinct field, also addressed by handle.
     do x = 0, 1
       selected = 0
-      selected(:,1) = x
-      if (rank /= 0) selected(2,1) = x-1
+      selected(1,:) = x
+      if (rank /= 0) selected(1,2) = x-1
       if (x == 0) then
         call file%write_cell_data('before',reshape([95+rank],[1,1,1]),[x,0,0],selected,handle=static_cells(3))
       else
         call file%write_cell_data(static_cells(3),reshape([96+rank],[1,1,1]),[x,0,0],selected)
       end if
     end do
-    cell_bounds = reshape([0,1,0,0,0,0],[2,3])
+    cell_bounds = reshape([0,0,0,1,0,0],[3,2])
     if (rank /= 0) then
-      cell_bounds(2,1) = -1
-      point_bounds(2,1) = -1
+      cell_bounds(1,2) = -1
+      point_bounds(1,2) = -1
     end if
     call file%start_time_step(0.0)
     do j = 1, 4
@@ -236,12 +236,12 @@ contains
     call file%start_time_step(1.0)
     call file%close()
     call create_file('image_static_names.vtkhdf')
-    point_bounds = reshape([0,2,0,1,0,0],[2,3])
+    point_bounds = reshape([0,0,0,2,1,0],[3,2])
     call file%write_mesh(point_bounds,[0.,0.,0.],[1.,1.,1.])
-    cell_bounds = reshape([0,1,0,0,0,0],[2,3])
+    cell_bounds = reshape([0,0,0,1,0,0],[3,2])
     if (rank /= 0) then
-      cell_bounds(2,1) = -1
-      point_bounds(2,1) = -1
+      cell_bounds(1,2) = -1
+      point_bounds(1,2) = -1
     end if
     ! A one-block write needs no handle. Repeating its label always creates
     ! another field, even when its numeric kind or component count differs.
@@ -264,7 +264,7 @@ contains
     type(vtkhdf_cell_data_handle) :: image_cells(12), ug_cells(12)
     type(vtkhdf_point_data_handle) :: image_points(12), ug_points(12)
     type(vtkhdf_field_data_handle) :: image_fields(12), ug_fields(12)
-    integer :: mode, j, value, cells(2,3), points(2,3)
+    integer :: mode, j, value, cells(3,2), points(3,2)
     integer :: cell_values(1,1,1), point_values(2,2,2)
     character(:), allocatable :: suffix
     do mode = VTKHDF_STATIC, VTKHDF_FIXED_MESH
@@ -272,12 +272,12 @@ contains
       if (mode == VTKHDF_FIXED_MESH) suffix = 'temporal'
       call create_ug_reference('image_names_'//suffix//'_ug.vtkhdf',mode)
       call create_file('image_names_'//suffix//'.vtkhdf',mode)
-      points = reshape([0,1,0,1,0,1],[2,3])
+      points = reshape([0,0,0,1,1,1],[3,2])
       call file%write_mesh(points,[0.,0.,0.],[1.,1.,1.])
       cells = 0
       if (rank /= 0) then
-        cells(2,1) = -1
-        points(2,1) = -1
+        cells(1,2) = -1
+        points(1,2) = -1
       end if
       do j = 1, size(labels)
         value = 100+j+rank
@@ -332,7 +332,7 @@ contains
     type(vtkhdf_ctx) :: ctx
     type(vtkhdf_structured) :: static_grid, temporal_grid
     integer(hid_t) :: file_id, parent_id, fapl
-    integer(int32) :: selected(2,3)
+    integer(int32) :: selected(3,2)
     integer :: ierr, index
     integer(int32) :: values(1,1,1)
 #ifdef USE_MPI
@@ -351,10 +351,10 @@ contains
     ! can already initialize temporal attribute storage for this mode.
     call temporal_grid%init(parent_id,'leaf_temporal',ctx,'StructuredGrid',mode=VTKHDF_MOVING_MESH)
     if (static_grid%root() == temporal_grid%root()) error stop 'leaves share an owner'
-    call static_grid%define_grid(reshape([0,1,0,1,0,0],[2,3]))
-    call temporal_grid%define_grid(reshape([0,1,0,1,0,0],[2,3]))
+    call static_grid%define_grid(reshape([0,0,0,1,1,0],[3,2]))
+    call temporal_grid%define_grid(reshape([0,0,0,1,1,0],[3,2]))
     selected = 0
-    if (rank /= 0) selected(2,1) = -1
+    if (rank /= 0) selected(1,2) = -1
     values = 11+rank
     call static_grid%write_cell_data('value',values,[0,0,0],selected)
     index = temporal_grid%register_temporal_cell_data('value',0_int32)
@@ -435,22 +435,22 @@ contains
   ! need not follow a Cartesian rank arrangement, and some ranks are empty.
   subroutine slab(lo,extent,block,phase,selected,owner)
     integer, intent(in) :: lo(3), extent(3), block, phase
-    integer, intent(out) :: selected(2,3), owner
+    integer, intent(out) :: selected(3,2), owner
     integer :: cuts(0:3)
     cuts = [0,extent(1)/3,2*extent(1)/3,extent(1)]
     if (phase > 0) cuts = [0,1,extent(1)-1,extent(1)]
-    selected(1,:) = lo
-    selected(2,:) = lo+extent-1
-    selected(:,1) = [lo(1)+cuts(block-1),lo(1)+cuts(block)-1]
+    selected(:,1) = lo
+    selected(:,2) = lo+extent-1
+    selected(1,:) = [lo(1)+cuts(block-1),lo(1)+cuts(block)-1]
     owner = modulo(block-1+phase,nproc)
-    if (rank /= owner) selected(2,1) = selected(1,1)-1
+    if (rank /= owner) selected(1,2) = selected(1,1)-1
   end subroutine
 
 #:for kind, decl in nums
   subroutine static_${kind}$(lo,extent)
     integer, intent(in) :: lo(3), extent(3)
     ${decl}$, allocatable :: a(:,:,:), v(:,:,:,:)
-    integer :: association, n(3), origin(3), selected(2,3), owner, b, i, j, k, c, q(3)
+    integer :: association, n(3), origin(3), selected(3,2), owner, b, i, j, k, c, q(3)
     character(:), allocatable :: scalar_name, vector_name
     type(vtkhdf_cell_data_handle) :: cells(2)
     type(vtkhdf_point_data_handle) :: points(2)
@@ -515,7 +515,7 @@ contains
   subroutine simple_fields(lo,extent)
     integer, intent(in) :: lo(3), extent(3)
     real(real64), allocatable :: a(:,:,:), v(:,:,:,:)
-    integer :: n(3), association, i,j,k,c, selected(2,3)
+    integer :: n(3), association, i,j,k,c, selected(3,2)
     do association = 1, 2
       n = extent
       if (association == 1) n = max(1,n-1)
@@ -530,9 +530,9 @@ contains
           end do
         end do
       end do
-      selected(1,:) = lo
-      selected(2,:) = lo+n-1
-      if (rank /= 0) selected(2,1) = lo(1)-1
+      selected(:,1) = lo
+      selected(:,2) = lo+n-1
+      if (rank /= 0) selected(1,2) = lo(1)-1
       if (association == 1) then
         if (rank == 0) then
           ! Default whole-array selection and an explicitly noncontiguous actual.
@@ -556,7 +556,7 @@ contains
   subroutine numeric_${kind}$(index)
     integer, intent(in) :: index
     ${decl}$, allocatable :: a(:,:,:),v(:,:,:,:)
-    integer :: n(3), association, i,j,k,c,selected(2,3)
+    integer :: n(3), association, i,j,k,c,selected(3,2)
     do association = 1,2
       n = [3,2,2]
       if (association == 1) n = [2,1,1]
@@ -571,9 +571,9 @@ contains
           end do
         end do
       end do
-      selected(1,:) = 0
-      selected(2,:) = n-1
-      if (rank /= 0) selected(2,1) = -1
+      selected(:,1) = 0
+      selected(:,2) = n-1
+      if (rank /= 0) selected(1,2) = -1
       if (association == 1) then
         call file%write_cell_data(numeric_cells(1,index),a,[0,0,0],selected)
         call file%write_cell_data(numeric_cells(2,index),v,[0,0,0],selected)
@@ -589,13 +589,13 @@ contains
   subroutine collision_fields()
     type(vtkhdf_cell_data_handle) :: first, second
     real :: a(6,4,3)
-    integer :: selected(2,3), b
+    integer :: selected(3,2), b
     a = 1
     do b = 1,2
-      selected(1,:) = [2,-3,4]
-      selected(2,:) = [7,0,6]
-      selected(:,1) = [2+3*(b-1),4+3*(b-1)]
-      if (rank /= 0) selected(2,1) = selected(1,1)-1
+      selected(:,1) = [2,-3,4]
+      selected(:,2) = [7,0,6]
+      selected(1,:) = [2+3*(b-1),4+3*(b-1)]
+      if (rank /= 0) selected(1,2) = selected(1,1)-1
       if (b == 1) then
         call file%write_cell_data('a/b',a,[2,-3,4],selected,handle=first)
         call file%write_cell_data('a.b',2*a,[2,-3,4],selected,handle=second)
@@ -609,18 +609,18 @@ contains
   subroutine static_temporal(name)
     character(*), intent(in) :: name
     real(real64) :: a(6,4,3)
-    integer :: selected(2,3)
+    integer :: selected(3,2)
     a = 17
-    selected(1,:) = 0
-    selected(2,:) = [5,3,2]
-    if (rank /= 0) selected(2,1) = -1
+    selected(:,1) = 0
+    selected(:,2) = [5,3,2]
+    if (rank /= 0) selected(1,2) = -1
     call file%write_cell_data(name,a,[0,0,0],selected)
   end subroutine
 
   subroutine temporal_cell(phase)
     integer, intent(in) :: phase
     real(real64) :: a(6,4,3)
-    integer :: i,j,k,b,owner,selected(2,3)
+    integer :: i,j,k,b,owner,selected(3,2)
     do k=1,3
       do j=1,4
         do i=1,6
@@ -637,7 +637,7 @@ contains
   subroutine temporal_other(phase)
     integer, intent(in) :: phase
     integer(int64) :: a(6,4,3)
-    integer :: i,j,k,b,owner,selected(2,3)
+    integer :: i,j,k,b,owner,selected(3,2)
     do k=1,3
       do j=1,4
         do i=1,6
@@ -654,7 +654,7 @@ contains
   subroutine temporal_point(phase)
     integer, intent(in) :: phase
     real(real32) :: a(3,7,5,4)
-    integer :: i,j,k,c,b,owner,selected(2,3)
+    integer :: i,j,k,c,b,owner,selected(3,2)
     do k=1,4
       do j=1,5
         do i=1,7

@@ -192,7 +192,7 @@ contains
 #:for kind, decl in [('real32','real(real32)'), ('real64','real(real64)')]
   subroutine write_mesh_${kind}$(this, point_bounds, origin, spacing, direction)
     class(vtkhdf_image_file), intent(inout) :: this
-    integer(int32), intent(in) :: point_bounds(2,3)
+    integer(int32), intent(in) :: point_bounds(3,2)
     ${decl}$, intent(in) :: origin(3), spacing(3)
     ${decl}$, intent(in), optional :: direction(3,3)
     real(real64) :: matrix(3,3)
@@ -205,7 +205,8 @@ contains
     INSIST(this%ctx%identical(real(origin,real64)))
     INSIST(this%ctx%identical(real(spacing,real64)))
     INSIST(this%ctx%identical(reshape(matrix,[9])))
-    call h5_write_attr(this%ctx, this%grid%root(), 'WholeExtent', reshape(point_bounds,[6]))
+    ! VTK interleaves the lower and upper bounds for each axis.
+    call h5_write_attr(this%ctx, this%grid%root(), 'WholeExtent', reshape(transpose(point_bounds),[6]))
     call h5_write_attr(this%ctx, this%grid%root(), 'Origin', real(origin,real64))
     call h5_write_attr(this%ctx, this%grid%root(), 'Spacing', real(spacing,real64))
     ! VTK stores the nine matrix entries in row-major order.
@@ -239,7 +240,7 @@ contains
     character(*), intent(in) :: name
     ${decl}$, contiguous, intent(in) :: array(${','.join([':']*rank)}$)
     integer(int32), intent(in) :: array_origin(3)
-    integer(int32), intent(in), optional :: write_bounds(2,3)
+    integer(int32), intent(in), optional :: write_bounds(3,2)
     character(*), intent(in), optional :: attribute
     type(vtkhdf_${loc}$_data_handle), intent(out), optional :: handle
     integer :: index
@@ -269,7 +270,7 @@ contains
     type(vtkhdf_${loc}$_data_handle), intent(in) :: var
     ${decl}$, contiguous, intent(in) :: array(${','.join([':']*rank)}$)
     integer(int32), intent(in) :: array_origin(3)
-    integer(int32), intent(in), optional :: write_bounds(2,3)
+    integer(int32), intent(in), optional :: write_bounds(3,2)
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
     call this%grid%write_${loc}$_data(var%get_index(this%grid%root()), array, array_origin, write_bounds)

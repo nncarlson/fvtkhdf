@@ -33,10 +33,10 @@ Mesh Data
    registering point/cell data or starting time stepping. All ranks must
    supply identical arguments.
 
-   * ``point_bounds(2,3)``: inclusive global logical point bounds of type
-     ``integer(int32)``. Row 1 contains lower bounds and row 2 contains upper
-     bounds, in x, y, z order. Each upper bound must be at least its lower
-     bound, and at least one direction must contain more than one point.
+   * ``point_bounds(3,2)``: inclusive global logical point bounds of type
+     ``integer(int32)``. Column 1 contains lower bounds and column 2 contains
+     upper bounds, in x, y, z order. Each upper bound must be at least its
+     lower bound, and at least one direction must contain more than one point.
    * ``origin(3)``: physical position of logical index zero, including when
      zero lies outside the global bounds.
    * ``spacing(3)``: physical spacing along the logical axes.
@@ -100,15 +100,14 @@ The following serial example defines an XY grid with eight by six points:
    use, intrinsic :: iso_fortran_env, only: int32, real64
    use vtkhdf_image_file_type
    type(vtkhdf_image_file) :: file
-   integer(int32) :: point_bounds(2,3)
+   integer(int32) :: point_bounds(3,2)
    integer :: stat
    character(:), allocatable :: errmsg
 
    call file%create('image.vtkhdf',stat,errmsg)
    if (stat /= 0) error stop errmsg
-   point_bounds(:,1) = [0,7]
-   point_bounds(:,2) = [0,5]
-   point_bounds(:,3) = [0,0]
+   point_bounds(:,1) = [0,0,0]
+   point_bounds(:,2) = [7,5,0]
    call file%write_mesh(point_bounds, &
        origin=[0.0_real64,0.0_real64,0.0_real64], &
        spacing=[0.1_real64,0.2_real64,1.0_real64])

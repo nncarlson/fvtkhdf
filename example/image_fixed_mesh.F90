@@ -11,7 +11,7 @@ program image_fixed_mesh_example
   type(vtkhdf_field_data_handle) :: energy_var
   real(real64) :: temperature(4,3,1)
   integer :: rank, nproc, stat, step, i, j
-  integer :: point_bounds(2,3), cell_origin(3), material(4,3,1)
+  integer :: point_bounds(3,2), cell_origin(3), material(4,3,1)
   character(:), allocatable :: errmsg
 #ifdef USE_MPI
   call MPI_Init(stat)
@@ -21,8 +21,8 @@ program image_fixed_mesh_example
   rank = 0
   nproc = 1
 #endif
-  point_bounds(1,:) = [0,0,0]
-  point_bounds(2,:) = [4*nproc,3,0]
+  point_bounds(:,1) = [0,0,0]
+  point_bounds(:,2) = [4*nproc,3,0]
 #ifdef USE_MPI
   call file%create('image_fixed_mesh.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=VTKHDF_FIXED_MESH)
 #else

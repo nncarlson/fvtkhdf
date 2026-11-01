@@ -14,7 +14,7 @@ program vtkhdf_image_fail_test
   type(vtkhdf_cell_data_handle) :: var
   type(vtkhdf_field_data_handle) :: field_var
   integer :: rank,nproc,stat,mode
-  integer :: bounds(2,3), selected(2,3)
+  integer :: bounds(3,2), selected(3,2)
   real(real64) :: a(3,2,1), v(2,3,2,1)
   character(64) :: scenario
   character(:), allocatable :: errmsg
@@ -44,8 +44,8 @@ program vtkhdf_image_fail_test
     call test_env_finalize()
     stop
   end if
-  bounds(1,:) = 0
-  bounds(2,:) = [3,2,0]
+  bounds(:,1) = 0
+  bounds(:,2) = [3,2,0]
   a = 1
   v = 1
   if (scenario == 'before_mesh') then
@@ -54,7 +54,7 @@ program vtkhdf_image_fail_test
   if (scenario == 'register_before_mesh') then
     var = file%register_temporal_cell_data('bad',0.0_real64)
   end if
-  if (scenario == 'geometry_mismatch') bounds(2,1) = 3+rank
+  if (scenario == 'geometry_mismatch') bounds(1,2) = 3+rank
   call file%write_mesh(bounds,[0.0,0.0,0.0],[1.0,1.0,1.0])
   var = file%register_temporal_cell_data('data',0.0_real64)
   field_var = file%register_temporal_field_data('field',0.0_real64)
@@ -72,12 +72,12 @@ program vtkhdf_image_fail_test
   call file%start_time_step(0.0)
   select case (trim(scenario))
   case ('bounds')
-    selected(1,:) = 0
-    selected(2,:) = [2,1,0]
-    if (rank == 0) selected(2,1) = 3
+    selected(:,1) = 0
+    selected(:,2) = [2,1,0]
+    if (rank == 0) selected(1,2) = 3
     call file%write_cell_data(var,a,[0,0,0],selected)
   case ('source')
-    call file%write_cell_data(var,a,[1,0,0],reshape([0,2,0,1,0,0],[2,3]))
+    call file%write_cell_data(var,a,[1,0,0],reshape([0,0,0,2,1,0],[3,2]))
   case ('type')
     call file%write_cell_data(var,real(a,real32),[0,0,0])
   case ('components')

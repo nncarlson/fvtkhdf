@@ -93,8 +93,8 @@ Create a static field and write one rectangular region per calling rank.
 * ``array``: rank-3 scalar or rank-4 multicomponent data, as above.
 * ``array_origin(3)``: global logical indices of the first spatial
   element of ``array``, independently of its Fortran lower bounds.
-* ``write_bounds(2,3)``: optional inclusive global bounds selecting the
-  region to write. Row 1 gives lower bounds and row 2 gives upper
+* ``write_bounds(3,2)``: optional inclusive global bounds selecting the
+  region to write. Column 1 gives lower bounds and column 2 gives upper
   bounds. The selection must lie within both the supplied array and
   the global bounds for the association. If omitted, the entire array
   is written.
@@ -207,13 +207,12 @@ halos excluded by ``owned``:
 .. code-block:: fortran
 
    real(real64) :: pressure(0:5,0:4,1)
-   integer(int32) :: owned(2,3)
+   integer(int32) :: owned(3,2)
    type(vtkhdf_cell_data_handle) :: pressure_var
 
    ! Interior subscripts (1:4,1:3,1) map to global indices (10:13,-2:0,0).
-   owned(:,1) = [10,13]
-   owned(:,2) = [-2,0]
-   owned(:,3) = [0,0]
+   owned(:,1) = [10,-2,0]
+   owned(:,2) = [13,0,0]
    call file%write_cell_data('Pressure',pressure, &
        array_origin=[9,-3,0],write_bounds=owned,handle=pressure_var)
    call file%write_cell_data(pressure_var,other_pressure, &

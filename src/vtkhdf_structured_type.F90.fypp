@@ -55,7 +55,7 @@ module vtkhdf_structured_type
     integer(hid_t) :: root_id = H5I_INVALID_HID, steps_id = H5I_INVALID_HID
     type(mesh_data_list) :: cell_data, point_data
     type(field_data_list) :: field_data
-    integer(int32) :: bounds(2,3,2) = 0
+    integer(int32) :: bounds(3,2,2) = 0
     integer(int64) :: dims(3,2) = 0, data_chunk_bytes = 128_int64*1024
     logical :: active(3) = .false., geometry_defined = .false., step_open = .false.
     integer :: nsteps = -1
@@ -199,20 +199,20 @@ contains
 
   subroutine define_grid(this, point_bounds)
     class(vtkhdf_structured), intent(inout) :: this
-    integer(int32), intent(in) :: point_bounds(2,3)
+    integer(int32), intent(in) :: point_bounds(3,2)
     integer(int64) :: total
     integer :: j
     INSIST(this%root_id >= 0)
     INSIST(.not.this%geometry_defined)
     INSIST(this%nsteps <= 0)
     INSIST(this%ctx%identical(reshape(point_bounds,[6])))
-    INSIST(all(point_bounds(2,:) >= point_bounds(1,:)))
+    INSIST(all(point_bounds(:,2) >= point_bounds(:,1)))
     this%bounds(:,:,POINT) = point_bounds
     this%bounds(:,:,CELL) = point_bounds
-    this%active = point_bounds(2,:) > point_bounds(1,:)
+    this%active = point_bounds(:,2) > point_bounds(:,1)
     INSIST(any(this%active)) ! one-, two-, or three-dimensional images
-    where (this%active) this%bounds(2,:,CELL) = point_bounds(2,:) - 1
-    this%dims(:,POINT) = int(point_bounds(2,:),int64) - int(point_bounds(1,:),int64) + 1
+    where (this%active) this%bounds(:,2,CELL) = point_bounds(:,2) - 1
+    this%dims(:,POINT) = int(point_bounds(:,2),int64) - int(point_bounds(:,1),int64) + 1
     this%dims(:,CELL) = max(1_int64, this%dims(:,POINT)-1)
     ! VTK represents each axis dimension using a C int. Products and file
     ! offsets are wider; reject overflow before any multiplication.
@@ -237,7 +237,7 @@ contains
     character(*), intent(in) :: name
     ${decl}$, contiguous, intent(in) :: array(${','.join([':']*rank)}$)
     integer(int32), intent(in) :: array_origin(3)
-    integer(int32), intent(in), optional :: write_bounds(2,3)
+    integer(int32), intent(in), optional :: write_bounds(3,2)
     character(*), intent(in), optional :: attribute
     integer, intent(out), optional :: index
     character(:), allocatable :: external_name, internal_name
@@ -347,7 +347,7 @@ contains
     integer, intent(in) :: index
     ${decl}$, contiguous, intent(in) :: array(${','.join([':']*rank)}$)
     integer(int32), intent(in) :: array_origin(3)
-    integer(int32), intent(in), optional :: write_bounds(2,3)
+    integer(int32), intent(in), optional :: write_bounds(3,2)
     integer :: ncomp
     integer(hsize_t) :: ms(3), mc(3), spatial_shape(3)
     integer(hsize_t), allocatable :: fs(:), fc(:)
@@ -516,28 +516,28 @@ contains
     integer, intent(in) :: index
     integer(hsize_t), intent(in) :: spatial_shape(3)
     integer(int32), intent(in) :: array_origin(3)
-    integer(int32), intent(in), optional :: write_bounds(2,3)
+    integer(int32), intent(in), optional :: write_bounds(3,2)
     integer(hsize_t), intent(out) :: mem_start(3), mem_count(3)
     integer(hsize_t), allocatable, intent(out) :: file_start(:), file_count(:)
     logical :: valid, empty
-    integer(int64) :: bounds(2,3), origin(3), file_origin(3)
+    integer(int64) :: bounds(3,2), origin(3), file_origin(3)
     origin = int(array_origin,int64)
-    bounds(1,:) = origin
-    bounds(2,:) = origin + spatial_shape - 1
+    bounds(:,1) = origin
+    bounds(:,2) = origin + spatial_shape - 1
     if (present(write_bounds)) bounds = int(write_bounds,int64)
-    empty = any(bounds(2,:) < bounds(1,:))
+    empty = any(bounds(:,2) < bounds(:,1))
     mem_start = 0
     mem_count = 0
     file_origin = 0
     if (.not.empty) then
-      valid = all(bounds(1,:) >= int(this%bounds(1,:,${assoc}$),int64)) .and. &
-          all(bounds(2,:) <= int(this%bounds(2,:,${assoc}$),int64))
+      valid = all(bounds(:,1) >= int(this%bounds(:,1,${assoc}$),int64)) .and. &
+          all(bounds(:,2) <= int(this%bounds(:,2,${assoc}$),int64))
       INSIST(this%ctx%global_all(valid))
-      valid = all(bounds(1,:) >= origin) .and. all(bounds(2,:) < origin + spatial_shape)
+      valid = all(bounds(:,1) >= origin) .and. all(bounds(:,2) < origin + spatial_shape)
       INSIST(this%ctx%global_all(valid))
-      mem_start = bounds(1,:) - origin
-      mem_count = bounds(2,:) - bounds(1,:) + 1
-      file_origin = bounds(1,:) - int(this%bounds(1,:,${assoc}$),int64)
+      mem_start = bounds(:,1) - origin
+      mem_count = bounds(:,2) - bounds(:,1) + 1
+      file_origin = bounds(:,1) - int(this%bounds(:,1,${assoc}$),int64)
     else
       ! Keep the same collective validation sequence as nonempty ranks.
       INSIST(this%ctx%global_all(.true.))
