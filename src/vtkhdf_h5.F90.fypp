@@ -18,6 +18,11 @@
 !! unrecoverable HDF5/filesystem failures trigger an immediate global
 !! MPI_Abort (via f90_assert) to prevent deadlocks and ensure file integrity.
 !!
+!! GNU_BUG20261103 forces packing with array constructors when passing
+!! noncontiguous arrays from SELECT RANK to HDF5's assumed-size buffers.
+!! https://github.com/nncarlson/fortran-compiler-tests/blob/master/gfortran-bugs/gfortran-20261103.f90
+!! Fixed in GNU 16.1.0.
+!!
 
 #include "vtkhdf_assert.inc"
 
@@ -172,9 +177,17 @@ contains
       rank (0)
         ierr = H5Dwrite(dset_id, ${s["h5type"]}$, [array], mem_space, file_space, dxpl)
       rank (1)
+#ifdef GNU_BUG20261103
+        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, [array], mem_space, file_space, dxpl)
+#else
         ierr = H5Dwrite(dset_id, ${s["h5type"]}$, array, mem_space, file_space, dxpl)
+#endif
       rank (2)
+#ifdef GNU_BUG20261103
+        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, [array], mem_space, file_space, dxpl)
+#else
         ierr = H5Dwrite(dset_id, ${s["h5type"]}$, array, mem_space, file_space, dxpl)
+#endif
       rank default
         INSIST(.false.)
       end select
@@ -360,9 +373,17 @@ contains
     rank (0)
       ierr = H5Awrite(attr_id, type_id, [value])
     rank (1)
+#ifdef GNU_BUG20261103
+      ierr = H5Awrite(attr_id, type_id, [value])
+#else
       ierr = H5Awrite(attr_id, type_id, value)
+#endif
     rank (2)
+#ifdef GNU_BUG20261103
+      ierr = H5Awrite(attr_id, type_id, [value])
+#else
       ierr = H5Awrite(attr_id, type_id, value)
+#endif
     rank default
       INSIST(.false.)
     end select
@@ -519,9 +540,17 @@ contains
     rank (0)
       ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl_id)
     rank (1)
+#ifdef GNU_BUG20261103
+      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl_id)
+#else
       ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl_id)
+#endif
     rank (2)
+#ifdef GNU_BUG20261103
+      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl_id)
+#else
       ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl_id)
+#endif
     rank default
       INSIST(.false.)
     end select
@@ -716,9 +745,17 @@ contains
     rank (0)
       ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl_id)
     rank (1)
+#ifdef GNU_BUG20261103
+      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl_id)
+#else
       ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl_id)
+#endif
     rank (2)
+#ifdef GNU_BUG20261103
+      ierr = H5Dwrite(dset_id, type_id, [array], mem_space_id, data_space_id, dxpl_id)
+#else
       ierr = H5Dwrite(dset_id, type_id, array, mem_space_id, data_space_id, dxpl_id)
+#endif
     rank default
       INSIST(.false.)
     end select

@@ -31,3 +31,11 @@ pkg-config --cflags --libs hdf5
 which h5cc
 which h5pcc
 ```
+
+## GNU compiler workaround
+
+All GNU compiler features in `fpm.toml` define `GNU_BUG20261103` to work around
+incorrect handling of noncontiguous arrays passed through `select rank`.
+With **GNU Fortran 16.1.0 or newer**, this define can be removed from the
+`gfortran.preprocess.cpp.macros` lists. Leaving it enabled is safe.
+CMake builds select the workaround automatically based on the compiler version.

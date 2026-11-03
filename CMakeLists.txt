@@ -84,6 +84,9 @@ if(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
 endif()
 if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
   add_compile_definitions(GNU_PR123899 GNU_PR128230)
+  if(CMAKE_Fortran_COMPILER_VERSION VERSION_LESS "16.1.0")
+    add_compile_definitions(GNU_BUG20261103)
+  endif()
 endif()
 
 # --- Subdirectories ---
