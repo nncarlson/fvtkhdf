@@ -40,8 +40,7 @@ File Creation and Management
    except that there is no file-level ``mode`` argument.
 
 ``call file%flush()``
-   Collectively flush the file's HDF5 buffers and request the operating
-   system to flush file buffers.
+   Flush the file's HDF5 buffers.
 
 ``call file%close()``
    Close the file and release internal resources. Users should always

@@ -9,6 +9,7 @@
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 
 source_root = Path(__file__).resolve().parents[2]
@@ -46,7 +47,8 @@ if (source_root / '.git').exists():
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-#extensions = ['sphinx_rtd_theme']
+sys.path.insert(0, str(Path(__file__).resolve().parent / '_ext'))
+extensions = ['method_doc']
 
 templates_path = ['_templates']
 exclude_patterns = []
@@ -61,7 +63,8 @@ html_theme = 'furo'
 html_sidebars = {
     "index": [] # This removes the sidebar ONLY from the index.html page
 }
-# html_static_path = ['_static']
+html_static_path = ['_static']
+html_css_files = ['custom.css']
 
 # get rid of navigation sidebar for single-page document
 #html_sidebars = { '**': [] }

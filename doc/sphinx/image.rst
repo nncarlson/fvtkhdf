@@ -33,8 +33,8 @@ Mesh Data
    registering point/cell data or starting time stepping. All ranks must
    supply identical arguments.
 
-   * ``point_bounds(3,2)``: inclusive global logical point bounds of type
-     ``integer(int32)``. Column 1 contains lower bounds and column 2 contains
+   * ``point_bounds(3,2)``: inclusive global logical point bounds of kind
+     ``int32``. Column 1 contains lower bounds and column 2 contains
      upper bounds, in x, y, z order. Each upper bound must be at least its
      lower bound, and at least one direction must contain more than one point.
    * ``origin(3)``: physical position of logical index zero, including when

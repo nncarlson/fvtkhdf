@@ -112,6 +112,22 @@ def equal(np, actual, expected):
 
 def check_layout(directory):
     np, h5py = dependencies()
+    with h5py.File(directory / "image_fill.vtkhdf") as f:
+        nproc = f["VTKHDF/PointData/static_real32"].shape[1] - 2
+        for association in ["PointData", "CellData"]:
+            for kind in ["int8", "int32", "int64", "real32", "real64"]:
+                for mode in ["static", "temporal"]:
+                    d = f[f"VTKHDF/{association}/{mode}_{kind}"]
+                    floating = kind.startswith("real")
+                    if floating:
+                        assert np.isnan(d.fillvalue)
+                    else:
+                        assert d.fillvalue == 0
+                    for step in range(2 if mode == "temporal" else 1):
+                        actual = d[step]
+                        expected = np.full_like(actual, np.nan if floating else 0)
+                        expected[step:step + nproc] = 7 + step
+                        np.testing.assert_array_equal(actual, expected)
     with h5py.File(directory / "image_static.vtkhdf") as f:
         g = f["VTKHDF"]
         assert g.attrs["WholeExtent"].dtype.itemsize == 4

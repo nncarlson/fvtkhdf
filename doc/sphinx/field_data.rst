@@ -14,7 +14,7 @@ Values and Interpretation
 -------------------------
 
 The ``array`` argument may be a scalar, a rank-1 array, or a rank-2 array of
-``integer(int32)``, ``integer(int64)``, ``real(real32)``, or ``real(real64)``.
+kind ``int32``, ``int64``, ``real32``, or ``real64``.
 The kind constants are available from ``iso_fortran_env``.
 
 VTK and ParaView interpret these values as tuples with one or more components:

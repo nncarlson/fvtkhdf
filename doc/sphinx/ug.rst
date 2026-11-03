@@ -44,7 +44,7 @@ File Creation and Management
    proper collective cleanup.
 
 ``call file%flush()``
-   Flush the file's HDF5 buffers and request the OS to flush the file buffers.
+   Flush the file's HDF5 buffers.
 
 Writer Modes
 ~~~~~~~~~~~~

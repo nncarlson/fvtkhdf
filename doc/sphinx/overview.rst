@@ -103,7 +103,7 @@ concurrently to a shared file.
 Key Architectural Features
 --------------------------
 * **Single-File Output:** All simulation data, including geometry,
-  connectivity, and temporal fields, is stored within a single `.vtkhdf` file.
+  connectivity, and temporal datasets, is stored within a single `.vtkhdf` file.
 * **Data placement:** UG and MB preserve mesh partitions. ImageData uses
   one global structured VTK dataset, assembled from caller-owned rectangular
   regions without recording rank partitions. The library performs no

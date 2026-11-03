@@ -32,6 +32,7 @@
 module vtkhdf_h5
 
   use,intrinsic :: iso_fortran_env
+  use,intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
   use vtkhdf_ctx_type
   use vtkhdf_h5_c_binding
   implicit none
@@ -202,6 +203,8 @@ contains
     integer(hsize_t), intent(in), optional :: maxdims(:)
     integer(hsize_t) :: chunks(size(dims)), remaining
     integer(hid_t) :: space_id, dcpl_id
+    real(real32), target :: fill32
+    real(real64), target :: fill64
     integer :: j, first, ierr
     INSIST(all(dims >= 0))
     INSIST(value_bytes > 0 .and. chunk_bytes > 0)
@@ -223,6 +226,17 @@ contains
     INSIST(dcpl_id >= 0)
     ierr = H5Pset_chunk(dcpl_id, size(chunks), chunks)
     INSIST(ierr >= 0)
+    ! Structured real fields expose unwritten locations as missing data.
+    ! Integer fields retain HDF5's default zero fill (including ghost masks).
+    if (type_id == H5T_NATIVE_FLOAT) then
+      fill32 = ieee_value(0.0_real32, ieee_quiet_nan)
+      ierr = H5Pset_fill_value(dcpl_id, type_id, c_loc(fill32))
+      INSIST(ierr >= 0)
+    else if (type_id == H5T_NATIVE_DOUBLE) then
+      fill64 = ieee_value(0.0_real64, ieee_quiet_nan)
+      ierr = H5Pset_fill_value(dcpl_id, type_id, c_loc(fill64))
+      INSIST(ierr >= 0)
+    end if
     dset_id = H5Dcreate(loc_id, name, type_id, space_id, dcpl_id=dcpl_id)
     INSIST(ctx%global_all(dset_id >= 0))
     ierr = H5Sclose(space_id)

@@ -1,0 +1,10 @@
+/* Keep paired signatures in one scrolling code block above their description. */
+.method-description {
+  margin-left: 2em;
+}
+
+/* Keep glossary signatures on one line and scroll long entries. */
+dl.glossary > dt {
+  overflow-x: auto;
+  white-space: nowrap;
+}

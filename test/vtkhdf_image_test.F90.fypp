@@ -166,8 +166,40 @@ program vtkhdf_image_test
   call nested_groups()
   call registration_names()
   call naming_parity()
+  call fill_values()
   call test_env_finalize()
 contains
+  subroutine fill_values()
+    type(vtkhdf_point_data_handle) :: points(5)
+    type(vtkhdf_cell_data_handle) :: cells(5)
+    integer(int32) :: extent(3,2)
+    integer :: step
+    extent(:,1) = 0
+    extent(:,2) = [nproc+1,0,0]
+    call create_file('image_fill.vtkhdf',VTKHDF_FIXED_MESH,8_int64)
+    call file%write_mesh(extent,[0.,0.,0.],[1.,1.,1.])
+#:for i in range(1,6)
+#:set kind, decl = nums[i-1]
+#:set cast = "real" if kind.startswith("real") else "int"
+    call file%write_point_data('static_${kind}$',reshape([${cast}$(7,${kind}$)],[1,1,1]),[rank,0,0])
+    call file%write_cell_data('static_${kind}$',reshape([${cast}$(7,${kind}$),${cast}$(7,${kind}$),${cast}$(7,${kind}$)],[3,1,1,1]),[rank,0,0])
+    points(${i}$) = file%register_temporal_point_data('temporal_${kind}$',${cast}$(0,${kind}$))
+    cells(${i}$) = file%register_temporal_cell_data('temporal_${kind}$',[${cast}$(0,${kind}$),${cast}$(0,${kind}$),${cast}$(0,${kind}$)])
+#:endfor
+    do step = 0, 1
+      call file%start_time_step(real(step,real64))
+#:for i in range(1,6)
+#:set kind, decl = nums[i-1]
+#:set cast = "real" if kind.startswith("real") else "int"
+      call file%write_point_data(points(${i}$),reshape([${cast}$(7+step,${kind}$)],[1,1,1]),[rank+step,0,0])
+      call file%write_cell_data(cells(${i}$), &
+          reshape([${cast}$(7+step,${kind}$),${cast}$(7+step,${kind}$),${cast}$(7+step,${kind}$)],[3,1,1,1]),[rank+step,0,0])
+#:endfor
+      call file%finalize_time_step()
+    end do
+    call file%close()
+  end subroutine
+
   subroutine registration_names()
     type(vtkhdf_cell_data_handle) :: cells(4), static_cells(3)
     type(vtkhdf_point_data_handle) :: points(4)
