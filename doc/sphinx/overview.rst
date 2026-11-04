@@ -35,7 +35,7 @@ of simple VTK datasets.
 Writer modes use the shared names
 ``VTKHDF_STATIC``, ``VTKHDF_FIXED_MESH``, ``VTKHDF_MOVING_MESH``, and
 ``VTKHDF_DYNAMIC_MESH``. The last three modes produce temporal VTK datasets.
-Each file-type module exports its supported subset: ImageData supports
+Each file-type module exports its supported subset: the structured writers support
 the first two, while UnstructuredGrid supports all four.
 
 Currently supported VTK dataset types:
@@ -45,10 +45,11 @@ Currently supported VTK dataset types:
   ``VTKHDF_DYNAMIC_MESH``) covering static, moving-mesh, and dynamic-mesh
   workflows for point, cell, and field data.
 
-* **ImageData**: fixed regular geometry and rectangular point/cell block
+* **ImageData, RectilinearGrid, and StructuredGrid**: fixed geometry and rectangular point/cell block
   writes, with static data and temporal replacement or reuse. See
   :doc:`structured` for the data-writing interface and :doc:`image` for
-  geometry and reader compatibility.
+  geometry and reader compatibility. The other geometry interfaces are described
+  in :doc:`rectilinear` and :doc:`structured_grid`.
 
 * **MultiBlockDataSet (MB)**: a composite type containing a flat collection
   of UnstructuredGrid blocks.
@@ -64,9 +65,8 @@ support rectangular block placement and incremental point/cell writes. See
 interface.
 
 The reference is organized into structured, unstructured, and composite VTK
-dataset types. RectilinearGrid and StructuredGrid are planned additions to
-the structured family; PartitionedDataSetCollection is a planned addition
-to the composite family. These writers are not yet available.
+dataset types. PartitionedDataSetCollection is a planned addition to the
+composite family.
 
 This library targets VTKHDF Version 2.8.
 See the individual VTK dataset chapters for reader requirements and verified
@@ -86,6 +86,12 @@ The available file writers are:
    * - ImageData
      - ``vtkhdf_image_file``
      - ``vtkhdf_image_file_type``
+   * - RectilinearGrid
+     - ``vtkhdf_rectilinear_file``
+     - ``vtkhdf_rectilinear_file_type``
+   * - StructuredGrid
+     - ``vtkhdf_structured_file``
+     - ``vtkhdf_structured_file_type``
    * - MultiBlockDataSet
      - ``vtkhdf_mb_file``
      - ``vtkhdf_mb_file_type``
@@ -104,7 +110,7 @@ Key Architectural Features
 --------------------------
 * **Single-File Output:** All simulation data, including geometry,
   connectivity, and temporal datasets, is stored within a single `.vtkhdf` file.
-* **Data placement:** UG and MB preserve mesh partitions. ImageData uses
+* **Data placement:** UG and MB preserve mesh partitions. Each structured writer uses
   one global structured VTK dataset, assembled from caller-owned rectangular
   regions without recording rank partitions. The library performs no
   repartitioning or data redistribution.

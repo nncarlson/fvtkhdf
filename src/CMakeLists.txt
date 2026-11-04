@@ -4,6 +4,11 @@ include(CMakePackageConfigHelpers)
 set(FYPP_SRC
   vtkhdf_field_data_type.F90.fypp
   vtkhdf_structured_type.F90.fypp
+  vtkhdf_structured_base_class.F90.fypp
+  vtkhdf_image_type.F90.fypp
+  vtkhdf_rectilinear_type.F90.fypp
+  vtkhdf_rectilinear_file_type.F90.fypp
+  vtkhdf_structured_file_type.F90.fypp
   vtkhdf_image_file_type.F90.fypp
   vtkhdf_h5.F90.fypp
   vtkhdf_ug_type.F90.fypp
@@ -19,7 +24,9 @@ if(ENABLE_MPI)
   endif()
 endif()
 
-add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC} FLAGS --line-numbering ${FYPP_DEFINES})
+add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC}
+  INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_structured_file_template.fypp
+  FLAGS --line-numbering ${FYPP_DEFINES})
 
 set(SRC
   vtkhdf_data_handle_types.F90

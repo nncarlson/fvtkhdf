@@ -28,3 +28,7 @@ global logical bounds, explicit array placement, full temporal replacement,
 omitted-write reuse, and independent rank-zero FieldData. See the ImageData
 manual for multiple blocks, halo exclusion, empty contributions, and reader
 limitations.
+
+`rectilinear_fixed_mesh.F90` and `structured_fixed_mesh.F90` use the same
+fixed-geometry temporal workflow with rank-zero coordinate vectors and
+distributed explicit coordinates, respectively. Both support serial and MPI builds.

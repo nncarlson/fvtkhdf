@@ -28,7 +28,7 @@ types but may ignore newer metadata.
 | UnstructuredGrid and MultiBlock, including temporal FieldData | 5.13+ expected |
 | ImageData | 5.13+ expected, with the reader limitations below |
 | Dataset attribute designations (`Scalars`, `Vectors`, etc.) | 6.2+ |
-| RectilinearGrid and StructuredGrid (planned) | Will require 6.2+ |
+| RectilinearGrid and StructuredGrid | 6.2+; use trailing singleton axes with readers before VTK 9.7.2 |
 
 **ImageData reader limitations:** ParaView 6.2.0 includes VTK 9.7.1 and still
 has two geometry reader defects. For affected readers, use **zero-based global
@@ -53,10 +53,12 @@ for details.
 
   * Supports point-centered, cell-centered, and field data.
 
-* **ImageData:** Fixed regular-grid geometry with static and temporal
+* **ImageData, RectilinearGrid, and StructuredGrid:** Fixed geometry with static and temporal
   point/cell arrays assembled from rectangular blocks, including halo
   exclusion, multiple blocks per rank, and empty collective contributions.
 
+  * Geometry uses regular spacing, rank-zero axis vectors, or distributed
+    explicit point coordinates, respectively.
   * Uses explicit three-dimensional spatial array shapes and component-first
     multicomponent arrays.
   * Temporal fields support complete replacement or whole-field reuse.
@@ -156,7 +158,7 @@ target_link_libraries(my_simulation PRIVATE fVTKHDF::fvtkhdf)
 Here is a minimal serial example that writes a **VTKHDF** UnstructuredGrid
 dataset for an unstructured mesh consisting of a single tetrahedral cell
 with a scalar field. More complete examples (serial and MPI-parallel,
-UnstructuredGrid, ImageData, and MultiBlockDataSet) are provided in the `example`
+UnstructuredGrid, ImageData, RectilinearGrid, StructuredGrid, and MultiBlockDataSet) are provided in the `example`
 directory.
 
 ```fortran

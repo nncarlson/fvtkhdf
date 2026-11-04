@@ -429,3 +429,26 @@ if(ENABLE_MPI)
   set_tests_properties(vtkhdf_image_two_rank_layout PROPERTIES
     FIXTURES_REQUIRED vtkhdf_image_two_rank_files SKIP_RETURN_CODE 77)
 endif()
+
+# Explicit structured geometry: coordinate kinds, distributed regions, and time reuse.
+add_fypp_sources(GRID_TEST_SRC SOURCES vtkhdf_grid_test.F90.fypp FLAGS --line-numbering)
+vtkhdf_add_test_target(vtkhdf_grid_test "${GRID_TEST_SRC}")
+vtkhdf_add_runtime_test(vtkhdf_grid_file_types vtkhdf_grid_test)
+set_tests_properties(vtkhdf_grid_file_types PROPERTIES FIXTURES_SETUP vtkhdf_grid_files)
+add_test(NAME vtkhdf_grid_layout
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_grid_check.py
+          layout ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(vtkhdf_grid_layout PROPERTIES
+  FIXTURES_REQUIRED vtkhdf_grid_files SKIP_RETURN_CODE 77)
+foreach(mask RANGE 1 7)
+  add_test(NAME vtkhdf_grid_reader_dim_${mask}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_grid_check.py
+            reader ${CMAKE_CURRENT_BINARY_DIR} ${mask})
+  set_tests_properties(vtkhdf_grid_reader_dim_${mask} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_grid_files SKIP_RETURN_CODE 77)
+endforeach()
+vtkhdf_add_test_target(vtkhdf_grid_fail_test vtkhdf_grid_fail_test.F90)
+foreach(case axis_length before_mesh missing_close missing_step components bounds source kind late duplicate)
+  vtkhdf_add_runtime_test(vtkhdf_grid_fail_${case} vtkhdf_grid_fail_test ${case})
+  set_tests_properties(vtkhdf_grid_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+endforeach()

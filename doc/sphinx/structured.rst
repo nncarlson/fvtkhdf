@@ -3,18 +3,18 @@ Structured VTK Dataset Types
 
 Structured VTK datasets use a logical grid indexed by three integer coordinates.
 Their point and cell data are written as rectangular regions of that grid.
-The interface below is provided by the ImageData writer. RectilinearGrid and
-StructuredGrid writers are not yet available.
+The interface below is shared by the ImageData, RectilinearGrid, and
+StructuredGrid writers.
 
-See :doc:`image` for geometry definition, supported modes, and reader
-requirements.
+See :doc:`image`, :doc:`rectilinear`, and :doc:`structured_grid` for geometry
+definition, supported modes, and reader requirements.
 
 File Creation and Management
 ----------------------------
 
 The declaration of ``file`` and its geometry-writing method depend on the
-VTK dataset type. For ImageData, use ``vtkhdf_image_file`` from
-``vtkhdf_image_file_type``.
+VTK dataset type: ``vtkhdf_image_file``, ``vtkhdf_rectilinear_file``, or
+``vtkhdf_structured_file``, from the corresponding ``*_file_type`` module.
 
 .. method-doc::
 

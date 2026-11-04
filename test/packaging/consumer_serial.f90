@@ -1,5 +1,7 @@
 program consumer_serial
   use vtkhdf_ug_file_type
+  use vtkhdf_rectilinear_file_type
+  use vtkhdf_structured_file_type
   use vtkhdf_image_file_type
   use vtkhdf_file_modes, only: VTKHDF_FIXED_MESH
   implicit none
@@ -7,6 +9,9 @@ program consumer_serial
   character(:), allocatable :: errmsg
   type(vtkhdf_ug_file) :: file
   type(vtkhdf_image_file) :: image
+  type(vtkhdf_rectilinear_file) :: rect
+  type(vtkhdf_structured_file) :: grid
+  real :: points(3,2,2,1)
   type(vtkhdf_cell_data_handle) :: variable
   integer :: selected(3,2), rank
   real :: values(1,1,1)
@@ -23,5 +28,18 @@ program consumer_serial
   call image%start_time_step(0.0)
   call image%write_cell_data(variable,values,[0,0,0],selected)
   call image%close()
+  call rect%create('consumer_rect.vtkhdf',ierr,errmsg)
+  if (ierr /= 0) error stop errmsg
+  call rect%write_mesh(reshape([0,0,0,1,1,0],[3,2]),[0.,1.],[0.,1.],[0.])
+  call rect%close()
+  call grid%create('consumer_grid.vtkhdf',ierr,errmsg)
+  if (ierr /= 0) error stop errmsg
+  call grid%write_mesh(reshape([0,0,0,1,1,0],[3,2]))
+  points = reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,1.,1.,0.],[3,2,2,1])
+  selected = reshape([0,0,0,1,1,0],[3,2])
+  if (rank /= 0) selected(1,2) = -1
+  call grid%write_mesh_geometry(points,[0,0,0],selected)
+  call grid%close()
+
   print *, 'consumer_serial: link OK'
 end program

@@ -1,0 +1,54 @@
+!!
+!! VTKHDF_IMAGE_TYPE
+!!
+!! ImageData geometry on the common structured dataset base.
+!!
+!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
+!! SPDX-License-Identifier: BSD-2-Clause
+!!
+#include "vtkhdf_assert.inc"
+#:set reals = [('real32','real(real32)','H5T_NATIVE_FLOAT'), ('real64','real(real64)','H5T_NATIVE_DOUBLE')]
+
+module vtkhdf_image_type
+
+  use,intrinsic :: iso_fortran_env
+  use vtkhdf_structured_base_class
+  use vtkhdf_h5_c_binding
+  use vtkhdf_h5
+  implicit none
+  private
+
+  type, extends(vtkhdf_structured_base), public :: vtkhdf_image
+    private
+  contains
+    generic :: write_mesh => write_mesh_real32, write_mesh_real64
+    procedure, private :: write_mesh_real32, write_mesh_real64
+  end type
+
+contains
+
+#:for kind, decl, h5type in reals
+  subroutine write_mesh_${kind}$(this, point_bounds, origin, spacing, direction)
+    class(vtkhdf_image), intent(inout) :: this
+    integer(int32), intent(in) :: point_bounds(3,2)
+    ${decl}$, intent(in) :: origin(3), spacing(3)
+    ${decl}$, intent(in), optional :: direction(3,3)
+    real(real64) :: matrix(3,3)
+    call this%define_grid(point_bounds)
+    matrix = reshape([1.0_real64,0.0_real64,0.0_real64, 0.0_real64,1.0_real64,0.0_real64, &
+        0.0_real64,0.0_real64,1.0_real64],[3,3])
+    if (present(direction)) matrix = real(direction,real64)
+    INSIST(this%ctx%identical(real(origin,real64)))
+    INSIST(this%ctx%identical(real(spacing,real64)))
+    INSIST(this%ctx%identical(reshape(matrix,[9])))
+    ! VTK interleaves the lower and upper bounds for each axis.
+    call h5_write_attr(this%ctx, this%root(), 'WholeExtent', reshape(transpose(point_bounds),[6]))
+    call h5_write_attr(this%ctx, this%root(), 'Origin', real(origin,real64))
+    call h5_write_attr(this%ctx, this%root(), 'Spacing', real(spacing,real64))
+    ! VTK stores the nine matrix entries in row-major order.
+    call h5_write_attr(this%ctx, this%root(), 'Direction', reshape(transpose(matrix),[9]))
+  end subroutine
+
+#:endfor
+
+end module vtkhdf_image_type

@@ -20,6 +20,8 @@ A serial build is also available.
 
    Common Interface <structured>
    ImageData <image>
+   RectilinearGrid <rectilinear>
+   StructuredGrid <structured_grid>
 
 .. toctree::
    :maxdepth: 1
