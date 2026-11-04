@@ -24,7 +24,8 @@ jobs:
             hdf5_pkg: libhdf5-openmpi-dev
             hdf5_pc_pattern: '/pkgconfig/(hdf5-openmpi|hdf5)\.pc$'
             generator_args: --features mpi-release
-            build_args: --features mpi-release
+            # The CI image provides HDF5 1.10.10.
+            build_args: --features mpi-release --flag "-DHDF5_NULL_MEMSPACE_BUG"
 
     steps:
     - name: Checkout code

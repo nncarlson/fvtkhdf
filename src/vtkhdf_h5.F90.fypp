@@ -150,7 +150,11 @@ contains
       mem_space = H5Screate(count)
       ierr = H5Sselect_hyperslab(file_space, H5S_SELECT_SET, start, count)
     else
+#ifdef HDF5_NULL_MEMSPACE_BUG
+      mem_space = empty_memory_space()
+#else
       mem_space = H5Screate(H5S_NULL)
+#endif
       ierr = H5Sselect_none(file_space)
     end if
     INSIST(mem_space >= 0)
@@ -289,7 +293,11 @@ contains
     file_space = H5Dget_space(dset_id)
     INSIST(file_space >= 0)
     if (any(mem_count == 0)) then
+#ifdef HDF5_NULL_MEMSPACE_BUG
+      mem_space = empty_memory_space()
+#else
       mem_space = H5Screate(H5S_NULL)
+#endif
       ierr = H5Sselect_none(file_space)
     else
       n = size(mem_dims)
@@ -627,7 +635,11 @@ contains
     if (mem_dims(1) > 0) then
       mem_space_id = H5Screate(mem_dims)
     else ! rank contributes nothing
+#ifdef HDF5_NULL_MEMSPACE_BUG
+      mem_space_id = empty_memory_space()
+#else
       mem_space_id = H5Screate(H5S_NULL)
+#endif
     end if
     INSIST(mem_space_id > 0)
 
@@ -849,7 +861,11 @@ contains
     if (mem_dims(1) > 0) then
       mem_space_id = H5Screate(mem_dims)
     else ! rank contributes nothing
+#ifdef HDF5_NULL_MEMSPACE_BUG
+      mem_space_id = empty_memory_space()
+#else
       mem_space_id = H5Screate(H5S_NULL)
+#endif
     end if
     INSIST(mem_space_id > 0)
 
@@ -864,5 +880,23 @@ contains
     INSIST(ctx%global_all(ierr >= 0))
 
   end subroutine append_to_dataset_common
+
+#ifdef HDF5_NULL_MEMSPACE_BUG
+  !! Work around collective-write corruption in HDF5 older than 1.13.0.
+  !! A rank with an H5S_NULL memory dataspace and an empty file selection can
+  !! still write its first buffer element, overwriting the intended writer's
+  !! data. This was reproduced in C with HDF5 1.10.10 and 1.12.1; 1.13.0 passes.
+  !! Use a simple memory dataspace with an explicitly empty selection instead.
+  !! CMake enables this workaround automatically for affected MPI builds;
+  !! fpm builds require the preprocessor definition to be supplied explicitly.
+  function empty_memory_space() result(space_id)
+    integer(hid_t) :: space_id
+    integer :: ierr
+    space_id = H5Screate([1_hsize_t])
+    INSIST(space_id >= 0)
+    ierr = H5Sselect_none(space_id)
+    INSIST(ierr >= 0)
+  end function
+#endif
 
 end module vtkhdf_h5

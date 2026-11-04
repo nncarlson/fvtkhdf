@@ -54,6 +54,11 @@ if(ENABLE_MPI AND NOT HDF5_IS_PARALLEL)
   message(FATAL_ERROR "Parallel HDF5 is required when MPI is enabled, but only serial HDF5 was found.")
 endif()
 
+# Older parallel HDF5 can write data from ranks with H5S_NULL memory spaces.
+if(ENABLE_MPI AND HDF5_VERSION VERSION_LESS "1.13.0")
+  add_compile_definitions(HDF5_NULL_MEMSPACE_BUG)
+endif()
+
 # 3. Python & Fypp
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_program(FYPP_EXECUTABLE fypp)
