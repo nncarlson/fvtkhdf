@@ -99,7 +99,7 @@ contains
     integer(hsize_t), intent(in) :: chunk_size
     integer(hid_t) :: space_id, dcpl_id, dset_id
     integer :: ierr
-    INSIST(ctx%identical([chunk_size]))
+    ASSERT(ctx%identical([chunk_size]))
     INSIST(chunk_size > 0)
     space_id = H5Screate([0_hsize_t,1_hsize_t], [H5S_UNLIMITED,H5S_UNLIMITED])
     INSIST(space_id >= 0)
@@ -124,13 +124,13 @@ contains
     integer(hid_t) :: stored_type
     integer(hsize_t) :: dims(2), count(2), start(2)
     integer :: ierr
-    INSIST(ctx%identical([ncomp,ntuples]))
+    ASSERT(ctx%identical([ncomp,ntuples]))
     INSIST(ncomp >= 0 .and. ntuples >= 0)
     dset_id = H5Dopen(loc_id, name)
     INSIST(ctx%global_all(dset_id >= 0))
     stored_type = H5Dget_type(dset_id)
     INSIST(stored_type >= 0)
-    INSIST(ctx%global_all(H5Tequal(stored_type,type_id) > 0))
+    INSIST(H5Tequal(stored_type,type_id) > 0)
     ierr = H5Tclose(stored_type)
     file_space = H5Dget_space(dset_id)
     INSIST(file_space >= 0)
@@ -354,7 +354,7 @@ contains
     INSIST(ctx%global_all(dset_id >= 0))
     call h5_write_attr(ctx, dset_id, 'Name', external_name)
     if (present(attribute)) then
-      INSIST(ctx%identical(trim(attribute)))
+      ASSERT(ctx%identical(trim(attribute)))
       if (attribute /= '') call h5_write_attr(ctx, dset_id, 'Attribute', trim(attribute))
     end if
     ierr = H5Dclose(dset_id)

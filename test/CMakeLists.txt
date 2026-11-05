@@ -393,10 +393,23 @@ foreach(case bounds source type components late outside_step missing field_dupli
   vtkhdf_add_runtime_test(vtkhdf_image_fail_${case} vtkhdf_image_fail_test ${case})
   set_tests_properties(vtkhdf_image_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
 endforeach()
+# Rank-disagreement checks use ASSERT and are absent with NDEBUG.
 if(ENABLE_MPI)
   foreach(case geometry_mismatch name_mismatch mode_mismatch)
-    vtkhdf_add_runtime_test(vtkhdf_image_fail_${case} vtkhdf_image_fail_test ${case})
-    set_tests_properties(vtkhdf_image_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+    set(test_name vtkhdf_image_fail_${case})
+    if(CMAKE_CONFIGURATION_TYPES)
+      add_test(NAME ${test_name}
+        COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
+                ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_image_fail_test ${MPIEXEC_POSTFLAGS} ${case}
+        CONFIGURATIONS Debug)
+      set_tests_properties(${test_name} PROPERTIES
+        PROCESSORS 4 WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+      vtkhdf_add_runtime_test(${test_name} vtkhdf_image_fail_test ${case})
+    else()
+      continue()
+    endif()
+    set_tests_properties(${test_name} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
   endforeach()
 endif()
 
@@ -452,3 +465,6 @@ foreach(case axis_length before_mesh missing_close missing_step components bound
   vtkhdf_add_runtime_test(vtkhdf_grid_fail_${case} vtkhdf_grid_fail_test ${case})
   set_tests_properties(vtkhdf_grid_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
 endforeach()
+
+vtkhdf_add_test_target(vtkhdf_simple_dataset_test vtkhdf_simple_dataset_test.F90)
+vtkhdf_add_runtime_test(vtkhdf_simple_dataset_lifecycle vtkhdf_simple_dataset_test)

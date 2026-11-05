@@ -2,7 +2,7 @@
 !! VTKHDF_DATA_HANDLE_TYPES
 !!
 !! This module defines the cell, point, and field data handle types shared by
-!! the file interfaces. Handles identify fields; block placement is supplied
+!! simple writers and composite interfaces. Handles identify datasets; block placement is supplied
 !! separately at each write.
 !!
 !! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
@@ -21,7 +21,7 @@ module vtkhdf_data_handle_types
     ! BLOCK_INDEX is interpreted only by the MultiBlock front end.
     integer :: block_index = -1
     ! Root HDF5 group ID of the owning VTK dataset (an individual leaf block
-    ! within a MultiBlock file). File wrappers use this only to check
+    ! within a MultiBlock file). Writers use this only to check
     ! handle ownership during the open writer's lifetime.
     integer(int64) :: owner = -1
   contains

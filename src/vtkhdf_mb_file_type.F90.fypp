@@ -39,7 +39,8 @@ module vtkhdf_mb_file_type
   use vtkhdf_h5
   use vtkhdf_data_support, only: named_record, resolve_record_name
   use vtkhdf_data_handle_types
-  use vtkhdf_ug_type
+  use vtkhdf_simple_dataset_class
+  use vtkhdf_ug_file_type
   use vtkhdf_ctx_type
   use vtkhdf_h5e_context_type
   use vtkhdf_version_param
@@ -116,7 +117,7 @@ module vtkhdf_mb_file_type
   end type
 
   type, extends(named_record) :: block_item
-    type(vtkhdf_ug), allocatable :: b
+    class(vtkhdf_simple_dataset), allocatable :: b
   end type
 
   type, public :: vtkhdf_block_handle
@@ -311,7 +312,7 @@ contains
     !! Resize this%blocks to hold the new block
     if (.not.allocated(this%blocks)) then
       allocate(this%blocks(0:0))
-      allocate(this%blocks(0)%b)
+      allocate(vtkhdf_ug_file :: this%blocks(0)%b)
       this%blocks(0)%internal_name = internal_name
     else
       block
@@ -323,7 +324,7 @@ contains
           call move_alloc(this%blocks(j)%b, tmp(j)%b)
           call move_alloc(this%blocks(j)%internal_name, tmp(j)%internal_name)
         end do
-        allocate(tmp(n)%b)
+        allocate(vtkhdf_ug_file :: tmp(n)%b)
         tmp(n)%internal_name = internal_name
         call move_alloc(tmp, this%blocks)
       end block
@@ -332,13 +333,16 @@ contains
     call err_ctx%capture ! begin HDF5 calls
 
     !! Initialize the UG block group and its HDF5 hierarchy.
-    associate (new_block => this%blocks(this%next_block_index)%b)
-      write(group_name,'(a,i0)') 'Group_', this%next_block_index
-      call new_block%init(this%vtk_id, trim(group_name), this%ctx, mode, this%data_chunk_bytes)
-      call new_block%set_block_metadata(this%next_block_index, external_name)
-      handle%index = this%next_block_index
-      this%next_block_index = this%next_block_index + 1
-    end associate
+    select type (new_block => this%blocks(this%next_block_index)%b)
+    type is (vtkhdf_ug_file)
+        write(group_name,'(a,i0)') 'Group_', this%next_block_index
+        call new_block%init(this%vtk_id, trim(group_name), this%ctx, mode, this%data_chunk_bytes)
+        call new_block%set_block_metadata(this%next_block_index, external_name)
+        handle%index = this%next_block_index
+        this%next_block_index = this%next_block_index + 1
+    class default
+      INSIST(.false.)
+    end select
 
     !! Create a soft link in Assembly group to the block group.
     ierr = H5Lcreate_soft('/VTKHDF/' // trim(group_name), this%ass_id, internal_name)
@@ -369,7 +373,12 @@ contains
     INSIST(size(points,dim=1) == 3)
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
-    call this%blocks(blk%index)%b%write_mesh(points, cnode, xcnode, types)
+    select type (dataset => this%blocks(blk%index)%b)
+    type is (vtkhdf_ug_file)
+      call dataset%write_mesh(points, cnode, xcnode, types)
+    class default
+      INSIST(.false.)
+    end select
     call err_ctx%restore(0)
 
   end subroutine write_mesh_${rkind}$_${ikind}$
@@ -389,7 +398,12 @@ contains
 
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
-    call this%blocks(blk%index)%b%write_mesh_topology(cnode, xcnode, types)
+    select type (dataset => this%blocks(blk%index)%b)
+    type is (vtkhdf_ug_file)
+      call dataset%write_mesh_topology(cnode, xcnode, types)
+    class default
+      INSIST(.false.)
+    end select
     call err_ctx%restore(0)
 
   end subroutine write_mesh_topology_${ikind}$
@@ -408,7 +422,12 @@ contains
     INSIST(size(points,dim=1) == 3)
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
-    call this%blocks(blk%index)%b%write_mesh_geometry(points)
+    select type (dataset => this%blocks(blk%index)%b)
+    type is (vtkhdf_ug_file)
+      call dataset%write_mesh_geometry(points)
+    class default
+      INSIST(.false.)
+    end select
     call err_ctx%restore(0)
 
   end subroutine write_mesh_geometry_${rkind}$
@@ -431,7 +450,12 @@ contains
     type(vtkhdf_h5e_context) :: err_ctx
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
-    call this%blocks(blk%index)%b%write_${loc}$_data(name, array, attribute)
+    select type (dataset => this%blocks(blk%index)%b)
+    type is (vtkhdf_ug_file)
+      call dataset%write_${loc}$_data(name, array, attribute)
+    class default
+      INSIST(.false.)
+    end select
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -449,7 +473,12 @@ contains
     type(vtkhdf_h5e_context) :: err_ctx
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
-    call this%blocks(blk%index)%b%write_field_data(name, array, as_vector)
+    select type (dataset => this%blocks(blk%index)%b)
+    type is (vtkhdf_ug_file)
+      call dataset%write_field_data(name, array, as_vector)
+    class default
+      INSIST(.false.)
+    end select
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -482,13 +511,16 @@ contains
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: mold${mold_shape}$
     character(*), intent(in), optional :: attribute
-    integer :: index
     type(vtkhdf_h5e_context) :: err_ctx
     type(vtkhdf_${loc}$_data_handle) :: handle
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
-    index = this%blocks(blk%index)%b%register_temporal_${loc}$_data(name, mold, attribute)
-    call handle%set(index, this%blocks(blk%index)%b%root())
+    select type (dataset => this%blocks(blk%index)%b)
+    type is (vtkhdf_ug_file)
+      handle = dataset%register_temporal_${loc}$_data(name, mold, attribute)
+    class default
+      INSIST(.false.)
+    end select
     call handle%set_block_index(blk%index)
     call err_ctx%restore(0)
   end function
@@ -502,13 +534,16 @@ contains
     type(vtkhdf_block_handle), intent(in) :: blk
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: mold
-    integer :: index
     type(vtkhdf_h5e_context) :: err_ctx
     type(vtkhdf_field_data_handle) :: handle
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
-    index = this%blocks(blk%index)%b%register_temporal_field_data(name, mold)
-    call handle%set(index, this%blocks(blk%index)%b%root())
+    select type (dataset => this%blocks(blk%index)%b)
+    type is (vtkhdf_ug_file)
+      handle = dataset%register_temporal_field_data(name, mold)
+    class default
+      INSIST(.false.)
+    end select
     call handle%set_block_index(blk%index)
     call err_ctx%restore(0)
   end function
@@ -573,7 +608,12 @@ contains
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     INSIST(var%get_block_index() == blk%index)
     call err_ctx%capture
-    call this%blocks(blk%index)%b%write_${loc}$_data(var%get_index(this%blocks(blk%index)%b%root()), array)
+    select type (dataset => this%blocks(blk%index)%b)
+    type is (vtkhdf_ug_file)
+      call dataset%write_${loc}$_data(var, array)
+    class default
+      INSIST(.false.)
+    end select
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -592,7 +632,12 @@ contains
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     INSIST(var%get_block_index() == blk%index)
     call err_ctx%capture
-    call this%blocks(blk%index)%b%write_field_data(var%get_index(this%blocks(blk%index)%b%root()), array, as_vector)
+    select type (dataset => this%blocks(blk%index)%b)
+    type is (vtkhdf_ug_file)
+      call dataset%write_field_data(var, array, as_vector)
+    class default
+      INSIST(.false.)
+    end select
     call err_ctx%restore(0)
   end subroutine
 #:endfor

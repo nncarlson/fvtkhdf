@@ -1,35 +1,54 @@
 # RectilinearGrid and StructuredGrid integration
 
-Implementation handoff updated 2026-11-04, branch `structured`.
+Implementation handoff updated 2026-11-05, branch `structured`.
+Work in progress: implementation and documentation review continue. The initial
+new-format implementation was committed as `b1b314e`; this checkpoint includes
+the subsequent file/core merger and runtime-check policy changes.
 
 ## Settled scope and architecture
 
 The first implementation adds standalone RectilinearGrid and StructuredGrid
 writers with static or fixed-geometry temporal data. Moving geometry and
-MultiBlock integration are deferred. Preserve an architecture that can later
-place each concrete dataset type in a composite without using file wrappers.
+public MultiBlock support for the new types remain deferred.
 
-The internal hierarchy is:
+The implementation now merges each dataset core into its public file type:
 
 ```text
-vtkhdf_structured_base                abstract, vtkhdf_structured_base_class
-├── vtkhdf_image                      vtkhdf_image_type
-├── vtkhdf_rectilinear                vtkhdf_rectilinear_type
-└── vtkhdf_structured                 vtkhdf_structured_type
+vtkhdf_simple_dataset                 abstract, vtkhdf_simple_dataset_class
+├── vtkhdf_ug_file                    vtkhdf_ug_file_type
+└── vtkhdf_structured_base            abstract, vtkhdf_structured_base_class
+    ├── vtkhdf_image_file             vtkhdf_image_file_type
+    ├── vtkhdf_rectilinear_file       vtkhdf_rectilinear_file_type
+    └── vtkhdf_structured_file        vtkhdf_structured_file_type
 ```
 
-The base owns the dataset group, logical grid bounds and mapping, point/cell
-registries and storage, field data, and time stepping. Geometry belongs to the
-concrete types. The file wrappers own the file and communicator; datasets retain
-an unowned communicator copy. The three wrappers share forwarding code through
-`vtkhdf_structured_file_template.fypp`. No deferred geometry interface is needed because
-the concrete geometry signatures differ.
+The simple ancestor specifies only the shared lifecycle contract: close, root,
+start/finalize time step, temporal-enabled and step-open queries. The concrete
+branches retain their implementation and state. Structured geometry interfaces
+differ and do not belong to the ancestor. Numeric overload generation remains
+Fypp-based, but the shared file-wrapper include and forwarding layer are gone.
 
-Future MB support may introduce an abstract `vtkhdf_dataset` ancestor shared
-with UG and an owning `class(vtkhdf_dataset), allocatable` component in each
-block. That hierarchy and MB dispatch are not part of this increment. Future
-moving geometry will need separate geometry snapshots/offsets and lifecycle
-hooks; do not encode it in unrelated concrete extensions now.
+The structured base declares deferred INIT and SUPPORTS_MODE bindings. Each
+concrete file type supplies its VTK type string to the shared INIT_GRID method
+and defines its permitted modes. All three currently permit static and fixed
+mesh; future moving-geometry support can have a different policy per type.
+
+CREATE owns a standalone file and duplicated communicator through a
+vtkhdf_file_context component. Each public file type also has an undocumented
+internal INIT entry point taking a parent group and borrowed context for MB.
+Close releases dataset resources, closes any owned file and communicator, then
+resets the object. Implicit finalization performs no collective cleanup.
+
+Handle creation and owner validation reside in the implementation that owns the
+registry. MB sets/checks the existing block-index component and forwards the
+handle to its leaf. MB stores leaves as class(vtkhdf_simple_dataset), allocatable,
+using polymorphic lifecycle calls and type selection for format-specific calls.
+Its public block creation remains UG-only in this increment. The nested-leaf
+regression exercises all four concrete types through the ancestor independently
+of that public API.
+
+Future moving geometry will need separate geometry snapshots/offsets and
+lifecycle hooks; do not encode it in unrelated concrete extensions now.
 
 ## Agreed public geometry interfaces
 
@@ -92,6 +111,29 @@ The prior CI problems are resolved. Preserve GNU_BUG20261103 (GNU before 16.1)
 and HDF5_NULL_MEMSPACE_BUG (parallel HDF5 before 1.13). Existing CI images remain
 the baseline. The shared exported vtkhdf_version parameter is [2,8], matching
 the targeted specification in README.
+
+The [runtime checking policy](runtime-checks.md) records the error-handling
+philosophy and how to choose checks. Agreement checks now use debug-only ASSERT;
+argument validity checks use local INSIST. Collective library-success checks and
+algorithmic reductions remain unconditional. Method-identification tags and
+empty-rank padding collectives were removed. The three MPI disagreement tests
+are Debug-only.
+
+Latest GNU 16.1.1 results with HDF5 1.14.6 and MPICH 5.0.1:
+
+| Configuration | Serial passed | MPI passed | Reader skips in each suite |
+| --- | ---: | ---: | ---: |
+| Debug | 85 | 95 | 9 |
+| Release | 85 | 92 | 9 |
+
+Release object inspection confirmed no references to the agreement helpers from
+the structured writers and HDF5 support. The merger also passed GNU 14.2 and
+LLVM 22 serial tests, installed serial/MPI consumers, a clean build, and the
+Sphinx build. NAG 7.2 serial and MPI tests passed before the subsequent checking
+refinements. NAG compilation needs escalated access to its licence. For a NAG
+parallel build, configure a fresh directory with FC=mpifort and CC=mpicc after
+loading `ml nag mpich hdf5`; selecting nagfor directly causes linker problems.
+fpm source generation was checked, but fpm itself was unavailable locally.
 
 ## References
 

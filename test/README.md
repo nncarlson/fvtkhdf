@@ -55,6 +55,11 @@ test rather than just the execution mode.
 These are expected-failure tests registered with `WILL_FAIL`. They protect API
 ordering and handle-usage assertions that intentionally abort.
 
+The MPI `geometry_mismatch`, `name_mismatch`, and `mode_mismatch` checks are
+registered only for Debug configurations: they exercise debug-only `ASSERT`
+diagnostics. Local argument and lifecycle checks use unconditional `INSIST`
+and remain tested in Release. See the [runtime checking policy](../doc/runtime-checks.md).
+
 - `vtkhdf_ug_fail_late_register`
 - `vtkhdf_ug_fail_wrong_cell_count`
 - `vtkhdf_ug_fail_data_before_mesh`

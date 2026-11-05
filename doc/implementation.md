@@ -1,5 +1,8 @@
 # Writer implementation
 
+See [Runtime checks and collective-call contracts](runtime-checks.md) for the
+developer policy on choosing checks, assertions, and collective validation.
+
 The UnstructuredGrid and structured cores use the same organization:
 initialization and cleanup, geometry, static data, temporal registration,
 writes by index, time stepping, and registry/storage helpers. Their Fypp

@@ -130,7 +130,7 @@ contains
     associate (var => this%vars(index))
       INSIST(var%is_temporal)
       INSIST(.not.var%wrote_this_step)
-      INSIST(ctx%global_all(var%type_id == ${h5type}$))
+      INSIST(var%type_id == ${h5type}$)
       select rank (array)
       rank (0)
         INSIST(.not.as_vector_)
