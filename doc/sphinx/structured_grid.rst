@@ -38,8 +38,9 @@ Mesh Data
    call file%write_mesh_geometry(points, array_origin [, write_bounds])
 
    Write a rectangular region of physical point coordinates. Repeated calls
-   assemble the global geometry. Supply geometry before starting time stepping;
-   at least one collective geometry call is required before closing the file.
+   assemble the global geometry. Complete these writes before writing point or
+   cell data and before finalizing the first time step. Geometry may be supplied
+   before or during that step; subsequent geometry writes are not permitted.
 
    * ``points(3,nx,ny,nz)``: physical x, y, z coordinates, with all three
      spatial dimensions present even for 1D or 2D. Accepted kinds are

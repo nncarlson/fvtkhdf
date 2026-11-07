@@ -1,9 +1,16 @@
-!! Common lifecycle contract for simple VTKHDF writers and composite leaves.
-!! Geometry and data interfaces belong to the UG and structured branches.
+!!
+!! VTKHDF_SIMPLE_DATASET_CLASS
+!!
+!! Common lifecycle contract for simple VTKHDF dataset writers and composite
+!! dataset leaves. Geometry and data interfaces belong to the structured and
+!! unstructured extensions.
 !!
 !! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
+!!
+
 module vtkhdf_simple_dataset_class
+
   use,intrinsic :: iso_fortran_env, only: real32, real64
   use vtkhdf_h5_c_binding, only: hid_t
   implicit none
@@ -50,4 +57,4 @@ contains
     call this%start_time_step_real64(real(time,real64))
   end subroutine
 
-end module
+end module vtkhdf_simple_dataset_class

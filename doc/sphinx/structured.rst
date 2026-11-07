@@ -50,6 +50,19 @@ VTK dataset type: ``vtkhdf_image_file``, ``vtkhdf_rectilinear_file``, or
    must call this explicitly; automatic Fortran finalization cannot perform
    collective cleanup.
 
+Geometry Ordering
+-----------------
+
+Supply the mesh geometry before writing point or cell data. In temporal files,
+the initial geometry may be supplied before or during the first time step,
+but must be supplied before that step is finalized. Complete all geometry
+writes before the first point/cell data write or the first step's finalization;
+subsequent geometry writes are not permitted because the mesh is fixed.
+
+Point and cell data registration requires the logical grid dimensions.
+Where the geometry interface permits separate coordinate writes, registration
+may precede those writes.
+
 Grid Indices and Data Layout
 ----------------------------
 
@@ -237,7 +250,7 @@ Temporal Point and Cell Data
      its values are ignored.
    * ``attribute``: optional character VTK role, set at registration.
 
-Define the mesh before registration. Complete all registration before
+Define the logical grid before registration. Complete all registration before
 the first time step starts. Placement is supplied on each write.
 
 .. method-doc::
@@ -245,7 +258,7 @@ the first time step starts. Placement is supplied on each write.
    call file%start_time_step(time)
 
    Start a new time step with the scalar ``real32`` or ``real64`` time value
-   ``time``. In MPI builds, all ranks supply the same value.
+   ``time``. In MPI builds, only rank zero's value is used; the call is collective.
 
 .. method-doc::
 

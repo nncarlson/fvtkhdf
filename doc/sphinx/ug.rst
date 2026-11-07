@@ -220,6 +220,7 @@ step must be started before temporal datasets are written.
 
    ``call file%start_time_step(time)``
       Start a new time step with time value ``time``.
+      In MPI builds, only rank zero's value is used; the call is collective.
 
       After ``start_time_step`` is called for the first time step, every
       temporal mesh-centered dataset must be written once for that step.

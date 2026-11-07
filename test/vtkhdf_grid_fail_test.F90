@@ -10,6 +10,7 @@ program vtkhdf_grid_fail_test
   implicit none
   type(vtkhdf_rectilinear_file) :: rect
   type(vtkhdf_structured_file) :: grid
+  type(vtkhdf_cell_data_handle) :: cell_var
   real(real64) :: points(3,2,2,1), bad(2,2,2,1), axis(2)
   integer :: rank, nproc, stat, bounds(3,2), selected(3,2)
   character(64) :: scenario
@@ -42,9 +43,19 @@ program vtkhdf_grid_fail_test
       call grid%write_mesh(bounds)
       select case (trim(scenario))
       case ('missing_close')
+        call grid%start_time_step(0.0)
         call grid%close()
       case ('missing_step')
         call grid%start_time_step(0.0)
+        call grid%finalize_time_step()
+      case ('cell_before_geometry')
+        call grid%write_cell_data('cell',reshape([1.0_real64],[1,1,1]),bounds(:,1))
+      case ('point_before_geometry')
+        call grid%write_point_data('point',points(1,:,:,:),bounds(:,1))
+      case ('temporal_before_geometry')
+        cell_var = grid%register_temporal_cell_data('cell',0.0_real64)
+        call grid%start_time_step(0.0)
+        call grid%write_cell_data(cell_var,reshape([1.0_real64],[1,1,1]),bounds(:,1))
       case ('components')
         call grid%write_mesh_geometry(bad,bounds(:,1))
       case ('bounds')
@@ -61,6 +72,12 @@ program vtkhdf_grid_fail_test
           call grid%write_mesh_geometry(real(points,real32),bounds(:,1),selected)
         case ('late')
           call grid%start_time_step(0.0)
+          call grid%finalize_time_step()
+          call grid%write_mesh_geometry(points,bounds(:,1),selected)
+        case ('geometry_after_data')
+          selected(:,2) = bounds(:,1)
+          if (rank /= 0) selected(1,2) = selected(1,1)-1
+          call grid%write_cell_data('cell',reshape([1.0_real64],[1,1,1]),bounds(:,1),selected)
           call grid%write_mesh_geometry(points,bounds(:,1),selected)
         case ('duplicate')
           call grid%write_mesh(bounds)

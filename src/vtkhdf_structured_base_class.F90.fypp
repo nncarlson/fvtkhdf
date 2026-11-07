@@ -16,9 +16,10 @@
 !! vtkhdf_image_file, vtkhdf_rectilinear_file, and vtkhdf_structured_file
 !! extend this base with their geometry-writing interfaces. CREATE owns a
 !! standalone file and communicator through FILE. The internal INIT entry
-!! points instead borrow the containing composite's resources. CLOSE releases
+!! point instead borrows the containing composite's resources. CLOSE releases
 !! dataset resources and any owned file resources before resetting the object.
-!! Each concrete extension specifies its permitted modes through SUPPORTS_MODE;
+!! Each concrete extension supplies its format name through DATASET_TYPE and
+!! specifies its permitted modes through SUPPORTS_MODE;
 !! shared initialization checks that policy and, in debug builds, agreement
 !! across ranks. Argument validity checks are local; collective HDF5 success
 !! checks remain unconditional. See doc/runtime-checks.md for the policy.
@@ -44,7 +45,7 @@ module vtkhdf_structured_base_class
   use,intrinsic :: iso_fortran_env
   use vtkhdf_h5_c_binding
   use vtkhdf_h5
-  use vtkhdf_ctx_type
+  use vtkhdf_context_type
   use vtkhdf_data_support
   use vtkhdf_field_data_type, only: field_data_list
   use vtkhdf_version_param
@@ -57,13 +58,13 @@ module vtkhdf_structured_base_class
   private
 
   integer, parameter :: CELL = 1, POINT = 2
-  type, extends(data_var_record) :: mesh_data_var
+  type, extends(dataset_record) :: mesh_dataset
     integer(hid_t) :: dataset_id = H5I_INVALID_HID, type_id = H5I_INVALID_HID
     logical :: is_vector = .false.
   end type
 
-  type, extends(data_groups) :: mesh_data_list
-    type(mesh_data_var), allocatable :: vars(:)
+  type, extends(data_groups) :: mesh_dataset_list
+    type(mesh_dataset), allocatable :: vars(:)
   end type
 
   type, abstract, extends(vtkhdf_simple_dataset), public :: vtkhdf_structured_base
@@ -71,22 +72,21 @@ module vtkhdf_structured_base_class
     ! These components are shared with the geometry implementations. The
     ! communicator is an unowned copy; the file wrapper owns its lifetime.
     type(vtkhdf_file_context) :: file
-    type(vtkhdf_ctx), public :: ctx
+    type(vtkhdf_context), public :: ctx
     integer(int64), public :: data_chunk_bytes = 128_int64*1024
     logical, public :: geometry_written = .false.
     integer(hid_t) :: root_id = H5I_INVALID_HID, steps_id = H5I_INVALID_HID
-    type(mesh_data_list) :: cell_data, point_data
+    type(mesh_dataset_list) :: cell_data, point_data
     type(field_data_list) :: field_data
     integer(int32) :: bounds(3,2,2) = 0
     integer(int64) :: dims(3,2) = 0
-    logical :: active(3) = .false., geometry_defined = .false., step_open = .false.
+    logical :: active(3) = .false., logical_grid_defined = .false., step_open = .false.
+    logical :: mesh_locked = .false. ! Further geometry writes are forbidden.
     integer :: nsteps = -1
   contains
-    procedure(init_interface), deferred :: init
-    procedure(supports_mode_interface), deferred :: supports_mode
-    procedure :: init_grid
-    procedure :: close, root, temporal_enabled, step_is_open, set_block_metadata
-    procedure :: flush
+    ! User-facing interface and its specific bindings.
+    ! START_TIME_STEP is inherited from vtkhdf_simple_dataset.
+    procedure :: close, flush
 #ifdef USE_MPI_F08
     generic :: create => create_f08, create_int
     procedure, private :: create_f08, create_int
@@ -96,8 +96,6 @@ module vtkhdf_structured_base_class
 #else
     procedure :: create
 #endif
-    procedure :: define_grid, point_dimensions, check_geometry_write, map_point_region
-    procedure, private :: map_region
 #:for loc, assoc in mesh_locations
 #:for kind, decl, h5type in nums
 #:for rank in [3,4]
@@ -123,8 +121,8 @@ module vtkhdf_structured_base_class
 #:for loc, assoc in mesh_locations
 #:for kind, decl, h5type in nums
 #:for rank in [3,4]
-    generic :: write_${loc}$_data => write_indexed_${loc}$_data_${kind}$_${rank}$
-    procedure, private :: write_indexed_${loc}$_data_${kind}$_${rank}$
+    generic :: write_${loc}$_data => write_by_handle_${loc}$_data_${kind}$_${rank}$
+    procedure, private :: write_by_handle_${loc}$_data_${kind}$_${rank}$
 #:endfor
 #:endfor
 #:endfor
@@ -133,6 +131,17 @@ module vtkhdf_structured_base_class
     procedure, private :: write_temporal_field_data_${kind}$
 #:endfor
     procedure :: start_time_step_real64, finalize_time_step
+
+    ! Internal interface for composite writers and geometry implementations;
+    ! public for cross-module calls.
+    procedure :: init
+    procedure(dataset_type_interface), deferred :: dataset_type
+    procedure(supports_mode_interface), deferred :: supports_mode
+    procedure :: root, temporal_enabled, step_is_open, set_block_metadata
+    procedure :: define_logical_grid, point_dimensions, geometry_writable, map_point_region
+
+    ! Private helpers.
+    procedure, private :: map_region
 #:for loc, group in [('cell','CellData'), ('point','PointData')]
     procedure, private :: reserve_${loc}$_data_name
 #:endfor
@@ -148,15 +157,11 @@ module vtkhdf_structured_base_class
       integer, intent(in) :: mode
     end function
 
-    subroutine init_interface(this, loc_id, name, ctx, mode, data_chunk_bytes)
-      import vtkhdf_structured_base, hid_t, vtkhdf_ctx, int64
-      class(vtkhdf_structured_base), intent(inout) :: this
-      integer(hid_t), intent(in) :: loc_id
-      character(*), intent(in) :: name
-      type(vtkhdf_ctx), intent(in) :: ctx
-      integer, intent(in), optional :: mode
-      integer(int64), intent(in), optional :: data_chunk_bytes
-    end subroutine
+    pure function dataset_type_interface(this) result(name)
+      import vtkhdf_structured_base
+      class(vtkhdf_structured_base), intent(in) :: this
+      character(:), allocatable :: name
+    end function
   end interface
 
 contains
@@ -171,7 +176,11 @@ contains
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: mode
     integer(int64), intent(in), optional :: data_chunk_bytes
+    type(vtkhdf_h5e_context) :: err_ctx
+    call init_hdf5
+    call err_ctx%capture
     call this%create(filename, comm%mpi_val, stat, errmsg, mode, data_chunk_bytes)
+    call err_ctx%restore(stat)
   end subroutine
 #endif
 #ifdef USE_MPI
@@ -183,9 +192,12 @@ contains
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: mode
     integer(int64), intent(in), optional :: data_chunk_bytes
-    call this%file%open(filename, stat, errmsg, comm)
-    if (stat /= 0) return
-    call this%init(this%file%id(), 'VTKHDF', this%file%context(), mode, data_chunk_bytes)
+    type(vtkhdf_h5e_context) :: err_ctx
+    call init_hdf5
+    call err_ctx%capture
+    call this%file%open(filename, comm, stat, errmsg)
+    if (stat == 0) call this%init(this%file%id(), 'VTKHDF', this%file%context(), mode, data_chunk_bytes)
+    call err_ctx%restore(stat)
   end subroutine
 #else
   subroutine create(this, filename, stat, errmsg, mode, data_chunk_bytes)
@@ -195,37 +207,66 @@ contains
     character(:), allocatable, intent(out) :: errmsg
     integer, intent(in), optional :: mode
     integer(int64), intent(in), optional :: data_chunk_bytes
+    type(vtkhdf_h5e_context) :: err_ctx
+    call init_hdf5
+    call err_ctx%capture
     call this%file%open(filename, stat, errmsg)
-    if (stat /= 0) return
-    call this%init(this%file%id(), 'VTKHDF', this%file%context(), mode, data_chunk_bytes)
+    if (stat == 0) call this%init(this%file%id(), 'VTKHDF', this%file%context(), mode, data_chunk_bytes)
+    call err_ctx%restore(stat)
   end subroutine
 #endif
 
   subroutine flush(this)
     class(vtkhdf_structured_base), intent(in) :: this
-    call this%file%flush()
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%file%flush
+    call err_ctx%restore(0)
   end subroutine
 
-  ! Initialization and cleanup.
+  subroutine close(this)
+    class(vtkhdf_structured_base), intent(inout) :: this
+    integer :: j, ierr
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    if (this%root_id >= 0) then
+      if (this%step_open) call this%finalize_time_step
+#:for loc, assoc in mesh_locations
+      if (allocated(this%${loc}$_data%vars)) then
+        do j = 1, size(this%${loc}$_data%vars)
+          if (H5Iis_valid(this%${loc}$_data%vars(j)%dataset_id) > 0) ierr = H5Dclose(this%${loc}$_data%vars(j)%dataset_id)
+        end do
+      end if
+      call this%${loc}$_data%close
+#:endfor
+      call this%field_data%close
+      if (H5Iis_valid(this%steps_id) > 0) ierr = H5Gclose(this%steps_id)
+      if (H5Iis_valid(this%root_id) > 0) ierr = H5Gclose(this%root_id)
+    end if
+    call this%file%close
+    call finalize(this) ! finalize via intent(out) this
+    call err_ctx%restore(0)
+  contains
+    subroutine finalize(this)
+      class(vtkhdf_structured_base), intent(out) :: this
+    end subroutine
+  end subroutine close
 
-  !! Create a named VTK dataset group under a file or parent group. The caller
-  !! retains ownership of LOC_ID, allowing standalone files and composite leaves.
-  !! MODE defaults to static. Both initialization paths enforce supported
-  !! modes and agreement across ranks.
-  subroutine init_grid(this, loc_id, name, ctx, dataset_type, mode, data_chunk_bytes)
+!!!! INTERNAL INTERFACES FOR COMPOSITE VTKHDF DATASET WRITERS !!!!!!!!!!!!!!!!!!
+
+  subroutine init(this, loc_id, name, ctx, mode, data_chunk_bytes)
 
     class(vtkhdf_structured_base), intent(inout) :: this
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
-    type(vtkhdf_ctx), intent(in) :: ctx
-    character(*), intent(in) :: dataset_type
+    type(vtkhdf_context), intent(in) :: ctx
     integer, intent(in), optional :: mode
     integer(int64), intent(in), optional :: data_chunk_bytes
 
     integer :: mode_
 
     type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
+    call err_ctx%capture
     this%ctx = ctx
 
     mode_ = VTKHDF_STATIC
@@ -241,7 +282,7 @@ contains
     INSIST(ctx%global_all(this%root_id >= 0))
 
     call h5_write_attr(ctx, this%root_id, 'Version', vtkhdf_version)
-    call h5_write_attr(ctx, this%root_id, 'Type', dataset_type)
+    call h5_write_attr(ctx, this%root_id, 'Type', this%dataset_type())
 
 #:for loc, group in locations
     this%${loc}$_data%group_id = H5Gcreate(this%root_id, '${group}$')
@@ -271,36 +312,8 @@ contains
     INSIST(ctx%global_all(this%field_data%sizes_id >= 0))
 
     call err_ctx%restore(0)
-  end subroutine init_grid
 
-  subroutine close(this)
-    class(vtkhdf_structured_base), intent(inout) :: this
-    integer :: j, ierr
-    type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
-    if (this%root_id >= 0) then
-      INSIST(.not.this%geometry_defined .or. this%geometry_written)
-      if (this%step_open) call this%finalize_time_step()
-#:for loc, assoc in mesh_locations
-      if (allocated(this%${loc}$_data%vars)) then
-        do j = 1, size(this%${loc}$_data%vars)
-          if (H5Iis_valid(this%${loc}$_data%vars(j)%dataset_id) > 0) ierr = H5Dclose(this%${loc}$_data%vars(j)%dataset_id)
-        end do
-      end if
-      call this%${loc}$_data%close()
-#:endfor
-      call this%field_data%close()
-      if (H5Iis_valid(this%steps_id) > 0) ierr = H5Gclose(this%steps_id)
-      if (H5Iis_valid(this%root_id) > 0) ierr = H5Gclose(this%root_id)
-    end if
-    call this%file%close()
-    call finalize(this) ! finalize via intent(out) this
-    call err_ctx%restore(0)
-  contains
-    subroutine finalize(this)
-      class(vtkhdf_structured_base), intent(out) :: this
-    end subroutine
-  end subroutine
+  end subroutine init
 
   function root(this) result(id)
     class(vtkhdf_structured_base), intent(in) :: this
@@ -324,25 +337,19 @@ contains
     class(vtkhdf_structured_base), intent(inout) :: this
     integer, intent(in) :: index
     character(*), intent(in) :: name
-    type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
     INSIST(this%root_id >= 0)
     call h5_write_attr(this%ctx, this%root_id, 'Index', index)
     call h5_write_attr(this%ctx, this%root_id, 'Name', name)
-    call err_ctx%restore(0)
   end subroutine
 
-  ! Geometry.
-
-  subroutine define_grid(this, point_bounds, geometry_pending)
+  subroutine define_logical_grid(this, point_bounds, geometry_pending)
     class(vtkhdf_structured_base), intent(inout) :: this
     integer(int32), intent(in) :: point_bounds(3,2)
     logical, intent(in), optional :: geometry_pending
     integer(int64) :: total
     integer :: j
     INSIST(this%root_id >= 0)
-    INSIST(.not.this%geometry_defined)
-    INSIST(this%nsteps <= 0)
+    INSIST(.not.this%logical_grid_defined)
     ASSERT(this%ctx%identical(reshape(point_bounds,[6])))
     INSIST(all(point_bounds(:,2) >= point_bounds(:,1)))
     this%bounds(:,:,POINT) = point_bounds
@@ -360,18 +367,17 @@ contains
       INSIST(this%dims(j,POINT) <= huge(total)/total)
       total = total * this%dims(j,POINT)
     end do
-    this%geometry_defined = .true.
+    this%logical_grid_defined = .true.
     this%geometry_written = .true.
     if (present(geometry_pending)) this%geometry_written = .not.geometry_pending
-  end subroutine
+    this%mesh_locked = this%geometry_written
+  end subroutine define_logical_grid
 
-  ! Static data.
+!!!! STATIC DATA !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #:for loc, assoc in mesh_locations
 #:for kind, decl, h5type in nums
 #:for rank in [3,4]
-  !! A name-based call creates a new dataset and optionally returns its handle
-  !! for additional block writes. Repeated names are disambiguated at creation.
   subroutine write_${loc}$_data_${kind}$_${rank}$(this, name, array, array_origin, write_bounds, attribute, handle)
     class(vtkhdf_structured_base), intent(inout) :: this
     character(*), intent(in) :: name
@@ -384,8 +390,8 @@ contains
     integer :: new_index, ncomp
     type(vtkhdf_${loc}$_data_handle) :: var
     type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
-    INSIST(this%root_id >= 0 .and. this%geometry_defined)
+    call err_ctx%capture
+    INSIST(this%root_id >= 0 .and. this%logical_grid_defined .and. this%geometry_written)
     ASSERT(this%ctx%identical(trim(name)))
     ASSERT(this%ctx%identical([merge(1,0,present(attribute))]))
     ASSERT(this%ctx%identical([${nums.index((kind,decl,h5type))}$]))
@@ -401,32 +407,27 @@ contains
     if (present(handle)) call handle%set(new_index, this%root_id)
     call err_ctx%restore(0)
   end subroutine
-
 #:endfor
-
 #:endfor
-
 #:endfor
 
 #:for kind, decl, h5type in nums_no_int8
-  !! FieldData intentionally retains UG's rank-zero, unique-name semantics.
   subroutine write_field_data_${kind}$(this, name, array, as_vector)
     class(vtkhdf_structured_base), intent(inout) :: this
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
     type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
+    call err_ctx%capture
     INSIST(this%root_id >= 0)
     INSIST(this%nsteps == -1)
     ASSERT(this%ctx%identical(trim(name)))
     call this%field_data%write(this%ctx, name, array, as_vector)
     call err_ctx%restore(0)
   end subroutine
-
 #:endfor
 
-  ! Temporal registration.
+!!!! TEMPORAL REGISTRATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #:for loc, assoc in mesh_locations
 #:for kind, decl, h5type in nums
@@ -443,7 +444,7 @@ contains
     logical :: vector
 
     type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
+    call err_ctx%capture
     INSIST(this%nsteps == 0)
     ASSERT(this%ctx%identical(trim(name)))
     ASSERT(this%ctx%identical([merge(1,0,present(attribute))]))
@@ -461,7 +462,7 @@ contains
     end select
 
     ASSERT(this%ctx%identical([ncomp, merge(1,0,vector)]))
-    INSIST(this%geometry_defined)
+    INSIST(this%logical_grid_defined)
     call this%reserve_${loc}$_data_name(name, external_name, internal_name, index, is_temporal=.true.)
     call this%create_${loc}$_var(index, ${h5type}$, int(storage_size(mold)/8,int64), &
         ncomp, vector)
@@ -470,9 +471,7 @@ contains
     call handle%set(index, this%root_id)
     call err_ctx%restore(0)
   end function
-
 #:endfor
-
 #:endfor
 
 #:for kind, decl, h5type in nums_no_int8
@@ -483,7 +482,7 @@ contains
     integer :: index
     type(vtkhdf_field_data_handle) :: handle
     type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
+    call err_ctx%capture
     INSIST(this%nsteps == 0)
     ASSERT(this%ctx%identical(trim(name)))
     ASSERT(this%ctx%identical([${nums.index((kind,decl,h5type))}$]))
@@ -492,15 +491,14 @@ contains
     call handle%set(index, this%root_id)
     call err_ctx%restore(0)
   end function
-
 #:endfor
 
-  ! Writes by index.
+!!!! TEMPORAL AND INCREMENTAL STATIC WRITES !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #:for loc, assoc in mesh_locations
 #:for kind, decl, h5type in nums
 #:for rank in [3,4]
-  subroutine write_indexed_${loc}$_data_${kind}$_${rank}$(this, var, array, array_origin, write_bounds)
+  subroutine write_by_handle_${loc}$_data_${kind}$_${rank}$(this, var, array, array_origin, write_bounds)
     class(vtkhdf_structured_base), intent(inout) :: this
     type(vtkhdf_${loc}$_data_handle), intent(in) :: var
     ${decl}$, contiguous, intent(in) :: array(${','.join([':']*rank)}$)
@@ -510,21 +508,19 @@ contains
     integer(hsize_t) :: ms(3), mc(3), spatial_shape(3)
     integer(hsize_t), allocatable :: fs(:), fc(:)
     type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
-    index = var%get_index(this%root_id)
+    call err_ctx%capture
+    index = var%index(this%root_id)
     ncomp = ${'1' if rank == 3 else 'size(array,1)'}$
     call this%prepare_${loc}$_write(index, ${h5type}$, ncomp, ${'.false.' if rank == 3 else '.true.'}$)
     spatial_shape = [${', '.join('size(array,%d,kind=hsize_t)'%i for i in range(rank-2,rank+1))}$]
     call this%${loc}$_selections(index, spatial_shape, array_origin, write_bounds, ms, mc, fs, fc)
     call h5_write_region(this%ctx, this%${loc}$_data%vars(index)%dataset_id, array, &
         ${'ms, mc' if rank == 3 else '[0_hsize_t,ms], [int(ncomp,hsize_t),mc]'}$, fs, fc)
+    this%mesh_locked = .true.
     call err_ctx%restore(0)
   end subroutine
-
 #:endfor
-
 #:endfor
-
 #:endfor
 
 #:for kind, decl, h5type in nums_no_int8
@@ -534,47 +530,54 @@ contains
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
     type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
     INSIST(this%step_open)
-    call this%field_data%write_temporal(this%ctx, var%get_index(this%root_id), array, as_vector)
+    call err_ctx%capture
+    call this%field_data%write_temporal(this%ctx, var%index(this%root_id), array, as_vector)
     call err_ctx%restore(0)
   end subroutine
-
 #:endfor
 
-  ! Time stepping.
+!!!! TIME STEPPING !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   subroutine start_time_step_real64(this, time)
+
     class(vtkhdf_structured_base), intent(inout) :: this
     real(real64), intent(in) :: time
+
     type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
+
+    call err_ctx%capture
+
     INSIST(this%nsteps >= 0)
-    INSIST(this%geometry_defined .and. this%geometry_written)
-    ASSERT(this%ctx%identical([time]))
-    if (this%step_open) call this%finalize_time_step()
+    if (this%step_open) call this%finalize_time_step
+
     this%nsteps = this%nsteps + 1
     call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps)
+
     call h5_append_to_dataset(this%ctx, this%steps_id, 'Values', time, root=0)
-    if (allocated(this%cell_data%vars)) then
-      call this%cell_data%vars%reset_step_flags()
-    end if
-    if (allocated(this%point_data%vars)) then
-      call this%point_data%vars%reset_step_flags()
-    end if
-    if (allocated(this%field_data%vars)) then
-      call this%field_data%vars%reset_step_flags()
-    end if
+
+    if (allocated(this%point_data%vars)) call this%point_data%vars%reset_step_flags
+    if (allocated(this%cell_data%vars))  call this%cell_data%vars%reset_step_flags
+    if (allocated(this%field_data%vars)) call this%field_data%vars%reset_step_flags
     this%step_open = .true.
+
     call err_ctx%restore(0)
-  end subroutine
+
+  end subroutine start_time_step_real64
+
 
   subroutine finalize_time_step(this)
+
     class(vtkhdf_structured_base), intent(inout) :: this
+
     integer :: j
     type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
+
     INSIST(this%step_open)
+    INSIST(this%logical_grid_defined .and. this%geometry_written)
+
+    call err_ctx%capture
+
 #:for loc, assoc in mesh_locations
     if (allocated(this%${loc}$_data%vars)) then
       do j = 1, size(this%${loc}$_data%vars)
@@ -586,14 +589,19 @@ contains
       end do
     end if
 #:endfor
+
+    !! Cell and point data offsets for each temporal dataset for this timestep
     call append_data_offsets(this%ctx, this%cell_data%offsets_id, this%cell_data%vars)
     call append_data_offsets(this%ctx, this%point_data%offsets_id, this%point_data%vars)
     call this%field_data%append_metadata(this%ctx)
     this%step_open = .false.
-    call err_ctx%restore(0)
-  end subroutine
+    this%mesh_locked = .true.
 
-  ! Registry and storage helpers.
+    call err_ctx%restore(0)
+
+  end subroutine finalize_time_step
+
+!!!! REGISTRY AND STORAGE HELPERS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #:for loc, group in [('cell','CellData'), ('point','PointData')]
   subroutine reserve_${loc}$_data_name(this, name, external_name, internal_name, index, is_temporal)
@@ -602,7 +610,7 @@ contains
     character(:), allocatable, intent(out) :: external_name, internal_name
     integer, intent(out) :: index
     logical, intent(in), optional :: is_temporal
-    type(mesh_data_var) :: var
+    type(mesh_dataset) :: var
     call resolve_record_name(name, 'Unnamed_${group}$', external_name, internal_name, this%${loc}$_data%vars)
     var%internal_name = internal_name
     if (present(is_temporal)) var%is_temporal = is_temporal
@@ -613,7 +621,6 @@ contains
     end if
     index = size(this%${loc}$_data%vars)
   end subroutine
-
 #:endfor
 
 #:for loc, assoc in mesh_locations
@@ -624,7 +631,7 @@ contains
     integer(int64), intent(in) :: value_bytes
     logical, intent(in) :: vector
     integer(hsize_t), allocatable :: dims(:), maxdims(:)
-    INSIST(this%geometry_defined)
+    INSIST(this%logical_grid_defined)
     INSIST(ncomp > 0)
     associate (var => this%${loc}$_data%vars(index))
       var%type_id = type_id
@@ -660,7 +667,7 @@ contains
     integer, intent(in) :: index, ncomp
     integer(hid_t), intent(in) :: type_id
     logical, intent(in) :: vector
-    INSIST(this%geometry_defined)
+    INSIST(this%logical_grid_defined .and. this%geometry_written)
     INSIST(allocated(this%${loc}$_data%vars))
     INSIST(index >= 1 .and. index <= size(this%${loc}$_data%vars))
     ASSERT(this%ctx%identical([index, ncomp, merge(1,0,vector)]))
@@ -703,7 +710,6 @@ contains
       end if
     end associate
   end subroutine
-
 #:endfor
 
   function point_dimensions(this) result(dims)
@@ -712,11 +718,10 @@ contains
     dims = this%dims(:,POINT)
   end function
 
-  subroutine check_geometry_write(this)
+  pure logical function geometry_writable(this)
     class(vtkhdf_structured_base), intent(in) :: this
-    INSIST(this%root_id >= 0 .and. this%geometry_defined)
-    INSIST(this%nsteps <= 0) ! Fixed geometry must be supplied before time stepping.
-  end subroutine
+    geometry_writable = this%root_id >= 0 .and. this%logical_grid_defined .and. .not.this%mesh_locked
+  end function
 
   subroutine map_point_region(this, spatial_shape, array_origin, write_bounds, mem_start, mem_count, file_origin)
     class(vtkhdf_structured_base), intent(in) :: this
@@ -756,12 +761,12 @@ contains
       mem_count = bounds(:,2) - bounds(:,1) + 1
       file_origin = bounds(:,1) - int(this%bounds(:,1,association),int64)
     end if
-  end subroutine
+  end subroutine map_region
 
   subroutine append_data_offsets(ctx, grp_id, vars)
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: grp_id
-    type(mesh_data_var), allocatable, intent(in) :: vars(:)
+    type(mesh_dataset), allocatable, intent(in) :: vars(:)
     integer :: j
     if (.not.allocated(vars)) return
     do j = 1, size(vars)

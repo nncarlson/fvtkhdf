@@ -22,7 +22,7 @@ conventions. There is no runtime cell/point/field selector in these interfaces.
 Both cores contain `cell_data`, `point_data`, and `field_data`. Each association
 has `vars`, `group_id`, and `offsets_id`; FieldData also has `sizes_id`.
 `named_record` supplies the internal HDF5 name shared by data and block
-records. `data_var_record` extends it with common temporal bookkeeping.
+records. `dataset_record` extends it with common temporal bookkeeping.
 Mesh records extend it with UG's last local entity count or structured
 dataset IDs and scalar/component interpretation. FieldData uses the same
 record and list implementation in both cores.

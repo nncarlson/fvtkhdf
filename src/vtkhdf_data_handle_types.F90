@@ -17,15 +17,15 @@ module vtkhdf_data_handle_types
 
   type, abstract :: vtkhdf_data_handle
     private
-    integer :: index = -1
-    ! BLOCK_INDEX is interpreted only by the MultiBlock front end.
-    integer :: block_index = -1
+    integer :: index_ = -1
+    ! BLOCK_INDEX_ is interpreted only by the MultiBlock front end.
+    integer :: block_index_ = -1
     ! Root HDF5 group ID of the owning VTK dataset (an individual leaf block
     ! within a MultiBlock file). Writers use this only to check
     ! handle ownership during the open writer's lifetime.
     integer(int64) :: owner = -1
   contains
-    procedure :: set, get_index, set_block_index, get_block_index
+    procedure :: set, index, set_block_index, block_index
   end type
 
   type, extends(vtkhdf_data_handle), public :: vtkhdf_cell_data_handle
@@ -42,31 +42,29 @@ contains
   subroutine set_block_index(this, block_index)
     class(vtkhdf_data_handle), intent(inout) :: this
     integer, intent(in) :: block_index
-    this%block_index = block_index
+    this%block_index_ = block_index
   end subroutine
 
-  pure function get_block_index(this) result(block_index)
+  pure function block_index(this) result(value)
     class(vtkhdf_data_handle), intent(in) :: this
-    integer :: block_index
-    block_index = this%block_index
+    integer :: value
+    value = this%block_index_
   end function
 
   subroutine set(this, index, owner)
     class(vtkhdf_data_handle), intent(out) :: this
     integer, intent(in) :: index
-    integer(int64), intent(in), optional :: owner
-    this%index = index
-    if (present(owner)) this%owner = owner
+    integer(int64), intent(in) :: owner
+    this%index_ = index
+    this%owner = owner
   end subroutine
 
-  pure function get_index(this, owner) result(index)
+  pure function index(this, owner) result(value)
     class(vtkhdf_data_handle), intent(in) :: this
-    integer(int64), intent(in), optional :: owner
-    integer :: index
-    index = this%index
-    if (present(owner)) then
-      if (owner /= this%owner) index = -1
-    end if
+    integer(int64), intent(in) :: owner
+    integer :: value
+    value = this%index_
+    if (owner /= this%owner) value = -1
   end function
 
 end module vtkhdf_data_handle_types

@@ -1,49 +1,57 @@
+!!
+!! VTKHDF_FILE_CONTEXT
+!!
 !! Owned standalone file and communicator resources. Composite leaves leave
 !! this component inactive and borrow the containing writer's context instead.
 !! Cleanup is explicit and collective; implicit finalization performs no I/O.
+!! Callers initialize the HDF5 bindings and establish the HDF5 error context.
 !!
 !! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
+!!
+
 #include "vtkhdf_assert.inc"
+
 module vtkhdf_file_context_type
-  use vtkhdf_ctx_type
+
+  use vtkhdf_context_type
   use vtkhdf_h5_c_binding
-  use vtkhdf_h5e_context_type
   implicit none
   private
 
   type, public :: vtkhdf_file_context
     private
     integer(hid_t) :: file_id = H5I_INVALID_HID
-    type(vtkhdf_ctx) :: ctx
+    type(vtkhdf_context) :: ctx
   contains
     procedure :: open, close, flush, id, context
   end type
 
 contains
 
-  subroutine open(this, filename, stat, errmsg &
 #ifdef USE_MPI
-      , comm &
+  subroutine open(this, filename, comm, stat, errmsg)
+#else
+  subroutine open(this, filename, stat, errmsg)
 #endif
-      )
+
     class(vtkhdf_file_context), intent(out) :: this
     character(*), intent(in) :: filename
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
 #ifdef USE_MPI
     integer, intent(in) :: comm
 #endif
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+
     integer(hid_t) :: fapl
     integer :: ierr
-    type(vtkhdf_h5e_context) :: err_ctx
+
 #ifdef USE_MPI
     call this%ctx%init(comm)
 #else
     call this%ctx%init()
 #endif
-    call init_hdf5
-    call err_ctx%capture()
+
     call this%ctx%get_fapl(fapl)
     this%file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl)
     ierr = H5Pclose(fapl)
@@ -53,10 +61,10 @@ contains
       errmsg = 'failed to open file'
       if (this%file_id >= 0) ierr = H5Fclose(this%file_id)
       this%file_id = H5I_INVALID_HID
-      call this%ctx%free()
+      call this%ctx%free ! frees duplicated comm in MPI build
     end if
-    call err_ctx%restore(stat)
-  end subroutine
+
+  end subroutine open
 
   subroutine close(this)
     class(vtkhdf_file_context), intent(inout) :: this
@@ -71,12 +79,9 @@ contains
   subroutine flush(this)
     class(vtkhdf_file_context), intent(in) :: this
     integer :: ierr
-    type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
     INSIST(this%file_id >= 0)
     ierr = H5Fflush(this%file_id, H5F_SCOPE_LOCAL)
     INSIST(ierr >= 0)
-    call err_ctx%restore(0)
   end subroutine
 
   function id(this) result(file_id)
@@ -87,7 +92,7 @@ contains
 
   function context(this) result(ctx)
     class(vtkhdf_file_context), intent(in) :: this
-    type(vtkhdf_ctx) :: ctx
+    type(vtkhdf_context) :: ctx
     ctx = this%ctx ! unowned copy
   end function
 

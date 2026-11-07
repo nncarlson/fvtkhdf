@@ -41,7 +41,7 @@ module vtkhdf_mb_file_type
   use vtkhdf_data_handle_types
   use vtkhdf_simple_dataset_class
   use vtkhdf_ug_file_type
-  use vtkhdf_ctx_type
+  use vtkhdf_context_type
   use vtkhdf_h5e_context_type
   use vtkhdf_version_param
   implicit none
@@ -54,7 +54,7 @@ module vtkhdf_mb_file_type
 
   type, public :: vtkhdf_mb_file
     private
-    type(vtkhdf_ctx) :: ctx
+    type(vtkhdf_context) :: ctx
     integer(hid_t) :: file_id=H5I_INVALID_HID, vtk_id=H5I_INVALID_HID, ass_id=H5I_INVALID_HID
     integer(int64) :: data_chunk_bytes = 128_int64*1024
     integer :: next_block_index = 0
@@ -96,8 +96,8 @@ module vtkhdf_mb_file_type
 #:for suffix, mold_shape, array_shape in data_specs
     generic :: write_${loc}$_data => write_${loc}$_data_${kind}$_${suffix}$
     procedure, private :: write_${loc}$_data_${kind}$_${suffix}$
-    generic :: write_${loc}$_data => write_indexed_${loc}$_data_${kind}$_${suffix}$
-    procedure, private :: write_indexed_${loc}$_data_${kind}$_${suffix}$
+    generic :: write_${loc}$_data => write_temporal_${loc}$_data_${kind}$_${suffix}$
+    procedure, private :: write_temporal_${loc}$_data_${kind}$_${suffix}$
     generic :: register_temporal_${loc}$_data => register_temporal_${loc}$_data_${kind}$_${suffix}$
     procedure, private :: register_temporal_${loc}$_data_${kind}$_${suffix}$
 #:endfor
@@ -599,14 +599,14 @@ contains
 #:for kind, decl in nums
 #:for suffix, mold_shape, array_shape in data_specs
 
-  subroutine write_indexed_${loc}$_data_${kind}$_${suffix}$(this, blk, var, array)
+  subroutine write_temporal_${loc}$_data_${kind}$_${suffix}$(this, blk, var, array)
     class(vtkhdf_mb_file), intent(inout) :: this
     type(vtkhdf_block_handle), intent(in) :: blk
     type(vtkhdf_${loc}$_data_handle), intent(in) :: var
     ${decl}$, intent(in) :: array${array_shape}$
     type(vtkhdf_h5e_context) :: err_ctx
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
-    INSIST(var%get_block_index() == blk%index)
+    INSIST(var%block_index() == blk%index)
     call err_ctx%capture
     select type (dataset => this%blocks(blk%index)%b)
     type is (vtkhdf_ug_file)
@@ -630,7 +630,7 @@ contains
     logical, intent(in), optional :: as_vector
     type(vtkhdf_h5e_context) :: err_ctx
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
-    INSIST(var%get_block_index() == blk%index)
+    INSIST(var%block_index() == blk%index)
     call err_ctx%capture
     select type (dataset => this%blocks(blk%index)%b)
     type is (vtkhdf_ug_file)

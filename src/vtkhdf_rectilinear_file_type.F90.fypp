@@ -6,7 +6,9 @@
 !! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
+
 #include "vtkhdf_assert.inc"
+
 #:set reals = [('real32','real(real32)','H5T_NATIVE_FLOAT'), ('real64','real(real64)','H5T_NATIVE_DOUBLE')]
 
 module vtkhdf_rectilinear_file_type
@@ -16,7 +18,6 @@ module vtkhdf_rectilinear_file_type
   use vtkhdf_h5_c_binding
   use vtkhdf_h5
   use vtkhdf_h5e_context_type
-  use vtkhdf_ctx_type
   use vtkhdf_data_handle_types
   use vtkhdf_version_param
   use vtkhdf_file_modes, only: VTKHDF_STATIC, VTKHDF_FIXED_MESH
@@ -29,7 +30,7 @@ module vtkhdf_rectilinear_file_type
   type, extends(vtkhdf_structured_base), public :: vtkhdf_rectilinear_file
     private
   contains
-    procedure :: init, supports_mode
+    procedure :: dataset_type, supports_mode
     generic :: write_mesh => write_mesh_real32, write_mesh_real64
     procedure, private :: write_mesh_real32, write_mesh_real64
   end type
@@ -42,17 +43,11 @@ contains
     supports_mode = mode == VTKHDF_STATIC .or. mode == VTKHDF_FIXED_MESH
   end function
 
-  !! Internal entry point for a composite leaf. LOC_ID and CTX remain owned
-  !! by the caller. Standalone CREATE uses the same initialization path.
-  subroutine init(this, loc_id, name, ctx, mode, data_chunk_bytes)
-    class(vtkhdf_rectilinear_file), intent(inout) :: this
-    integer(hid_t), intent(in) :: loc_id
-    character(*), intent(in) :: name
-    type(vtkhdf_ctx), intent(in) :: ctx
-    integer, intent(in), optional :: mode
-    integer(int64), intent(in), optional :: data_chunk_bytes
-    call this%init_grid(loc_id, name, ctx, 'RectilinearGrid', mode, data_chunk_bytes)
-  end subroutine
+  pure function dataset_type(this) result(name)
+    class(vtkhdf_rectilinear_file), intent(in) :: this
+    character(:), allocatable :: name
+    name = 'RectilinearGrid'
+  end function
 
 #:for kind, decl, h5type in reals
   subroutine write_mesh_${kind}$(this, point_bounds, x, y, z)
@@ -61,8 +56,8 @@ contains
     ${decl}$, intent(in) :: x(:), y(:), z(:)
     integer(int64) :: dims(3)
     type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture()
-    call this%define_grid(point_bounds)
+    call err_ctx%capture
+    call this%define_logical_grid(point_bounds)
     dims = this%point_dimensions()
     ASSERT(this%ctx%identical([${kind}$]))
     if (this%ctx%rank == 0) then

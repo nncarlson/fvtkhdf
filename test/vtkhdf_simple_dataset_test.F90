@@ -2,12 +2,13 @@
 ! deliberately below MB's public API, which still creates only UG blocks.
 program vtkhdf_simple_dataset_test
   use,intrinsic :: iso_fortran_env
+  use,intrinsic :: iso_c_binding, only: c_funptr, c_ptr, c_associated
   use vtkhdf_simple_dataset_class
   use vtkhdf_ug_file_type
   use vtkhdf_image_file_type
   use vtkhdf_rectilinear_file_type
   use vtkhdf_structured_file_type
-  use vtkhdf_ctx_type
+  use vtkhdf_context_type
   use vtkhdf_h5_c_binding
   use vtkhdf_test_env
 #ifdef USE_MPI
@@ -18,7 +19,9 @@ program vtkhdf_simple_dataset_test
     class(vtkhdf_simple_dataset), allocatable :: writer
   end type
   type(leaf) :: blocks(4)
-  type(vtkhdf_ctx) :: ctx
+  type(vtkhdf_context) :: ctx
+  type(c_funptr) :: saved_error_handler
+  type(c_ptr) :: saved_error_data
   integer(hid_t) :: file_id, parent_id, fapl, root_ids(4)
   integer :: rank, nproc, stat, j, cycle
   integer(int32) :: bounds(3,2), selected(3,2)
@@ -56,6 +59,7 @@ program vtkhdf_simple_dataset_test
       select type (writer => blocks(j)%writer)
       type is (vtkhdf_ug_file)
         call writer%init(parent_id,trim(name),ctx,mode=VTKHDF_FIXED_MESH)
+        if (cycle == 2) call writer%start_time_step(0.0_real32)
         if (rank == 0) then
           call writer%write_mesh(reshape(points,[3,4]),[1,2,4,3],[1,5],[9_int8])
         else
@@ -63,12 +67,15 @@ program vtkhdf_simple_dataset_test
         end if
       type is (vtkhdf_image_file)
         call writer%init(parent_id,trim(name),ctx,mode=VTKHDF_FIXED_MESH)
+        if (cycle == 2) call writer%start_time_step(0.0_real32)
         call writer%write_mesh(bounds,[0.,0.,0.],[1.,1.,1.])
       type is (vtkhdf_rectilinear_file)
         call writer%init(parent_id,trim(name),ctx,mode=VTKHDF_FIXED_MESH)
+        if (cycle == 2) call writer%start_time_step(0.0_real32)
         call writer%write_mesh(bounds,[0.,1.],[0.,1.],[0.])
       type is (vtkhdf_structured_file)
         call writer%init(parent_id,trim(name),ctx,mode=VTKHDF_FIXED_MESH)
+        if (cycle == 2) call writer%start_time_step(0.0_real32)
         call writer%write_mesh(bounds)
         call writer%write_mesh_geometry(points,bounds(:,1),selected)
       class default
@@ -78,8 +85,10 @@ program vtkhdf_simple_dataset_test
       root_ids(j) = blocks(j)%writer%root()
       if (root_ids(j) < 0) error stop 'missing root'
       if (.not.blocks(j)%writer%temporal_enabled()) error stop 'missing temporal mode'
-      if (blocks(j)%writer%step_is_open()) error stop 'step already open'
-      call blocks(j)%writer%start_time_step(0.0_real32)
+      if (cycle == 1) then
+        if (blocks(j)%writer%step_is_open()) error stop 'step already open'
+        call blocks(j)%writer%start_time_step(0.0_real32)
+      end if
       if (.not.blocks(j)%writer%step_is_open()) error stop 'step did not open'
       call blocks(j)%writer%start_time_step(1.0_real64)
       call blocks(j)%writer%finalize_time_step()
@@ -98,6 +107,8 @@ program vtkhdf_simple_dataset_test
   end do
   ! Failed standalone creation must release its duplicated communicator.
   ! The same polymorphic object can then be closed and reopened normally.
+  stat = H5Eget_auto2(H5E_DEFAULT,saved_error_handler,saved_error_data)
+  if (stat < 0) error stop 'failed to query HDF5 error handler'
   do j = 1,4
     do cycle = 1,3
       filename = 'simple_dataset_leaves.vtkhdf/not-a-directory.vtkhdf'
@@ -109,27 +120,40 @@ program vtkhdf_simple_dataset_test
 #else
         call writer%create(trim(filename),stat,errmsg)
 #endif
+        call check_error_handler()
+        if (stat == 0) call writer%flush()
       type is (vtkhdf_image_file)
 #ifdef USE_MPI
         call writer%create(trim(filename),MPI_COMM_WORLD,stat,errmsg)
 #else
         call writer%create(trim(filename),stat,errmsg)
 #endif
+        call check_error_handler()
+        if (stat == 0) call writer%flush()
       type is (vtkhdf_rectilinear_file)
 #ifdef USE_MPI
         call writer%create(trim(filename),MPI_COMM_WORLD,stat,errmsg)
 #else
         call writer%create(trim(filename),stat,errmsg)
 #endif
+        call check_error_handler()
+        if (stat == 0) call writer%flush()
       type is (vtkhdf_structured_file)
 #ifdef USE_MPI
         call writer%create(trim(filename),MPI_COMM_WORLD,stat,errmsg)
 #else
         call writer%create(trim(filename),stat,errmsg)
 #endif
+        call check_error_handler()
+        if (stat == 0) then
+          call writer%flush()
+          ! Cleanup must allow a logical grid whose coordinates were omitted.
+          call writer%write_mesh(bounds)
+        end if
       class default
         error stop 'unexpected leaf type'
       end select
+      call check_error_handler()
       if (cycle == 1) then
         if (stat == 0 .or. .not.allocated(errmsg)) error stop 'expected creation failure'
         if (blocks(j)%writer%root() >= 0) error stop 'failed creation left an open root'
@@ -139,6 +163,7 @@ program vtkhdf_simple_dataset_test
         if (blocks(j)%writer%temporal_enabled()) error stop 'wrong standalone mode'
       end if
       call blocks(j)%writer%close()
+      call check_error_handler()
     end do
   end do
   stat = H5Gclose(parent_id)
@@ -147,4 +172,23 @@ program vtkhdf_simple_dataset_test
   if (stat < 0) error stop 'parent file close failed'
   call ctx%free()
   call test_env_finalize()
+
+contains
+
+  subroutine check_error_handler()
+    type(c_funptr) :: handler
+    type(c_ptr) :: data
+    integer :: ierr
+    ierr = H5Eget_auto2(H5E_DEFAULT,handler,data)
+    if (ierr < 0) error stop 'failed to query HDF5 error handler'
+    if (c_associated(handler) .neqv. c_associated(saved_error_handler)) error stop 'HDF5 error handler changed'
+    if (c_associated(handler)) then
+      if (.not.c_associated(handler,saved_error_handler)) error stop 'HDF5 error handler changed'
+    end if
+    if (c_associated(data) .neqv. c_associated(saved_error_data)) error stop 'HDF5 error handler data changed'
+    if (c_associated(data)) then
+      if (.not.c_associated(data,saved_error_data)) error stop 'HDF5 error handler data changed'
+    end if
+  end subroutine
+
 end program

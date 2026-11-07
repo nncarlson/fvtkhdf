@@ -8,53 +8,6 @@
 !! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!
-!! NOTES
-!!
-!! NAMED_RECORD represents an object participating in an HDF5 naming
-!! namespace. Its INTERNAL_NAME component identifies a dataset or link
-!! within a group. Extensions add the metadata needed by each kind of object.
-!! UnstructuredGrid and structured writers keep arrays of records for their
-!! cell, point, and field datasets; MultiBlock keeps an array of block records.
-!! The common parent lets the naming routines search any of these arrays.
-!! Each array also serves as the catalog of names already used in its group:
-!! CellData, PointData, or FieldData for data fields, or Assembly for blocks.
-!! Data-field catalogs belong to an individual VTK dataset (a leaf in a
-!! MultiBlock file). Block internal names identify Assembly soft links; the
-!! corresponding block groups have separate generated names such as Group_0.
-!!
-!! Naming has two parts. First, normalize the user-supplied label by trimming
-!! it and supplying a default if empty. This external label is preserved by
-!! the caller in the dataset's Name attribute, or the block's Name attribute
-!! for MultiBlock. The private SANITIZED_NAME helper replaces '/', '.', and
-!! spaces with underscores to form a candidate internal HDF5 name.
-!! Second, disambiguate that candidate against the group's existing names
-!! by appending '_1', '_2', etc. until an unused name is found. This leaves
-!! the external label unchanged.
-!!
-!! RESOLVE_RECORD_NAME combines normalization and disambiguation. It examines
-!! the supplied records without modifying them; the caller reserves the name
-!! by appending a record to its own array after resolution.
-!!
-!! Cell and point payload storage belongs to the mesh-specific cores.
-!! FieldData records, storage, and temporal metadata are implemented in
-!! vtkhdf_field_data_type.
-!!
-!! DATA_GROUPS is the common base for the pair of HDF5 group handles of one
-!! data association. GROUP_ID identifies CellData, PointData, or FieldData
-!! beneath the owning VTK dataset's root. OFFSETS_ID identifies the corresponding
-!! group beneath Steps (CellDataOffsets, PointDataOffsets, or FieldDataOffsets);
-!! it remains invalid for static files. Each group contains datasets named for
-!! the association's individual variables.
-!!
-!! UG and structured each define a MESH_DATA_LIST extension containing their
-!! own variable records. FIELD_DATA_LIST in vtkhdf_field_data_type adds its
-!! records and the FieldDataSizes group handle. CLOSE releases and invalidates
-!! only the two base handles; extensions or their owners close any additional
-!! resources separately. FIELD_DATA_LIST overrides CLOSE for that purpose.
-!! Its override invokes the parent binding after closing the sizes group.
-!!
 
 module vtkhdf_data_support
 
@@ -68,13 +21,19 @@ module vtkhdf_data_support
 
   integer(int64), parameter :: STEPS_CHUNK_SIZE = 512
 
-  !! Common parent of records whose internal names share an HDF5 namespace.
-  !! Each writer retains ownership of its records and their metadata.
+  !! Base record for members of one naming namespace: the blocks of a composite
+  !! VTK dataset, or one kind of dataset (cell, point, or field) of a simple
+  !! VTK dataset. Users keep an array of records, possibly of an extended type,
+  !! which RESOLVE_RECORD_NAME searches to choose an unused internal name.
+
   type, public :: named_record
     character(:), allocatable :: internal_name
   end type
 
-  type, extends(named_record), public :: data_var_record
+  !! Record for a cell, point, or field HDF5 dataset, adding temporal write
+  !! tracking, offsets, and shape information.
+
+  type, extends(named_record), public :: dataset_record
     logical :: is_temporal = .false., wrote_this_step = .false.
     integer(int64) :: offset = 0, next_offset = 0
     integer(int32) :: ncomp = 1, tuples = 0
@@ -83,6 +42,10 @@ module vtkhdf_data_support
   end type
 
   !! Common base for the pair of HDF5 group handles of one data association.
+  !! GROUP_ID identifies CellData, PointData, or FieldData; OFFSETS_ID identifies
+  !! its temporal-offset group under Steps, and remains invalid for static files.
+  !! CLOSE releases only these handles; extensions manage additional resources.
+
   type, public :: data_groups
     integer(hid_t) :: group_id = H5I_INVALID_HID, offsets_id = H5I_INVALID_HID
   contains
@@ -92,7 +55,12 @@ module vtkhdf_data_support
 contains
 
   !! Normalize the external label and choose an unused internal HDF5 name.
+  !! Trim NAME and use DEFAULT_NAME if blank. Replace '/', '.', and spaces with
+  !! underscores, then append '_1', '_2', etc. as needed to avoid existing names.
+  !! ITEMS is not modified; the caller reserves the name by appending a record
+  !! and preserves the external label in the dataset or block's Name attribute.
   !! An unallocated actual array for ITEMS is treated as an absent argument.
+
   subroutine resolve_record_name(name, default_name, external_name, internal_name, items)
 
     character(*), intent(in) :: name, default_name
@@ -145,7 +113,7 @@ contains
 
   !! Clear temporal write tracking; retain offsets and shapes for omission reuse.
   elemental subroutine reset_step_flags(this)
-    class(data_var_record), intent(inout) :: this
+    class(dataset_record), intent(inout) :: this
     if (this%is_temporal) this%wrote_this_step = .false.
   end subroutine
 

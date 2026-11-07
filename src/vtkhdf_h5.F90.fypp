@@ -38,7 +38,7 @@ module vtkhdf_h5
 
   use,intrinsic :: iso_fortran_env
   use,intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
-  use vtkhdf_ctx_type
+  use vtkhdf_context_type
   use vtkhdf_h5_c_binding
   implicit none
   private
@@ -93,7 +93,7 @@ contains
   !! Both axes may grow: rows append tuples, columns accommodate new component
   !! counts. HDF5 fills unwritten columns; FieldDataSizes excludes that padding.
   subroutine h5_create_field_dataset(ctx, loc_id, name, type_id, chunk_size)
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id, type_id
     character(*), intent(in) :: name
     integer(hsize_t), intent(in) :: chunk_size
@@ -116,7 +116,7 @@ contains
 
   subroutine field_data_spaces(ctx, loc_id, name, type_id, ncomp, ntuples, &
       dset_id, mem_space, file_space)
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id, type_id
     character(*), intent(in) :: name
     integer, intent(in) :: ncomp, ntuples
@@ -165,7 +165,7 @@ contains
   !! Only rank zero's values are referenced. Raw Fortran component-first
   !! arrays have the same memory order as tuple-by-component file selections.
   subroutine append_field_data_${s["kind"]}$(ctx, loc_id, name, array, ncomp, ntuples)
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array(..)
@@ -212,7 +212,7 @@ contains
   !! target. Temporal chunks contain exactly one snapshot.
   subroutine h5_create_region_dataset(ctx, loc_id, name, type_id, dims, value_bytes, &
       chunk_bytes, dset_id, maxdims)
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id, type_id
     character(*), intent(in) :: name
     integer(hsize_t), intent(in) :: dims(:), value_bytes, chunk_bytes
@@ -262,7 +262,7 @@ contains
 
   !! Allocate a single new time slice. Transfers into that slice are separate.
   subroutine h5_reserve_snapshot(ctx, dset_id, offset)
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: dset_id
     integer(hsize_t), intent(out) :: offset
     integer(hid_t) :: space_id
@@ -285,7 +285,7 @@ contains
 
   subroutine region_spaces(ctx, dset_id, mem_dims, mem_start, mem_count, file_start, file_count, &
       mem_space, file_space)
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: dset_id
     integer(hsize_t), intent(in) :: mem_dims(:), mem_start(:), mem_count(:), file_start(:), file_count(:)
     integer(hid_t), intent(out) :: mem_space, file_space
@@ -318,7 +318,7 @@ contains
   !! with the HDF5 memory dataspace, without packing an interior array.
   subroutine write_region_${s["kind"]}$_${rank}$(ctx, dset_id, array, mem_start, mem_count, &
       file_start, file_count)
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: dset_id
     ${s["decl"]}$, contiguous, intent(in) :: array(${','.join([':']*rank)}$)
     integer(hsize_t), intent(in) :: mem_start(${rank}$), mem_count(${rank}$), file_start(:), file_count(:)
@@ -344,7 +344,7 @@ contains
 
   !! Preserve the external VTK data label and optional attribute designation.
   subroutine h5_write_data_name_attr(ctx, grp_id, dataset_name, external_name, attribute)
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: grp_id
     character(*), intent(in) :: dataset_name, external_name
     character(*), intent(in), optional :: attribute
@@ -365,7 +365,7 @@ contains
 
   subroutine write_attr_${s["kind"]}$(ctx, obj_id, name, value)
 
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: value(..)
@@ -405,11 +405,11 @@ contains
 
   subroutine write_attr_string(ctx, obj_id, name, value)
 
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
-! NB: Default safe path for gfortran for now; string arrays not currently used.  
-!     See https://github.com/nncarlson/fvtkhdf/issues/47                         
+! NB: Default safe path for gfortran for now; string arrays not currently used.
+!     See https://github.com/nncarlson/fvtkhdf/issues/47
 #if defined(INTEL_BUG20240327) || defined(__GFORTRAN__)
     character(*), intent(in) :: value
 #else
@@ -450,7 +450,7 @@ contains
 
   subroutine get_attr_id(ctx, obj_id, name, type_id, dims, attr_id)
 
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: obj_id
     character(*), intent(in) :: name
     integer(hid_t), intent(in) :: type_id
@@ -528,7 +528,7 @@ contains
 
   subroutine write_dataset_${s["kind"]}$(ctx, loc_id, name, array, root)
 
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array(..)
@@ -585,7 +585,7 @@ contains
   subroutine write_dataset_common(ctx, loc_id, name, type_id, dims, &
       dset_id, mem_space_id, data_space_id, root)
 
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id, type_id
     character(*), intent(in) :: name
     integer(hsize_t), intent(in) :: dims(:)
@@ -667,7 +667,7 @@ contains
 #:for s in num_specs
 
   subroutine create_unlimited_dataset_${s["kind"]}$(ctx, loc_id, name, mold, chunk_size)
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: mold(..)
@@ -680,7 +680,7 @@ contains
 
   subroutine create_unlimited_dataset_core(ctx, loc_id, name, type_id, dims, chunk_size)
 
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     integer(hid_t), intent(in) :: type_id
@@ -737,7 +737,7 @@ contains
 
   subroutine append_to_dataset_${s["kind"]}$(ctx, loc_id, name, array, root)
 
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     ${s["decl"]}$, intent(in) :: array(..)
@@ -793,7 +793,7 @@ contains
   subroutine append_to_dataset_common(ctx, loc_id, name, type_id, dims, &
       dset_id, mem_space_id, data_space_id, root)
 
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id, type_id
     character(*), intent(in) :: name
     integer(hsize_t), intent(in) :: dims(:)

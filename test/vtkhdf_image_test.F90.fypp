@@ -6,7 +6,7 @@ program vtkhdf_image_test
   use vtkhdf_test_env
   use vtkhdf_ug_file_type, only: vtkhdf_ug_file
   use vtkhdf_structured_file_type, only: vtkhdf_structured_file
-  use vtkhdf_ctx_type, only: vtkhdf_ctx
+  use vtkhdf_context_type, only: vtkhdf_context
   use vtkhdf_h5_c_binding
 #ifdef USE_MPI
   use mpi
@@ -360,7 +360,7 @@ contains
   ! Exercise the structured core beneath an existing group without adding a
   ! public MultiBlock ImageData API. The core owns only its named child group.
   subroutine nested_groups()
-    type(vtkhdf_ctx) :: ctx
+    type(vtkhdf_context) :: ctx
     type(vtkhdf_image_file) :: static_grid
     type(vtkhdf_structured_file) :: temporal_grid
     type(vtkhdf_cell_data_handle) :: var
@@ -517,8 +517,9 @@ contains
               call file%write_${loc}$_data(scalar_name,a,origin,selected,handle=${handles}$(1))
               call file%write_${loc}$_data(vector_name,v,origin,selected,handle=${handles}$(2))
             else
-              call file%write_${loc}$_data(${handles}$(1),a,origin,selected)
-              call file%write_${loc}$_data(${handles}$(2),v,origin,selected)
+              ! Noncontiguous halo sections exercise the handle-based rank dispatch.
+              call file%write_${loc}$_data(${handles}$(1),a(:,3:,:),origin+[0,1,0],selected)
+              call file%write_${loc}$_data(${handles}$(2),v(:,:,2:,:),origin+[0,1,0],selected)
             end if
           else
             if (b == 1) then

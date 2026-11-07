@@ -1,5 +1,5 @@
 !!
-!! VTKHDF_CTX_TYPE
+!! VTKHDF_CONTEXT_TYPE
 !!
 !! An internal abstraction layer that encapsulates the collective operations
 !! used by the VTKHDF modules. The public interface is identical in serial and
@@ -12,7 +12,7 @@
 #: set SERIAL = not defined("USE_MPI")
 #include "vtkhdf_assert.inc"
 
-module vtkhdf_ctx_type
+module vtkhdf_context_type
 
   use,intrinsic :: iso_fortran_env
 #:if not SERIAL
@@ -21,7 +21,7 @@ module vtkhdf_ctx_type
   implicit none
   private
 
-  type, public :: vtkhdf_ctx
+  type, public :: vtkhdf_context
   #:if not SERIAL
     integer :: comm = MPI_COMM_NULL
   #:endif
@@ -48,7 +48,7 @@ contains
   !! Small collective metadata checks, independent of the data decomposition.
 #:for kind, decl, mpi_type in [('int32', 'integer(int32)', 'MPI_INT32_T'), ('int64', 'integer(int64)', 'MPI_INT64_T'), ('real64', 'real(real64)', 'MPI_DOUBLE_PRECISION')]
   logical function identical_${kind}$(this, value) result(same)
-    class(vtkhdf_ctx), intent(in) :: this
+    class(vtkhdf_context), intent(in) :: this
     ${decl}$, intent(in) :: value(:)
 #:if SERIAL
     same = .true.
@@ -64,7 +64,7 @@ contains
 #:endfor
 
   logical function identical_string(this, value) result(same)
-    class(vtkhdf_ctx), intent(in) :: this
+    class(vtkhdf_context), intent(in) :: this
     character(*), intent(in) :: value
 #:if SERIAL
     same = .true.
@@ -86,11 +86,11 @@ contains
 
 #:if SERIAL
   subroutine init(this)
-    class(vtkhdf_ctx), intent(out) :: this
+    class(vtkhdf_context), intent(out) :: this
   end subroutine
 #:else
   subroutine init(this, comm)
-    class(vtkhdf_ctx), intent(out) :: this
+    class(vtkhdf_context), intent(out) :: this
     integer, intent(in) :: comm
     integer :: ierr
     call MPI_Comm_dup(comm, this%comm, ierr)
@@ -101,7 +101,7 @@ contains
 #:endif
 
   subroutine free(this)
-    class(vtkhdf_ctx), intent(inout) :: this
+    class(vtkhdf_context), intent(inout) :: this
   #:if not SERIAL
     integer :: ierr
     if (this%comm /= MPI_COMM_NULL) call MPI_Comm_free(this%comm, ierr)
@@ -113,7 +113,7 @@ contains
 
   !! Returns true if MASK is true on at least one rank; otherwise returns false.
   logical function global_any(this, mask)
-    class(vtkhdf_ctx), intent(in) :: this
+    class(vtkhdf_context), intent(in) :: this
     logical, intent(in) :: mask
   #:if SERIAL
     global_any = mask
@@ -128,7 +128,7 @@ contains
 
   !! Returns true if MASK is true on all ranks; otherwise returns false.
   logical function global_all(this, mask)
-    class(vtkhdf_ctx), intent(in) :: this
+    class(vtkhdf_context), intent(in) :: this
     logical, intent(in) :: mask
   #:if SERIAL
     global_all = mask
@@ -142,7 +142,7 @@ contains
   end function
 
   subroutine global_sum_int32_0(this, send, recv)
-    class(vtkhdf_ctx), intent(in) :: this
+    class(vtkhdf_context), intent(in) :: this
     integer(int32), intent(in)  :: send
     integer(int32), intent(out) :: recv
   #:if SERIAL
@@ -154,7 +154,7 @@ contains
   end subroutine
 
   subroutine global_sum_int64_0(this, send, recv)
-    class(vtkhdf_ctx), intent(in) :: this
+    class(vtkhdf_context), intent(in) :: this
     integer(int64), intent(in)  :: send
     integer(int64), intent(out) :: recv
   #:if SERIAL
@@ -166,7 +166,7 @@ contains
   end subroutine
 
   subroutine global_min_int32_1(this, send, recv)
-    class(vtkhdf_ctx), intent(in) :: this
+    class(vtkhdf_context), intent(in) :: this
     integer(int32), intent(in)  :: send(:)
     integer(int32), intent(out) :: recv(:)
   #:if SERIAL
@@ -180,7 +180,7 @@ contains
   end subroutine
 
   subroutine global_min_int64_1(this, send, recv)
-    class(vtkhdf_ctx), intent(in) :: this
+    class(vtkhdf_context), intent(in) :: this
     integer(int64), intent(in)  :: send(:)
     integer(int64), intent(out) :: recv(:)
   #:if SERIAL
@@ -194,7 +194,7 @@ contains
   end subroutine
 
   subroutine scan_sum_int64_0(this, send, recv)
-    class(vtkhdf_ctx), intent(in) :: this
+    class(vtkhdf_context), intent(in) :: this
     integer(int64), intent(in)  :: send
     integer(int64), intent(out) :: recv
   #:if SERIAL
@@ -208,7 +208,7 @@ contains
 
   subroutine get_dxpl(this, dxpl)
     use vtkhdf_h5_c_binding
-    class(vtkhdf_ctx), intent(in) :: this
+    class(vtkhdf_context), intent(in) :: this
     integer(hid_t), intent(out) :: dxpl
   #:if SERIAL
     ! Return a default data transfer property list (INDEPENDENT)
@@ -225,7 +225,7 @@ contains
 
   subroutine get_fapl(this, fapl)
     use vtkhdf_h5_c_binding
-    class(vtkhdf_ctx), intent(in) :: this
+    class(vtkhdf_context), intent(in) :: this
     integer(hid_t), intent(out) :: fapl
   #:if SERIAL
     ! Return a default file access property list
@@ -240,4 +240,4 @@ contains
   #:endif
   end subroutine
 
-end module vtkhdf_ctx_type
+end module vtkhdf_context_type

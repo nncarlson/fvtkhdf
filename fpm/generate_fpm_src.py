@@ -44,7 +44,7 @@ FYPP_FILES = (
     "vtkhdf_h5.F90.fypp",
     "vtkhdf_ug_file_type.F90.fypp",
     "vtkhdf_mb_file_type.F90.fypp",
-    "vtkhdf_ctx_type.F90.fypp",
+    "vtkhdf_context_type.F90.fypp",
 )
 
 EXAMPLE_GLOBS = (

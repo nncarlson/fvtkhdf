@@ -20,15 +20,15 @@ module vtkhdf_field_data_type
   use,intrinsic :: iso_fortran_env
   use vtkhdf_h5_c_binding
   use vtkhdf_h5
-  use vtkhdf_ctx_type
-  use vtkhdf_data_support, only: data_var_record, data_groups, STEPS_CHUNK_SIZE, &
+  use vtkhdf_context_type
+  use vtkhdf_data_support, only: dataset_record, data_groups, STEPS_CHUNK_SIZE, &
                                data_chunk_size, resolve_record_name
   implicit none
   private
 
   public :: field_data_list
 
-  type, extends(data_var_record) :: field_data_var
+  type, extends(dataset_record) :: field_data_var
     integer(hid_t) :: type_id = H5I_INVALID_HID
   end type
 
@@ -63,7 +63,7 @@ contains
   subroutine write_field_data_${kind}$(this, ctx, name, array, as_vector)
 
     class(field_data_list), intent(inout) :: this
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
@@ -99,7 +99,7 @@ contains
 #:for kind, decl, h5type in nums
   integer function register_temporal_field_data_${kind}$(this, ctx, name, mold, data_chunk_bytes) result(index)
     class(field_data_list), intent(inout) :: this
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: mold
     integer(int64), intent(in) :: data_chunk_bytes
@@ -118,7 +118,7 @@ contains
 #:for kind, decl, h5type in nums
   subroutine write_temporal_field_data_${kind}$(this, ctx, index, array, as_vector)
     class(field_data_list), intent(inout) :: this
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer, intent(in) :: index
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
@@ -174,7 +174,7 @@ contains
 
   subroutine append_field_data_metadata(this, ctx)
     class(field_data_list), intent(in) :: this
-    type(vtkhdf_ctx), intent(in) :: ctx
+    type(vtkhdf_context), intent(in) :: ctx
     integer :: j
     integer(int32) :: sizes(2,1)
     if (.not.allocated(this%vars)) return

@@ -5,6 +5,11 @@ Writers for simple VTK datasets use the same conventions for data associations,
 names, handles, and collective calls. Mesh-specific array shapes and mesh-writing
 requirements are described in the corresponding reference chapters.
 
+The caller is responsible for supplying all required mesh and data writes,
+including complete coverage of datasets written in regions. Closing a file
+releases resources and finalizes any open time step; it does not certify that
+the output is complete.
+
 Data Associations and Components
 --------------------------------
 
@@ -54,6 +59,7 @@ to ``create``. All ranks must call the same methods in the same order.
 Non-distributed arguments, including filenames, modes, names, and attribute
 designations, must have identical values on all ranks. Distributed arrays and
 placement arguments may differ as specified by the writer interface.
+For ``start_time_step``, only rank 0's time value is used.
 
 Field data has a distinct rule: all ranks supply arguments with matching type,
 kind, and shape, but only rank 0 contributes values.
