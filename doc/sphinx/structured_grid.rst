@@ -8,8 +8,9 @@ three-dimensional grids are supported.
 
 File management, point and cell data, and time stepping use :doc:`structured`.
 Field data uses :doc:`field_data`. The module exports ``VTKHDF_STATIC``
-(default) and ``VTKHDF_FIXED_MESH``. Geometry is fixed for the lifetime of
-the file; the latter mode allows temporal point, cell, and field data.
+(default), ``VTKHDF_FIXED_MESH``, and ``VTKHDF_MOVING_MESH``. The logical grid
+is fixed for the lifetime of the file. Moving-mesh mode permits changing
+point coordinates and requires temporal point, cell, and field data.
 
 .. code-block:: fortran
 
@@ -39,8 +40,10 @@ Mesh Data
 
    Write a rectangular region of physical point coordinates. Repeated calls
    assemble the global geometry. Complete these writes before writing point or
-   cell data and before finalizing the first time step. Geometry may be supplied
-   before or during that step; subsequent geometry writes are not permitted.
+   cell data and before finalizing the corresponding time step. Initial
+   geometry may be supplied before or during the first step. Static and
+   fixed-mesh modes permit only this initial geometry; moving-mesh mode permits
+   a replacement during each subsequent step.
 
    * ``points(3,nx,ny,nz)``: physical x, y, z coordinates, with all three
      spatial dimensions present even for 1D or 2D. Accepted kinds are
@@ -59,6 +62,18 @@ Mesh Data
    NaN. A zero spatial extent with ``write_bounds`` omitted supplies an empty
    contribution; the component extent must still be three. ``array_origin``
    remains required, and ``[0,0,0]`` suffices for an empty contribution.
+
+In moving-mesh mode, the first geometry call in a step begins a replacement;
+subsequent calls in that step supply further regions of the same replacement.
+An all-empty collective call also begins a replacement. Unwritten regions use
+fill values, rather than inheriting preceding coordinates. Complete all regions
+before writing point/cell data or finalizing the step.
+
+Omitting all geometry calls during a step reuses the most recently written
+geometry. A stored geometry snapshot is therefore distinct from a time step:
+seven steps with geometry written at steps 0, 2, and 4 require three snapshots.
+Geometry and point/cell data may be reused independently because the logical
+grid dimensions remain fixed.
 
 Logical indices used by fVTKHDF may have arbitrary lower bounds. VTKHDF stores
 only the dimensions for this grid type, so the reader exposes zero-based
@@ -79,4 +94,10 @@ Example
 coordinates and temporal cell data in serial and MPI builds.
 
 .. literalinclude:: ../../example/structured_fixed_mesh.F90
+   :language: fortran
+
+``example/structured_moving_mesh.F90`` demonstrates distributed moving
+coordinates with independent geometry and data reuse.
+
+.. literalinclude:: ../../example/structured_moving_mesh.F90
    :language: fortran

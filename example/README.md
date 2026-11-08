@@ -32,3 +32,9 @@ limitations.
 `rectilinear_fixed_mesh.F90` and `structured_fixed_mesh.F90` use the same
 fixed-geometry temporal workflow with rank-zero coordinate vectors and
 distributed explicit coordinates, respectively. Both support serial and MPI builds.
+
+
+The `rectilinear_moving_mesh` and `structured_moving_mesh` examples keep their
+logical grids fixed while changing physical coordinates. Geometry is replaced
+on even-numbered steps and reused otherwise; temporal cell data is updated on
+an independent schedule. Both programs support serial and MPI builds.

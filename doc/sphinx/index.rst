@@ -28,16 +28,11 @@ A serial build is also available.
    :caption: Unstructured VTK Dataset Types
 
    UnstructuredGrid <ug>
+   vtk_cell_types
+   stitching
 
 .. toctree::
    :maxdepth: 1
    :caption: Composite VTK Dataset Types
 
    MultiBlockDataSet <mb>
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Reference and Guides
-
-   vtk_cell_types
-   stitching

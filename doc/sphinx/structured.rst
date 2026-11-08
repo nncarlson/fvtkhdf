@@ -56,8 +56,10 @@ Geometry Ordering
 Supply the mesh geometry before writing point or cell data. In temporal files,
 the initial geometry may be supplied before or during the first time step,
 but must be supplied before that step is finalized. Complete all geometry
-writes before the first point/cell data write or the first step's finalization;
-subsequent geometry writes are not permitted because the mesh is fixed.
+writes before the first point/cell data write or the first step's finalization.
+Static and fixed-mesh modes permit no subsequent geometry writes. In moving-mesh
+mode, each new step permits a replacement before that step's point/cell writes;
+omitting geometry writes reuses the previous coordinates.
 
 Point and cell data registration requires the logical grid dimensions.
 Where the geometry interface permits separate coordinate writes, registration
@@ -149,7 +151,8 @@ Static Point and Cell Data
    Static point and cell data are supported in ``VTKHDF_STATIC`` and
    ``VTKHDF_FIXED_MESH`` modes. Define the mesh before creating or writing these
    datasets. In a temporal file, static datasets may also be written after time
-   stepping begins; they remain independent of time.
+   stepping begins; they remain independent of time. Moving-mesh mode requires
+   temporal point and cell datasets, registered before time stepping.
 
 Region Ownership and Collective Writes
 --------------------------------------
@@ -286,6 +289,16 @@ omitting the calls on all ranks.
 Region shapes and rank ownership may change between replacements. Every
 replacement must cover the entire dataset exactly once before the step is
 finalized.
+
+.. note::
+
+   VTK 9.7.1 can leave stale point/cell data attached when time steps are
+   requested out of order. This reader-cache limitation also affects fixed
+   meshes. It is `fixed in VTK 9.7.2
+   <https://gitlab.kitware.com/vtk/vtk/-/merge_requests/13775>`_; ParaView 6.2.1
+   is expected to include the fix. For affected versions, disable caching:
+   clear **Use Cache** in the ParaView reader properties and click **Apply**,
+   or call ``reader.SetUseCache(False)`` when using VTK in Python.
 
 Field Data
 ----------

@@ -25,7 +25,9 @@
 !! checks remain unconditional. See doc/runtime-checks.md for the policy.
 !! Geometry extensions share CTX and DATA_CHUNK_BYTES; GEOMETRY_WRITTEN records
 !! whether geometry storage has been supplied, not whether every point has
-!! been covered. Coverage and disjoint region ownership remain caller duties.
+!! been covered. GEOMETRY_WRITTEN_THIS_STEP groups incremental geometry writes
+!! into one snapshot; omission retains its preceding offset. Coverage and
+!! disjoint region ownership remain caller duties.
 !!
 !! The latest specification for the VTKHDF file format is available at:
 !! https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html#
@@ -49,7 +51,7 @@ module vtkhdf_structured_base_class
   use vtkhdf_data_support
   use vtkhdf_field_data_type, only: field_data_list
   use vtkhdf_version_param
-  use vtkhdf_file_modes, only: VTKHDF_STATIC
+  use vtkhdf_file_modes, only: VTKHDF_STATIC, VTKHDF_MOVING_MESH
   use vtkhdf_simple_dataset_class
   use vtkhdf_file_context_type
   use vtkhdf_data_handle_types
@@ -75,6 +77,7 @@ module vtkhdf_structured_base_class
     type(vtkhdf_context), public :: ctx
     integer(int64), public :: data_chunk_bytes = 128_int64*1024
     logical, public :: geometry_written = .false.
+    logical, public :: geometry_written_this_step = .false.
     integer(hid_t) :: root_id = H5I_INVALID_HID, steps_id = H5I_INVALID_HID
     type(mesh_dataset_list) :: cell_data, point_data
     type(field_data_list) :: field_data
@@ -82,6 +85,7 @@ module vtkhdf_structured_base_class
     integer(int64) :: dims(3,2) = 0
     logical :: active(3) = .false., logical_grid_defined = .false., step_open = .false.
     logical :: mesh_locked = .false. ! Further geometry writes are forbidden.
+    logical :: allow_geometry_change = .false.
     integer :: nsteps = -1
   contains
     ! User-facing interface and its specific bindings.
@@ -138,6 +142,7 @@ module vtkhdf_structured_base_class
     procedure(dataset_type_interface), deferred :: dataset_type
     procedure(supports_mode_interface), deferred :: supports_mode
     procedure :: root, temporal_enabled, step_is_open, set_block_metadata
+    procedure :: moving_mesh, append_geometry_offsets, complete_geometry_write
     procedure :: define_logical_grid, point_dimensions, geometry_writable, map_point_region
 
     ! Private helpers.
@@ -273,6 +278,7 @@ contains
     if (present(mode)) mode_ = mode
     ASSERT(ctx%identical([mode_]))
     INSIST(this%supports_mode(mode_))
+    this%allow_geometry_change = mode_ >= VTKHDF_MOVING_MESH
 
     if (present(data_chunk_bytes)) this%data_chunk_bytes = data_chunk_bytes
     ASSERT(ctx%identical([this%data_chunk_bytes]))
@@ -392,6 +398,7 @@ contains
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
     INSIST(this%root_id >= 0 .and. this%logical_grid_defined .and. this%geometry_written)
+    INSIST(.not.this%allow_geometry_change)
     ASSERT(this%ctx%identical(trim(name)))
     ASSERT(this%ctx%identical([merge(1,0,present(attribute))]))
     ASSERT(this%ctx%identical([${nums.index((kind,decl,h5type))}$]))
@@ -556,6 +563,11 @@ contains
 
     call h5_append_to_dataset(this%ctx, this%steps_id, 'Values', time, root=0)
 
+    if (this%allow_geometry_change .and. this%nsteps > 1) then
+      this%geometry_written_this_step = .false.
+      this%mesh_locked = .false.
+    end if
+
     if (allocated(this%point_data%vars)) call this%point_data%vars%reset_step_flags
     if (allocated(this%cell_data%vars))  call this%cell_data%vars%reset_step_flags
     if (allocated(this%field_data%vars)) call this%field_data%vars%reset_step_flags
@@ -589,6 +601,8 @@ contains
       end do
     end if
 #:endfor
+
+    if (this%allow_geometry_change) call this%append_geometry_offsets(this%steps_id)
 
     !! Cell and point data offsets for each temporal dataset for this timestep
     call append_data_offsets(this%ctx, this%cell_data%offsets_id, this%cell_data%vars)
@@ -720,8 +734,29 @@ contains
 
   pure logical function geometry_writable(this)
     class(vtkhdf_structured_base), intent(in) :: this
-    geometry_writable = this%root_id >= 0 .and. this%logical_grid_defined .and. .not.this%mesh_locked
+    geometry_writable = this%root_id >= 0 .and. this%logical_grid_defined .and. .not.this%mesh_locked .and. &
+        (this%nsteps <= 0 .or. this%step_open)
   end function
+
+  pure logical function moving_mesh(this)
+    class(vtkhdf_structured_base), intent(in) :: this
+    moving_mesh = this%allow_geometry_change
+  end function
+
+  ! Whole-geometry writers finish immediately; region writers remain writable.
+  subroutine complete_geometry_write(this)
+    class(vtkhdf_structured_base), intent(inout) :: this
+    this%geometry_written = .true.
+    this%geometry_written_this_step = .true.
+    this%mesh_locked = .true.
+  end subroutine
+
+  ! Moving geometry extensions append their offsets here. Fixed geometry has
+  ! no offset datasets; geometry payload handles remain scoped to each write.
+  subroutine append_geometry_offsets(this, steps_id)
+    class(vtkhdf_structured_base), intent(inout) :: this
+    integer(hid_t), intent(in) :: steps_id
+  end subroutine
 
   subroutine map_point_region(this, spatial_shape, array_origin, write_bounds, mem_start, mem_count, file_origin)
     class(vtkhdf_structured_base), intent(in) :: this

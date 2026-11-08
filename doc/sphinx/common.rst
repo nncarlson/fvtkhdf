@@ -88,7 +88,8 @@ Each file-type module exports the mode constants supported by its writer.
    * - ``VTKHDF_DYNAMIC_MESH``
      - Temporal topology, geometry, and data.
 
-ImageData, RectilinearGrid, and StructuredGrid support ``VTKHDF_STATIC`` and ``VTKHDF_FIXED_MESH``.
+ImageData supports ``VTKHDF_STATIC`` and ``VTKHDF_FIXED_MESH``.
+RectilinearGrid and StructuredGrid additionally support ``VTKHDF_MOVING_MESH``.
 UnstructuredGrid supports all four modes.
 
 Temporal data must be registered before the first ``start_time_step`` call.

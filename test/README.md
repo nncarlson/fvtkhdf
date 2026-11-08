@@ -155,3 +155,25 @@ the existing ImageData ownership check.
 See [the writer implementation guide](../doc/implementation.md) for the common
 organization of the UG and structured cores and the responsibilities of their
 shared data modules.
+
+## Moving RectilinearGrid and StructuredGrid
+
+`vtkhdf_moving_grid_test.F90.fypp` writes both real kinds, all seven active-axis
+combinations, and initial geometry before or during the first step. Seven time
+steps reference three geometry snapshots, while point/cell data uses a different
+replacement schedule. Geometry ownership changes across snapshots; tests include
+halo sections, empty contributions, all-empty geometry replacements, writer
+reuse, and both two- and four-rank execution. The shared lifecycle test also
+uses moving geometry in borrowed leaves.
+
+`vtkhdf_moving_grid_check.py` independently verifies payloads and per-step offsets
+with h5py, then checks geometry and data with VTK. Sequential reads use the
+default cache. Nonsequential reads disable the legacy cache where that API is
+available: VTK 9.7.1 can retain a previously attached point/cell array on a cache
+hit. This defect is fixed in VTK 9.7.2, and ParaView 6.2.1 is expected to include
+the fix. The file's offsets and uncached values are correct. Nontrailing singleton
+reader cases use the same existing version-dependent skips as fixed grids;
+all layout checks run.
+
+`vtkhdf_moving_grid_fail_test.F90` checks mode, geometry ordering, immutable
+bounds, coordinate kind/size consistency, and rejection of static data.

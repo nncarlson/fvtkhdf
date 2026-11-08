@@ -35,8 +35,9 @@ of simple VTK datasets.
 Writer modes use the shared names
 ``VTKHDF_STATIC``, ``VTKHDF_FIXED_MESH``, ``VTKHDF_MOVING_MESH``, and
 ``VTKHDF_DYNAMIC_MESH``. The last three modes produce temporal VTK datasets.
-Each file-type module exports its supported subset: the structured writers support
-the first two, while UnstructuredGrid supports all four.
+Each file-type module exports its supported subset: ImageData supports the first
+two, RectilinearGrid and StructuredGrid the first three, and UnstructuredGrid all
+four.
 
 Currently supported VTK dataset types:
 
@@ -45,8 +46,9 @@ Currently supported VTK dataset types:
   ``VTKHDF_DYNAMIC_MESH``) covering static, moving-mesh, and dynamic-mesh
   workflows for point, cell, and field data.
 
-* **ImageData, RectilinearGrid, and StructuredGrid**: fixed geometry and rectangular point/cell block
-  writes, with static data and temporal replacement or reuse. See
+* **ImageData, RectilinearGrid, and StructuredGrid**: rectangular point/cell block
+  writes, with static data and temporal replacement or reuse. RectilinearGrid
+  and StructuredGrid also support moving geometry with fixed logical grids. See
   :doc:`structured` for the data-writing interface and :doc:`image` for
   geometry and reader compatibility. The other geometry interfaces are described
   in :doc:`rectilinear` and :doc:`structured_grid`.

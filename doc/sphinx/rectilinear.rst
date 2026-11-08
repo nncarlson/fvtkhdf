@@ -8,8 +8,9 @@ and three-dimensional grids are supported.
 
 File management, point and cell data, and time stepping use :doc:`structured`.
 Field data uses :doc:`field_data`. The module exports ``VTKHDF_STATIC``
-(default) and ``VTKHDF_FIXED_MESH``. Geometry is fixed for the lifetime of
-the file; the latter mode allows temporal point, cell, and field data.
+(default), ``VTKHDF_FIXED_MESH``, and ``VTKHDF_MOVING_MESH``. The logical grid
+is fixed for the lifetime of the file. Moving-mesh mode permits changing
+coordinate vectors and requires temporal point, cell, and field data.
 
 .. code-block:: fortran
 
@@ -21,10 +22,10 @@ Mesh Data
 
 .. method-doc::
 
-   call file%write_mesh(point_bounds, x, y, z)
+   call file%write_mesh(point_bounds)
 
-   Define the global grid and write its coordinate vectors. Call exactly
-   once, before writing or registering point/cell data or starting time stepping.
+   Define the global logical grid. Call exactly once, before writing geometry
+   or writing/registering point/cell data.
 
    * ``point_bounds(3,2)``: inclusive global logical point bounds of kind
      ``int32``. Column 1 contains lower bounds and column 2 upper bounds,
@@ -32,16 +33,40 @@ Mesh Data
      be at least their lower bounds, with at least one nonsingleton direction.
      Each point dimension must fit in a signed 32-bit integer, and the total
      point count must fit in a signed 64-bit integer.
+
+.. method-doc::
+
+   call file%write_mesh_geometry(x, y, z)
+
+   Write the complete geometry as three coordinate vectors. In static and
+   fixed-mesh modes, call once. In moving-mesh mode, call for the initial
+   geometry and whenever it changes, at most once per time step. Supply all
+   three vectors together, before writing point/cell data for that step.
+
    * ``x(:)``, ``y(:)``, ``z(:)``: full physical coordinate vectors in logical
      index order, supplied by rank zero. Their lengths equal the corresponding
      global point dimensions, including one coordinate for a singleton axis.
      Values and lengths on other ranks are ignored; zero-sized arrays suffice.
      All three vectors, on all ranks, must have the same kind, either
-     ``real32`` or ``real64``. Storage preserves that kind.
+     ``real32`` or ``real64``. Storage preserves that kind, which must remain
+     the same for all geometry writes.
 
    This is a collective call, including on ranks supplying no coordinates.
    The first coordinate in each vector corresponds to the lower global
    logical point bound on that axis.
+
+.. method-doc::
+
+   call file%write_mesh(point_bounds, x, y, z)
+
+   Define the logical grid and write its initial coordinate vectors. This is
+   equivalent to calling the two methods above in sequence. Call exactly once;
+   subsequent moving-mesh updates use ``write_mesh_geometry``.
+
+Omitting ``write_mesh_geometry`` during a step reuses the most recently
+written coordinates. Geometry and point/cell data may be omitted or replaced
+independently. The global point dimensions and logical bounds remain fixed.
+Initial geometry may be supplied before or during the first time step.
 
 Logical indices used by fVTKHDF may have arbitrary lower bounds. VTKHDF stores
 only the dimensions for this grid type, so the reader exposes zero-based
@@ -62,4 +87,10 @@ Example
 vectors, distributed cell data, and temporal reuse in serial and MPI builds.
 
 .. literalinclude:: ../../example/rectilinear_fixed_mesh.F90
+   :language: fortran
+
+``example/rectilinear_moving_mesh.F90`` demonstrates moving coordinate
+vectors with independent geometry and data reuse.
+
+.. literalinclude:: ../../example/rectilinear_moving_mesh.F90
    :language: fortran

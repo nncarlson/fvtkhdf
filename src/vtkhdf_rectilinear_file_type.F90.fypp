@@ -20,19 +20,23 @@ module vtkhdf_rectilinear_file_type
   use vtkhdf_h5e_context_type
   use vtkhdf_data_handle_types
   use vtkhdf_version_param
-  use vtkhdf_file_modes, only: VTKHDF_STATIC, VTKHDF_FIXED_MESH
+  use vtkhdf_file_modes, only: VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH
   implicit none
   private
 
-  public :: vtkhdf_version, VTKHDF_STATIC, VTKHDF_FIXED_MESH
+  public :: vtkhdf_version, VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
 
   type, extends(vtkhdf_structured_base), public :: vtkhdf_rectilinear_file
     private
+    integer(int64) :: coordinate_offsets(3) = 0
+    logical :: offsets_initialized = .false.
   contains
-    procedure :: dataset_type, supports_mode
-    generic :: write_mesh => write_mesh_real32, write_mesh_real64
-    procedure, private :: write_mesh_real32, write_mesh_real64
+    procedure :: dataset_type, supports_mode, append_geometry_offsets
+    generic :: write_mesh => write_mesh_bounds, write_mesh_real32, write_mesh_real64
+    procedure, private :: write_mesh_bounds, write_mesh_real32, write_mesh_real64
+    generic :: write_mesh_geometry => write_mesh_geometry_real32, write_mesh_geometry_real64
+    procedure, private :: write_mesh_geometry_real32, write_mesh_geometry_real64
   end type
 
 contains
@@ -40,7 +44,7 @@ contains
   pure logical function supports_mode(this, mode)
     class(vtkhdf_rectilinear_file), intent(in) :: this
     integer, intent(in) :: mode
-    supports_mode = mode == VTKHDF_STATIC .or. mode == VTKHDF_FIXED_MESH
+    supports_mode = mode == VTKHDF_STATIC .or. mode == VTKHDF_FIXED_MESH .or. mode == VTKHDF_MOVING_MESH
   end function
 
   pure function dataset_type(this) result(name)
@@ -49,26 +53,91 @@ contains
     name = 'RectilinearGrid'
   end function
 
+  subroutine write_mesh_bounds(this, point_bounds)
+    class(vtkhdf_rectilinear_file), intent(inout) :: this
+    integer(int32), intent(in) :: point_bounds(3,2)
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%define_logical_grid(point_bounds, geometry_pending=.true.)
+    call h5_write_attr(this%ctx, this%root(), 'Dimensions', int(this%point_dimensions(),int32))
+    call err_ctx%restore(0)
+  end subroutine
+
 #:for kind, decl, h5type in reals
   subroutine write_mesh_${kind}$(this, point_bounds, x, y, z)
     class(vtkhdf_rectilinear_file), intent(inout) :: this
     integer(int32), intent(in) :: point_bounds(3,2)
     ${decl}$, intent(in) :: x(:), y(:), z(:)
-    integer(int64) :: dims(3)
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    call this%define_logical_grid(point_bounds)
-    dims = this%point_dimensions()
+    call this%write_mesh(point_bounds)
+    call this%write_mesh_geometry(x, y, z)
+    call err_ctx%restore(0)
+  end subroutine
+
+  subroutine write_mesh_geometry_${kind}$(this, x, y, z)
+    use vtkhdf_data_support, only: data_chunk_size
+    class(vtkhdf_rectilinear_file), intent(inout) :: this
+    ${decl}$, intent(in) :: x(:), y(:), z(:)
+    integer(int64) :: dims(3), chunk_size
+    integer(hid_t) :: dataset_id, type_id
+    integer :: ierr
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    INSIST(this%geometry_writable())
     ASSERT(this%ctx%identical([${kind}$]))
+    dims = this%point_dimensions()
     if (this%ctx%rank == 0) then
       INSIST(all([size(x,kind=int64),size(y,kind=int64),size(z,kind=int64)] == dims))
     end if
-    call h5_write_attr(this%ctx, this%root(), 'Dimensions', int(dims,int32))
-    call h5_write_dataset(this%ctx, this%root(), 'XCoordinates', x, root=0)
-    call h5_write_dataset(this%ctx, this%root(), 'YCoordinates', y, root=0)
-    call h5_write_dataset(this%ctx, this%root(), 'ZCoordinates', z, root=0)
+
+    call err_ctx%capture
+
+    if (this%moving_mesh()) then
+      if (.not.this%geometry_written) then
+        chunk_size = data_chunk_size(this%data_chunk_bytes, int(storage_size(x)/8,int64))
+#:for axis in ['X','Y','Z']
+        call h5_create_unlimited_dataset(this%ctx, this%root(), '${axis}$Coordinates', 0.0_${kind}$, chunk_size)
+#:endfor
+      else
+#:for axis in ['X','Y','Z']
+        dataset_id = H5Dopen(this%root(), '${axis}$Coordinates')
+        INSIST(this%ctx%global_all(dataset_id >= 0))
+        type_id = H5Dget_type(dataset_id)
+        INSIST(H5Tequal(type_id, ${h5type}$) > 0)
+        ierr = H5Tclose(type_id)
+        ierr = H5Dclose(dataset_id)
+#:endfor
+        INSIST(all(this%coordinate_offsets <= huge(0_int64)-dims))
+        this%coordinate_offsets = this%coordinate_offsets + dims
+      end if
+#:for axis in ['X','Y','Z']
+      call h5_append_to_dataset(this%ctx, this%root(), '${axis}$Coordinates', ${axis.lower()}$, root=0)
+#:endfor
+    else
+#:for axis in ['X','Y','Z']
+      call h5_write_dataset(this%ctx, this%root(), '${axis}$Coordinates', ${axis.lower()}$, root=0)
+#:endfor
+    end if
+    call this%complete_geometry_write
+
     call err_ctx%restore(0)
   end subroutine
 #:endfor
+
+  subroutine append_geometry_offsets(this, steps_id)
+    use vtkhdf_data_support, only: STEPS_CHUNK_SIZE
+    class(vtkhdf_rectilinear_file), intent(inout) :: this
+    integer(hid_t), intent(in) :: steps_id
+    if (.not.this%offsets_initialized) then
+#:for axis in ['X','Y','Z']
+      call h5_create_unlimited_dataset(this%ctx, steps_id, '${axis}$CoordinatesOffsets', 0_int64, STEPS_CHUNK_SIZE)
+#:endfor
+      this%offsets_initialized = .true.
+    end if
+#:for i, axis in enumerate(['X','Y','Z'],1)
+    call h5_append_to_dataset(this%ctx, steps_id, '${axis}$CoordinatesOffsets', this%coordinate_offsets(${i}$), root=0)
+#:endfor
+  end subroutine
 
 end module vtkhdf_rectilinear_file_type

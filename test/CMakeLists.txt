@@ -469,3 +469,48 @@ endforeach()
 
 vtkhdf_add_test_target(vtkhdf_simple_dataset_test vtkhdf_simple_dataset_test.F90)
 vtkhdf_add_runtime_test(vtkhdf_simple_dataset_lifecycle vtkhdf_simple_dataset_test)
+
+# Moving geometry uses snapshots independently of time steps and data writes.
+add_fypp_sources(MOVING_GRID_TEST_SRC SOURCES vtkhdf_moving_grid_test.F90.fypp FLAGS --line-numbering)
+vtkhdf_add_test_target(vtkhdf_moving_grid_test "${MOVING_GRID_TEST_SRC}")
+vtkhdf_add_runtime_test(vtkhdf_moving_grid_file_types vtkhdf_moving_grid_test)
+set_tests_properties(vtkhdf_moving_grid_file_types PROPERTIES FIXTURES_SETUP vtkhdf_moving_grid_files)
+add_test(NAME vtkhdf_moving_grid_layout
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_moving_grid_check.py
+          layout ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(vtkhdf_moving_grid_layout PROPERTIES
+  FIXTURES_REQUIRED vtkhdf_moving_grid_files SKIP_RETURN_CODE 77)
+foreach(mask RANGE 1 7)
+  add_test(NAME vtkhdf_moving_grid_reader_dim_${mask}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_moving_grid_check.py
+            reader ${CMAKE_CURRENT_BINARY_DIR} ${mask})
+  set_tests_properties(vtkhdf_moving_grid_reader_dim_${mask} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_moving_grid_files SKIP_RETURN_CODE 77)
+endforeach()
+if(ENABLE_MPI)
+  set(MOVING_GRID_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/moving-grid-two-rank)
+  file(MAKE_DIRECTORY ${MOVING_GRID_TWO_RANK_DIR})
+  add_test(NAME vtkhdf_moving_grid_two_rank
+    COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
+            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_moving_grid_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_moving_grid_two_rank PROPERTIES PROCESSORS 2
+    WORKING_DIRECTORY ${MOVING_GRID_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_moving_grid_two_rank_files)
+  add_test(NAME vtkhdf_moving_grid_two_rank_layout
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_moving_grid_check.py
+            layout ${MOVING_GRID_TWO_RANK_DIR})
+  set_tests_properties(vtkhdf_moving_grid_two_rank_layout PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_moving_grid_two_rank_files SKIP_RETURN_CODE 77)
+endif()
+vtkhdf_add_test_target(vtkhdf_moving_grid_fail_test vtkhdf_moving_grid_fail_test.F90)
+foreach(grid rectilinear structured)
+  foreach(case before_grid missing data_before_geometry after_data static_data between_steps kind bounds_change dynamic)
+    set(test_name vtkhdf_moving_${grid}_fail_${case})
+    vtkhdf_add_runtime_test(${test_name} vtkhdf_moving_grid_fail_test ${grid} ${case})
+    set_tests_properties(${test_name} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+  endforeach()
+endforeach()
+foreach(case duplicate axis_length)
+  set(test_name vtkhdf_moving_rectilinear_fail_${case})
+  vtkhdf_add_runtime_test(${test_name} vtkhdf_moving_grid_fail_test rectilinear ${case})
+  set_tests_properties(${test_name} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+endforeach()

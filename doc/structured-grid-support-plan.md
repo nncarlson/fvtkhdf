@@ -8,8 +8,9 @@ the subsequent file/core merger and runtime-check policy changes.
 ## Settled scope and architecture
 
 The first implementation adds standalone RectilinearGrid and StructuredGrid
-writers with static or fixed-geometry temporal data. Moving geometry and
-public MultiBlock support for the new types remain deferred.
+writers with static or fixed-geometry temporal data. Moving geometry is now
+supported for both types, with fixed logical grids. Public MultiBlock support
+for the new types remains deferred.
 
 The implementation now merges each dataset core into its public file type:
 
@@ -28,10 +29,10 @@ branches retain their implementation and state. Structured geometry interfaces
 differ and do not belong to the ancestor. Numeric overload generation remains
 Fypp-based, but the shared file-wrapper include and forwarding layer are gone.
 
-The structured base declares deferred INIT and SUPPORTS_MODE bindings. Each
-concrete file type supplies its VTK type string to the shared INIT_GRID method
-and defines its permitted modes. All three currently permit static and fixed
-mesh; future moving-geometry support can have a different policy per type.
+The structured base supplies INIT and declares deferred DATASET_TYPE and
+SUPPORTS_MODE queries. Each concrete file type supplies its VTK type string
+and permitted modes. ImageData permits static and fixed mesh; RectilinearGrid
+and StructuredGrid also permit moving mesh.
 
 CREATE owns a standalone file and duplicated communicator through a
 vtkhdf_file_context component. Each public file type also has an undocumented
@@ -47,14 +48,20 @@ Its public block creation remains UG-only in this increment. The nested-leaf
 regression exercises all four concrete types through the ancestor independently
 of that public API.
 
-Future moving geometry will need separate geometry snapshots/offsets and
-lifecycle hooks; do not encode it in unrelated concrete extensions now.
+Moving geometry uses separate snapshots and per-step offsets. The base owns
+mode policy and per-step geometry lifecycle; APPEND_GEOMETRY_OFFSETS delegates
+format-specific metadata to the concrete writers. Geometry payload handles
+remain scoped to their writes. RectilinearGrid stores concatenated axis vectors;
+StructuredGrid stores a leading snapshot dimension in Points. Stored snapshots
+are allocated only by geometry writes and need not match the number of steps.
 
 ## Agreed public geometry interfaces
 
 ```fortran
 call image%write_mesh(point_bounds, origin, spacing [, direction])
 call rectilinear%write_mesh(point_bounds, x, y, z)
+call rectilinear%write_mesh(point_bounds)
+call rectilinear%write_mesh_geometry(x, y, z)
 call structured%write_mesh(point_bounds)
 call structured%write_mesh_geometry(points, array_origin [, write_bounds])
 ```
@@ -63,12 +70,16 @@ Rectilinear calls remain collective. Rank zero supplies complete coordinate
 vectors; their values and lengths are ignored on other ranks, where empty
 arrays suffice. All arrays/ranks use the same real kind, real32 or real64.
 Singleton axes still have one coordinate. Distributed axis segments are deferred.
+The combined RectilinearGrid call remains available for initial setup; separate
+logical-grid definition and coordinate writes support moving geometry.
 
 Structured coordinates have shape `(3,nx,ny,nz)` and support the same rectangular
 region selection, halo exclusion, repeated transfers, and empty contributions
 as point data. The first geometry write establishes the stored real kind;
 subsequent calls must match. This choice avoids adding a kind argument to
-`write_mesh`. Geometry must be supplied before time stepping.
+`write_mesh`. Supply initial geometry before or during the first time step,
+before writing point/cell data or finalizing the step. Moving geometry updates
+follow the same ordering in subsequent steps.
 
 ## Logical indices and file representation
 
@@ -92,8 +103,9 @@ Structured Points has HDF5 shape `(nz,ny,nx,3)`, retaining singleton axes. Point
 and cell datasets squeeze inactive spatial axes as before.
 
 Fixed geometry has no temporal dimension or geometry offset datasets, even when
-associated data is temporal. Existing data registration, snapshots, and reuse
-apply unchanged. Real data and coordinates use quiet NaN fill; integer data uses
+associated data is temporal. Moving geometry writes explicit per-step offsets,
+repeating the preceding offset on omission. Existing data registration,
+snapshots, and reuse apply unchanged. Real data and coordinates use quiet NaN fill; integer data uses
 zero. Hidden points/cells use vtkGhostType flags 2/32 respectively.
 
 ## Validation and related cautions
