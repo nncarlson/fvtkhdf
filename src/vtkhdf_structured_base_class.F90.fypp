@@ -427,9 +427,9 @@ contains
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
     INSIST(this%root_id >= 0)
-    INSIST(this%nsteps == -1)
     ASSERT(this%ctx%identical(trim(name)))
-    call this%field_data%write(this%ctx, name, array, as_vector)
+    call this%field_data%write(this%ctx, name, array, as_vector, this%data_chunk_bytes, &
+        max(0,this%nsteps-merge(1,0,this%step_open)))
     call err_ctx%restore(0)
   end subroutine
 #:endfor

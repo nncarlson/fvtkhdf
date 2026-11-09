@@ -141,11 +141,22 @@ UG files; it does not skip a malformed FieldData result.
 
 The expected-failure ImageData tests cover local selection validity, type and
 component consistency, ordering, missing initial snapshots, foreign handles,
-FieldData restrictions and repeated writes to one FieldData handle in a step,
+field-data ordering and repeated writes to one field-data handle in a step,
 and MPI metadata disagreement.
 Creation rejects moving, dynamic, and invalid ImageData modes, including
 disagreement between MPI ranks about otherwise supported modes.
 Tests intentionally do not diagnose global coverage or overlap.
+
+`vtkhdf_constant_field_test.F90.fypp` covers by-name constant field data for all
+simple writers and supported modes, including changing UG topology. It writes
+all four numeric kinds as scalars, scalar tuples, vectors, and noncontiguous
+multicomponent arrays. Temporal files also include empty constants. Fields are
+created before mesh definition, during an open step, between steps, and after
+the last finalized step. Mixed constant/registered names exercise disambiguation
+in both creation orders. Independent layout and VTK checks verify complete
+offset/size histories, values at every step, rank-zero payload selection, and
+unchanged registered-field omission, reuse, and shape changes. Non-temporal
+files retain their original layouts without a Steps group.
 
 UG, MultiBlock, and ImageData file wrappers own public field handles; their cores
 use registry indices. Foreign-file handle checks cover cell, point, and field

@@ -74,7 +74,7 @@ module vtkhdf_ug_file_type
     integer(int64) :: nnode = 0, ncell = 0, nnode_tot = 0, ncell_tot = 0, maxval_cnode = 0
     integer :: npart = 1
     logical :: is_temporal = .false., allow_geometry_change = .false., allow_topology_change = .false.
-    logical :: allow_static_point_cell_data = .true., allow_static_field_data = .true.
+    logical :: allow_static_point_cell_data = .true.
     integer :: nsteps = -1
     logical :: step_open = .false., mesh_locked = .false.
     integer(hid_t) :: steps_id=H5I_INVALID_HID
@@ -287,7 +287,6 @@ contains
     this%allow_geometry_change = (mode_ >= VTKHDF_MOVING_MESH)
     this%allow_topology_change = (mode_ >= VTKHDF_DYNAMIC_MESH)
     this%allow_static_point_cell_data = (mode_ <= VTKHDF_FIXED_MESH)
-    this%allow_static_field_data = .not.this%is_temporal
 
     this%ctx = ctx
 
@@ -654,9 +653,10 @@ contains
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
     type(vtkhdf_h5e_context) :: err_ctx
-    INSIST(this%allow_static_field_data)
+    INSIST(this%root_id >= 0)
     call err_ctx%capture
-    call this%field_data%write(this%ctx, name, array, as_vector)
+    call this%field_data%write(this%ctx, name, array, as_vector, this%data_chunk_bytes, &
+        max(0,this%nsteps-merge(1,0,this%step_open)))
     call err_ctx%restore(0)
   end subroutine
 #:endfor

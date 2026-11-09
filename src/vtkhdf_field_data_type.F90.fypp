@@ -39,6 +39,7 @@ module vtkhdf_field_data_type
     procedure :: close => close_field_data
     procedure :: append_metadata => append_field_data_metadata
     procedure, private :: reserve_name => reserve_field_data_name
+    procedure, private :: append_var_metadata => append_field_var_metadata
 #:for kind, decl, h5type in nums
     generic :: write => write_field_data_${kind}$
     procedure, private :: write_field_data_${kind}$
@@ -60,20 +61,31 @@ contains
   end subroutine
 
 #:for kind, decl, h5type in nums
-  subroutine write_field_data_${kind}$(this, ctx, name, array, as_vector)
+  subroutine write_field_data_${kind}$(this, ctx, name, array, as_vector, data_chunk_bytes, completed_steps)
 
     class(field_data_list), intent(inout) :: this
     type(vtkhdf_context), intent(in) :: ctx
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
+    integer(int64), intent(in) :: data_chunk_bytes
+    integer, intent(in) :: completed_steps
 
     character(:), allocatable :: external_name, internal_name
-    integer :: index
+    integer :: index, j
     logical :: as_vector_
 
     as_vector_ = .false.
     if (present(as_vector)) as_vector_ = as_vector
+    if (this%offsets_id >= 0) then
+      ! Constant fields in temporal files use one value at every step.
+      index = this%register_temporal(ctx, name, ${'0' if kind.startswith('int') else '0.0'}$_${kind}$, data_chunk_bytes)
+      call this%write_temporal(ctx, index, array, as_vector)
+      do j = 1, completed_steps
+        call this%append_var_metadata(ctx, index)
+      end do
+      return
+    end if
     call this%reserve_name(name, external_name, internal_name, index)
     select rank (array)
     rank (0)
@@ -176,17 +188,23 @@ contains
     class(field_data_list), intent(in) :: this
     type(vtkhdf_context), intent(in) :: ctx
     integer :: j
-    integer(int32) :: sizes(2,1)
     if (.not.allocated(this%vars)) return
     do j = 1, size(this%vars)
-      associate (var => this%vars(j))
-        if (.not.var%is_temporal) cycle
-        ! Omission repeats the current offset/size, initially an empty value.
-        sizes(:,1) = [var%ncomp,var%tuples]
-        call h5_append_to_dataset(ctx, this%offsets_id, var%internal_name, var%offset, root=0)
-        call h5_append_to_dataset(ctx, this%sizes_id, var%internal_name, sizes, root=0)
-      end associate
+      if (this%vars(j)%is_temporal) call this%append_var_metadata(ctx, j)
     end do
+  end subroutine
+
+  subroutine append_field_var_metadata(this, ctx, index)
+    class(field_data_list), intent(in) :: this
+    type(vtkhdf_context), intent(in) :: ctx
+    integer, intent(in) :: index
+    integer(int32) :: sizes(2,1)
+    associate (var => this%vars(index))
+      ! Omission repeats the current offset/size, initially an empty value.
+      sizes(:,1) = [var%ncomp,var%tuples]
+      call h5_append_to_dataset(ctx, this%offsets_id, var%internal_name, var%offset, root=0)
+      call h5_append_to_dataset(ctx, this%sizes_id, var%internal_name, sizes, root=0)
+    end associate
   end subroutine
 
 end module vtkhdf_field_data_type

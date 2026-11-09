@@ -10,7 +10,8 @@ File management, point and cell data, and time stepping use :doc:`structured`.
 Field data uses :doc:`field_data`. The module exports ``VTKHDF_STATIC``
 (default), ``VTKHDF_FIXED_MESH``, and ``VTKHDF_MOVING_MESH``. The logical grid
 is fixed for the lifetime of the file. Moving-mesh mode permits changing
-point coordinates and requires temporal point, cell, and field data.
+point coordinates and requires temporal point and cell data. Field data may
+be static or temporal.
 
 .. code-block:: fortran
 

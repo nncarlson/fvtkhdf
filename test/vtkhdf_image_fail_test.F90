@@ -59,7 +59,12 @@ program vtkhdf_image_fail_test
   var = file%register_temporal_cell_data('data',0.0_real64)
   field_var = file%register_temporal_field_data('field',0.0_real64)
   if (scenario == 'outside_step') call file%write_cell_data(var,a,[0,0,0])
-  if (scenario == 'field_static') call file%write_field_data('static',1.0)
+  if (scenario == 'field_outside_step') then
+    call file%write_field_data(field_var,1.0_real64)
+    call file%close()
+    call test_env_finalize()
+    stop
+  end if
   if (scenario == 'wrong_handle') then
 #ifdef USE_MPI
     call other%create('image_fail_other.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=VTKHDF_FIXED_MESH)

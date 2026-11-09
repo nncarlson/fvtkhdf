@@ -63,9 +63,14 @@ Static Field Data
    * ``array``: complete scalar or array value, interpreted as described above.
    * ``as_vector``: optional logical controlling rank-1 interpretation.
 
-   Static field data is allowed only in ``VTKHDF_STATIC`` mode. Each call
-   creates a new field, including when a name is repeated. No handle is
-   returned, and writes are not incremental.
+   Static field data is allowed in every writer mode. Each call creates a new
+   field, including when a name is repeated. No handle is returned, and writes
+   are not incremental.
+
+   In a temporal file, the value applies to every step. It may be written
+   before time stepping, during or between steps, or after the last step has
+   been finalized and before closing the file. Values written later also
+   apply to earlier steps. No temporal registration is required.
 
 Temporal Field Data
 -------------------

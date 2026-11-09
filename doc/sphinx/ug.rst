@@ -58,15 +58,17 @@ The ``mode`` argument selects one of four workflows:
 * ``VTKHDF_STATIC``: single mesh with associated cell/point datasets; field
   datasets; no time stepping (static).
 * ``VTKHDF_FIXED_MESH``: single fixed mesh; cell/point datasets may be static
-  (independent of time step) or temporal (changing with time step); field
-  datasets must be temporal.
+  (independent of time step) or temporal (changing with time step).
 * ``VTKHDF_MOVING_MESH``: fixed mesh topology with temporal geometry;
-  all datasets must be temporal.
+  point/cell datasets must be temporal.
 * ``VTKHDF_DYNAMIC_MESH``: temporal mesh topology and geometry;
-  all datasets must be temporal.
+  point/cell datasets must be temporal.
 
-In temporal modes, registration determines which datasets participate in time
-stepping, and each write supplies the value for the current step.
+Field data may be static or temporal in all temporal modes.
+
+Temporal datasets are registered before time stepping; writes through their
+handles supply values for the current step. Static data remains independent
+of time stepping.
 
 Mesh Data
 ---------

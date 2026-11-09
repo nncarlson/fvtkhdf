@@ -82,15 +82,16 @@ Each file-type module exports the mode constants supported by its writer.
    * - ``VTKHDF_STATIC``
      - Fixed mesh and static data; no time stepping. This is the default.
    * - ``VTKHDF_FIXED_MESH``
-     - Fixed mesh, static or temporal point/cell data, and temporal field data.
+     - Fixed mesh and static or temporal data.
    * - ``VTKHDF_MOVING_MESH``
-     - Fixed topology, temporal geometry, and temporal data.
+     - Fixed topology, temporal geometry, and temporal point/cell data.
    * - ``VTKHDF_DYNAMIC_MESH``
-     - Temporal topology, geometry, and data.
+     - Temporal topology, geometry, and point/cell data.
 
 ImageData supports ``VTKHDF_STATIC`` and ``VTKHDF_FIXED_MESH``.
 RectilinearGrid and StructuredGrid additionally support ``VTKHDF_MOVING_MESH``.
 UnstructuredGrid supports all four modes.
+Static field data is supported in every writer mode.
 
 Temporal data must be registered before the first ``start_time_step`` call.
 Writes by handle then supply data for the current step. A step is completed
