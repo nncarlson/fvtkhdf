@@ -11,8 +11,8 @@ using parallel HDF5 and MPI, as well as serial builds without MPI.
 
 fVTKHDF targets version 2.8 of the
 [VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html)
-for the dataset types it supports. VTK is used for reader validation; the
-library itself depends on HDF5, with MPI required only for parallel builds.
+for the dataset types it supports. The library depends on HDF5, with MPI
+required only for parallel builds.
 
 ## Dataset Support
 
@@ -58,10 +58,9 @@ See the [Reference Manual](https://nncarlson.github.io/fvtkhdf/).
 * Fortran 2018 Compiler (GCC 13+, Intel oneAPI, etc.)
 * CMake (3.28+)
 * HDF5 C Library (1.10+) (Parallel HDF5 for MPI-enabled build)
-* Python 3 + `fypp` (`pip install fypp`)
+* Python 3 + `fypp`; `vtk` is recommended for reader-validation tests
+  (`pip install fypp vtk`)
 * MPI (Optional)
-
-Limited `fpm` build instructions are available in [fpm/README.md](./fpm/README.md).
 
 ### Build and Install
 
@@ -84,6 +83,9 @@ cmake --build build --parallel
 cmake --install build
 ```
 
+The installation includes CMake package configuration files for use with
+`find_package(fVTKHDF)`, as shown below.
+
 Add `-DBUILD_EXAMPLES=ON` to the CMake configure command to build the example
 programs. The executables are placed in `build/example/`.
 
@@ -92,6 +94,11 @@ Run the tests for your chosen build configuration with:
 ```bash
 ctest --test-dir build --output-on-failure
 ```
+
+### Fortran Package Manager (fpm)
+
+See [fpm/README.md](fpm/README.md) for instructions on using fVTKHDF with the
+Fortran Package Manager.
 
 ### Spack
 
@@ -115,6 +122,10 @@ find_package(fVTKHDF REQUIRED)
 add_executable(my_simulation main.f90)
 target_link_libraries(my_simulation PRIVATE fVTKHDF::fvtkhdf)
 ```
+
+For an installation in a custom location, add
+`-DCMAKE_PREFIX_PATH=/path/to/install` when configuring your project so CMake
+can find the package.
 
 ## Quick Start
 
