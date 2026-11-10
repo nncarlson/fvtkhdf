@@ -36,19 +36,28 @@ version = re.search(
     (source_root / 'CMakeLists.txt').read_text(),
 ).group(1)
 release = f'{version}-dev'
+repo_revision = 'master'
 if (source_root / '.git').exists():
     if git_output('describe', '--tags', '--exact-match') == f'v{version}':
         release = version
+        repo_revision = f'v{version}'
     else:
         revision = git_output('rev-parse', '--short', 'HEAD')
         if revision:
             release += f'+g{revision}'
+        # Feature and detached builds link to their exact source revision.
+        if git_output('symbolic-ref', '--quiet', '--short', 'HEAD') != 'master':
+            repo_revision = git_output('rev-parse', 'HEAD') or 'master'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / '_ext'))
-extensions = ['method_doc']
+extensions = ['method_doc', 'sphinx.ext.extlinks']
+
+extlinks = {
+    'repo': (f'https://github.com/nncarlson/fvtkhdf/blob/{repo_revision}/%s', '%s'),
+}
 
 templates_path = ['_templates']
 exclude_patterns = []

@@ -1,29 +1,20 @@
-The vtkhdf_image_file_type module
-=================================
+ImageData
+=========
 
-This module defines the ``vtkhdf_image_file`` derived type for writing
-VTKHDF ImageData files. ImageData represents a regular structured grid with
-fixed geometry. One-, two-, and three-dimensional grids are supported.
+The ``vtkhdf_image_file_type`` module defines the ``vtkhdf_image_file``
+derived type for writing VTKHDF ImageData files. ImageData represents a regular
+structured grid. One-, two-, and three-dimensional grids are supported. The
+writer supports ``VTKHDF_STATIC`` (default) and ``VTKHDF_FIXED_MESH``. The mesh
+geometry cannot change during the lifetime of the file.
 
-File management, point and cell data, and time stepping are described in
-:doc:`structured`. Field data is described in :doc:`field_data`.
+File management, point and cell data, and time stepping use the
+:doc:`shared interface for structured VTK datasets <structured>`.
+Field data uses the :doc:`common field data interface <field_data>`.
 
 .. code-block:: fortran
 
    use vtkhdf_image_file_type
    type(vtkhdf_image_file) :: file
-
-Writer Modes
-------------
-
-The module exports the following mode constants:
-
-* ``VTKHDF_STATIC`` (default): fixed geometry and static point, cell, and
-  field data; no time stepping.
-* ``VTKHDF_FIXED_MESH``: fixed geometry, static or temporal point and cell
-  data, and temporal field data.
-
-The mesh geometry cannot change during the lifetime of the file.
 
 Mesh Data
 ---------
@@ -66,41 +57,31 @@ isolated point is not supported.
 
 .. _image-reader-compatibility:
 
-Reader Compatibility
---------------------
+.. warning::
 
-VTK 9.7.0 and 9.7.1 have ImageData reader defects. For these versions and
-ParaView builds using the affected reader:
+   Readers earlier than VTK 9.7.2 (ParaView 6.2.1) have the following limitations:
 
-* Use zero-based global logical point lower bounds on every axis. Positive
-  global lower bounds, including one-based indexing, can cause out-of-range
-  data reads.
-* Keep singleton axes trailing: use ``(nx,ny,1)`` for two-dimensional grids
-  and ``(nx,1,1)`` for one-dimensional grids. Other singleton-axis choices
-  can fail or produce incorrect tuple counts.
+   * Use zero-based global logical point lower bounds on every axis. Positive
+     global lower bounds, including one-based indexing, can cause out-of-range
+     data reads. **This restriction applies only to ImageData**; RectilinearGrid
+     and StructuredGrid support arbitrary global logical lower bounds.
+   * Keep singleton axes trailing: use ``(nx,ny,1)`` for 2D grids and
+     ``(nx,1,1)`` for 1D grids. Other arrangements may produce incorrect results.
 
-These constraints apply to the global logical grid. A nonzero physical
-``origin`` and nonzero local ``array_origin`` or ``write_bounds`` remain
-supported with a zero-based global grid. fVTKHDF preserves the supplied
-bounds and does not automatically rebase indices.
+   These constraints apply to the global logical grid. A nonzero physical
+   ``origin`` and nonzero local ``array_origin`` or ``write_bounds`` remain
+   supported with a zero-based global grid.
 
-Both reader defects are fixed by upstream VTK
-`commit 32b8631901b9 <https://gitlab.kitware.com/vtk/vtk/-/commit/32b8631901b90fac46c470a312c30221c452bd54>`_
-(`merge request 13507 <https://gitlab.kitware.com/vtk/vtk/-/merge_requests/13507>`_).
-The fixes have been backported to the VTK 9.7 release branch for VTK 9.7.2.
-A VTK or ParaView build containing the fixes removes these constraints.
-
-Example
--------
+Examples
+--------
 
 The following serial example defines an XY grid with eight by six points:
 
 .. code-block:: fortran
 
-   use, intrinsic :: iso_fortran_env, only: int32, real64
    use vtkhdf_image_file_type
    type(vtkhdf_image_file) :: file
-   integer(int32) :: point_bounds(3,2)
+   integer :: point_bounds(3,2)
    integer :: stat
    character(:), allocatable :: errmsg
 
@@ -108,15 +89,10 @@ The following serial example defines an XY grid with eight by six points:
    if (stat /= 0) error stop errmsg
    point_bounds(:,1) = [0,0,0]
    point_bounds(:,2) = [7,5,0]
-   call file%write_mesh(point_bounds, &
-       origin=[0.0_real64,0.0_real64,0.0_real64], &
-       spacing=[0.1_real64,0.2_real64,1.0_real64])
+   call file%write_mesh(point_bounds, origin=[0.0,0.0,0.0], spacing=[0.1,0.2,1.0])
    ! Write point, cell, or field data here.
    call file%close()
 
-Complete Temporal Example
--------------------------
-
-``example/image_fixed_mesh.F90`` demonstrates static cell data, temporal point
+:repo:`example/image_fixed_mesh.F90` demonstrates static cell data, temporal point
 and field data, and shared-point ownership using ``write_bounds``. It supports
 serial and MPI builds.

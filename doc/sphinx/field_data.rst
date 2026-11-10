@@ -4,7 +4,9 @@ Field Data
 Field data consists of values associated with a simple VTK dataset as a whole
 rather than with its mesh points or cells. All writers for simple VTK datasets
 provide the interface described here. Field data writes need not be ordered
-with respect to mesh writes.
+with respect to mesh writes. Static field data may be written at any point
+after file creation and before closing the file; temporal field data is
+written within its corresponding time step.
 
 In the signatures below, ``file`` denotes a file writer object for a simple
 VTK dataset; see :doc:`overview` for the available writer types and their

@@ -1,13 +1,11 @@
-Structured VTK Dataset Types
-============================
+Common Interface for Structured VTK Datasets
+============================================
 
 Structured VTK datasets use a logical grid indexed by three integer coordinates.
 Their point and cell data are written as rectangular regions of that grid.
-The interface below is shared by the ImageData, RectilinearGrid, and
-StructuredGrid writers.
-
-See :doc:`image`, :doc:`rectilinear`, and :doc:`structured_grid` for geometry
-definition, supported modes, and reader requirements.
+The interface below is shared by the :doc:`image`, :doc:`rectilinear`, and
+:doc:`structured_grid` writers; see those sections for geometry definition,
+supported modes, and reader requirements.
 
 File Creation and Management
 ----------------------------

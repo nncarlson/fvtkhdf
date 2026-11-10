@@ -71,8 +71,10 @@ dataset types. PartitionedDataSetCollection is a planned addition to the
 composite family.
 
 This library targets VTKHDF Version 2.8.
-See the individual VTK dataset chapters for reader requirements and verified
-compatibility, including the ImageData reader limitations.
+Unless otherwise indicated, reader support targets ParaView 5.13 and later.
+Older releases may work, but compatibility is not guaranteed. Additional
+version requirements and known reader limitations are described in the
+individual VTK dataset chapters.
 
 The available file writers are:
 

@@ -1,10 +1,9 @@
-The vtkhdf_mb_file_type module
-==============================
+MultiBlockDataSet
+=================
 
-This module defines the ``vtkhdf_mb_file`` derived type for writing
-VTKHDF MultiBlockDataSet files.
+The ``vtkhdf_mb_file_type`` module defines the ``vtkhdf_mb_file``
+derived type for writing VTKHDF MultiBlockDataSet files.
 
-The reader compatibility target is ParaView 5.13 and later.
 Optional VTK attribute roles, specified with the ``attribute`` argument, are
 recognized by VTK 9.7.0 / ParaView 6.2.0 and later; older readers ignore these
 designations while still reading the data. See :doc:`common`.

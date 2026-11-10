@@ -1,10 +1,9 @@
-The vtkhdf_ug_file_type module
-==============================
+UnstructuredGrid
+================
 
-This module defines the ``vtkhdf_ug_file`` derived type for writing
-VTKHDF UnstructuredGrid files.
+The ``vtkhdf_ug_file_type`` module defines the ``vtkhdf_ug_file``
+derived type for writing VTKHDF UnstructuredGrid files.
 
-The reader compatibility target is ParaView 5.13 and later.
 Optional VTK attribute roles, specified with the ``attribute`` argument, are
 recognized by VTK 9.7.0 / ParaView 6.2.0 and later; older readers ignore these
 designations while still reading the data. See :doc:`common`.
@@ -264,14 +263,16 @@ supported values, array interpretation, and MPI requirements.
 Workflow by Mode
 ----------------
 
+In every mode, static field data may be written by name at any point after
+file creation and before closing the file, independently of mesh writes.
+
 .. rubric:: ``VTKHDF_STATIC``
 
 * Write the mesh once with ``write_mesh``.
-* Then write static datasets by name:
+* Then write static point and cell datasets by name:
 
   - ``call file%write_point_data(name, array [, attribute])``
   - ``call file%write_cell_data(name, array [, attribute])``
-  - ``call file%write_field_data(name, array [, as_vector])``
 
 Time stepping and temporal registration are not allowed.
 
@@ -283,8 +284,6 @@ Time stepping and temporal registration are not allowed.
   - ``call file%write_cell_data(name, array [, attribute])``
   - ``call file%write_point_data(name, array [, attribute])``
 
-  Static field data is not allowed in this mode.
-
 * Register temporal datasets before the first time step:
 
   - ``cell_var = file%register_temporal_cell_data(name, mold [, attribute])``
@@ -294,7 +293,7 @@ Time stepping and temporal registration are not allowed.
 * Then, for each step:
 
   * ``call file%start_time_step(time)``
-  * Write temporal datasets (or not, if allowed):
+  * Write temporal datasets (or not, if reuse is possible):
 
     - ``call file%write_cell_data(cell_var, array)``
     - ``call file%write_point_data(point_var, array)``
@@ -316,7 +315,7 @@ Time stepping and temporal registration are not allowed.
 
   * ``call file%start_time_step(time)``
   * ``call file%write_mesh_geometry(points)`` first step, or when geometry changes
-  * Write temporal datasets (or not, if allowed):
+  * Write temporal datasets (or not, if reuse is possible):
 
     - ``call file%write_cell_data(cell_var, array)``
     - ``call file%write_point_data(point_var, array)``
@@ -326,7 +325,7 @@ Time stepping and temporal registration are not allowed.
 
 The number of points must be constant across time steps.
 
-Static datasets are not allowed in this mode.
+Static point and cell datasets are not allowed in this mode.
 
 .. rubric:: ``VTKHDF_DYNAMIC_MESH``
 
@@ -348,7 +347,7 @@ Static datasets are not allowed in this mode.
     - ``write_mesh_geometry(points)`` to replace geometry only;
     - ``write_mesh(points, cnode, xcnode, types)`` to replace both.
 
-  * Write temporal datasets (or not, if allowed):
+  * Write temporal datasets (or not, if reuse is possible):
 
     - ``call file%write_cell_data(cell_var, array)``
     - ``call file%write_point_data(point_var, array)``
@@ -356,7 +355,7 @@ Static datasets are not allowed in this mode.
 
   * ``call file%finalize_time_step``
 
-Static datasets are not allowed in this mode.
+Static point and cell datasets are not allowed in this mode.
 
 This is the most general mode. Point counts, cell counts, connectivity, and
 geometry may all vary from one step to the next.

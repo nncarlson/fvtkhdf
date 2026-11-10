@@ -1,13 +1,17 @@
-The vtkhdf_rectilinear_file_type module
-=======================================
+RectilinearGrid
+===============
 
-This module defines ``vtkhdf_rectilinear_file`` for writing VTKHDF
-RectilinearGrid files. The geometry is the Cartesian product of three
-coordinate vectors, allowing nonuniform spacing along each axis. One-, two-,
-and three-dimensional grids are supported.
+The ``vtkhdf_rectilinear_file_type`` module defines the ``vtkhdf_rectilinear_file``
+derived type for writing VTKHDF RectilinearGrid files. The geometry is the
+Cartesian product of three coordinate vectors, allowing nonuniform spacing
+along each axis. One-, two-, and three-dimensional grids are supported.
+Reading these files requires ParaView 6.2 or later (VTK 9.7 or later).
 
-File management, point and cell data, and time stepping use :doc:`structured`.
-Field data uses :doc:`field_data`. The module exports ``VTKHDF_STATIC``
+File management, point and cell data, and time stepping use the
+:doc:`shared interface for structured VTK datasets <structured>`.
+Field data uses the :doc:`common field data interface <field_data>`.
+
+The RectilinearGrid writer supports ``VTKHDF_STATIC``
 (default), ``VTKHDF_FIXED_MESH``, and ``VTKHDF_MOVING_MESH``. The logical grid
 is fixed for the lifetime of the file. Moving-mesh mode permits changing
 coordinate vectors and static or temporal point, cell, and field data.
@@ -72,23 +76,21 @@ Logical indices used by fVTKHDF may have arbitrary lower bounds. VTKHDF stores
 only the dimensions for this grid type, so the reader exposes zero-based
 indices. Physical coordinates and data placement are preserved.
 
-Reader Compatibility
---------------------
+.. warning::
 
-RectilinearGrid requires ParaView 6.2+ (VTK 9.7+). Readers before VTK 9.7.2
-have a shared structured-data defect for nontrailing singleton axes. With an
-affected reader, use ``(nx,ny,1)`` for 2D and ``(nx,1,1)`` for 1D. Arbitrary
-logical lower bounds remain supported because the file uses zero-based storage.
+   Readers earlier than VTK 9.7.2 (ParaView 6.2.1) require singleton axes to be
+   trailing: use ``(nx,ny,1)`` for 2D grids and ``(nx,1,1)`` for 1D grids. Other
+   arrangements may produce incorrect results.
 
 Examples
 --------
 
-``example/rectilinear_fixed_mesh.F90`` follows the ImageData example, replacing
+:repo:`example/rectilinear_fixed_mesh.F90` follows the ImageData example, replacing
 its geometry definition with nonuniform coordinate vectors supplied by rank
 zero. It demonstrates static cell data, temporal point and field data, and
 shared-point ownership using ``write_bounds`` in serial and MPI builds.
 
-``example/rectilinear_moving_mesh.F90`` follows the fixed-mesh example,
+:repo:`example/rectilinear_moving_mesh.F90` follows the fixed-mesh example,
 shrinking the x coordinates and expanding the y coordinates at each successive
 step. Static diffusivity and temporal point and field data are written as in
 the fixed-mesh example. It supports serial and MPI builds.
