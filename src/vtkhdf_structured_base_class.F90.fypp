@@ -22,7 +22,7 @@
 !! specifies its permitted modes through SUPPORTS_MODE;
 !! shared initialization checks that policy and, in debug builds, agreement
 !! across ranks. Argument validity checks are local; collective HDF5 success
-!! checks remain unconditional. See doc/runtime-checks.md for the policy.
+!! checks remain unconditional. See doc/developer.md for the policy.
 !! Geometry extensions share CTX and DATA_CHUNK_BYTES; GEOMETRY_WRITTEN records
 !! whether geometry storage has been supplied, not whether every point has
 !! been covered. GEOMETRY_WRITTEN_THIS_STEP groups incremental geometry writes

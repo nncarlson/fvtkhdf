@@ -15,10 +15,12 @@ directory = Path(directory)
 if mode == "reader":
     try:
         from vtkmodules.vtkIOHDF import vtkHDFReader
+        from vtkmodules.vtkCommonCore import vtkVersion
         from vtkmodules.util.numpy_support import vtk_to_numpy
     except ImportError as exc:
         print(exc)
         sys.exit(77)
+    version = (vtkVersion.GetVTKMajorVersion(), vtkVersion.GetVTKMinorVersion())
 
 payloads = {
     "scalar": np.array([42]),
@@ -29,6 +31,10 @@ payloads = {
 }
 kinds = {"int32": ("i", 4), "int64": ("i", 8), "real32": ("f", 4), "real64": ("f", 8)}
 for grid, modes in ((1, range(4)), (2, range(2)), (3, range(3)), (4, range(3))):
+    if mode == "reader" and grid >= 3 and version < (9, 7):
+        dataset_type = {3: "RectilinearGrid", 4: "StructuredGrid"}[grid]
+        print(f"Skipping {dataset_type} reader cases: requires VTK 9.7 or later")
+        continue
     for file_mode in modes:
         path = directory / f"constant_fields_{grid}_{file_mode}.vtkhdf"
         temporal = file_mode != 0
@@ -89,4 +95,4 @@ for grid, modes in ((1, range(4)), (2, range(2)), (3, range(3)), (4, range(3))):
                 if temporal:
                     expected = np.array([]) if step == 0 else np.array([111]) if step < 3 else np.array([[301, 302]])
                     np.testing.assert_array_equal(vtk_to_numpy(fd.GetArray("before_real64_scalar_1")), expected)
-print(f"Constant field {mode} checks passed for all writers and modes")
+print(f"Constant field {mode} checks passed")

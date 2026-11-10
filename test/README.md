@@ -58,7 +58,7 @@ ordering and handle-usage assertions that intentionally abort.
 The MPI `geometry_mismatch`, `name_mismatch`, and `mode_mismatch` checks are
 registered only for Debug configurations: they exercise debug-only `ASSERT`
 diagnostics. Local argument and lifecycle checks use unconditional `INSIST`
-and remain tested in Release. See the [runtime checking policy](../doc/runtime-checks.md).
+and remain tested in Release. See the [runtime checking policy](../doc/developer.md).
 
 - `vtkhdf_ug_fail_late_register`
 - `vtkhdf_ug_fail_wrong_cell_count`
@@ -156,16 +156,18 @@ the last finalized step. Mixed constant/registered names exercise disambiguation
 in both creation orders. Independent layout and VTK checks verify complete
 offset/size histories, values at every step, rank-zero payload selection, and
 unchanged registered-field omission, reuse, and shape changes. Non-temporal
-files retain their original layouts without a Steps group.
+files retain their original layouts without a Steps group. VTK versions before
+9.7 read the UG and ImageData fixtures; the RectilinearGrid and StructuredGrid
+reader cases run only with VTK 9.7 or later. Layout checks cover all types.
 
-UG, MultiBlock, and ImageData file wrappers own public field handles; their cores
-use registry indices. Foreign-file handle checks cover cell, point, and field
-data in UG and MultiBlock, including matching field and block indices, alongside
-the existing ImageData ownership check.
+The simple writers own their registries and construct public data handles.
+MultiBlock adds and checks each handle's block index before forwarding it.
+Foreign-file handle checks cover cell, point, and field data in UG and
+MultiBlock, including matching field and block indices, alongside the existing
+ImageData ownership check.
 
-See [the writer implementation guide](../doc/implementation.md) for the common
-organization of the UG and structured cores and the responsibilities of their
-shared data modules.
+See the [developer guide](../doc/developer.md) for writer organization,
+resource ownership, shared data helpers, and the runtime checking policy.
 
 ## Moving RectilinearGrid and StructuredGrid
 

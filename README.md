@@ -5,81 +5,70 @@
 
 A modern Fortran library for writing **VTKHDF** format files.
 
-This library provides a high-level, object-oriented Fortran interface for
-generating **VTKHDF** files, a relatively new and evolving HDF5-based VTK
-file format used by ParaView. The library is designed for high-performance
-computing (HPC) applications, offering robust MPI-parallel output via HDF5,
-while also supporting serial workflows. By utilizing HDF5 as the underlying
-storage mechanism, **fVTKHDF** provides a more scalable alternative to older
-VTK ASCII or XML formats.
+fVTKHDF provides a Fortran 2018 interface for writing HDF5-based VTKHDF files
+readable by VTK and ParaView. It supports collective output to a single file
+using parallel HDF5 and MPI, as well as serial builds without MPI.
 
 fVTKHDF targets version 2.8 of the
 [VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html)
-for the dataset types it supports.
+for the dataset types it supports. VTK is used for reader validation; the
+library itself depends on HDF5, with MPI required only for parallel builds.
 
-**ParaView Compatibility**
+## Dataset Support
 
-**ParaView 6.2 or later is recommended. ParaView 5.13 is the oldest
-compatibility target.** Older ParaView releases support the existing dataset
-types but may ignore newer metadata.
+* **ImageData, RectilinearGrid, and StructuredGrid:** Logically rectangular
+  grids defined by uniform spacing, the tensor product of coordinate vectors,
+  or explicit point coordinates, respectively.
 
-| Output feature | ParaView support |
+  - Point and cell data are assembled from rectangular regions, with support
+    for halos, multiple regions per rank, and empty collective contributions.
+  - RectilinearGrid and StructuredGrid support moving geometry with fixed
+    logical grids; ImageData geometry remains fixed.
+  - Static point/cell data may be written incrementally. Temporal data supports
+    complete replacement or reuse of the previous value.
+
+* **UnstructuredGrid (UG):** Meshes with arbitrary cell connectivity, including
+  moving geometry and changing topology. Each MPI rank supplies a separate
+  mesh partition.
+
+* **MultiBlockDataSet (MB):** A flat collection of UnstructuredGrid blocks.
+  Each block selects its own writer mode, and all temporal blocks share a
+  common timeline. Structured block types and hierarchical nesting are not
+  supported.
+
+All simple dataset writers support point, cell, and field data. They use the
+shared mode names `VTKHDF_STATIC`, `VTKHDF_FIXED_MESH`, `VTKHDF_MOVING_MESH`, and
+`VTKHDF_DYNAMIC_MESH`, with each writer supporting the applicable subset.
+The original `UG_*` mode names remain available as compatibility aliases.
+
+Field data uses a common interface for scalar and multicomponent numeric
+values. Static field data is supported in every mode, including within MB
+blocks. In temporal files, a static value applies to every step. Registered
+temporal fields may change between steps or reuse their preceding values.
+
+## Reader Compatibility
+
+Unless otherwise indicated, reader support targets ParaView 5.13 and later.
+Older releases may work, but compatibility is not guaranteed.
+
+| Feature | Reader requirement |
 | --- | --- |
-| UnstructuredGrid and MultiBlock, including temporal FieldData | 5.13+ expected |
-| ImageData | 5.13+ expected, with the reader limitations below |
-| Dataset attribute designations (`Scalars`, `Vectors`, etc.) | 6.2+ |
-| RectilinearGrid and StructuredGrid | 6.2+; use trailing singleton axes with readers before VTK 9.7.2 |
+| RectilinearGrid and StructuredGrid | ParaView 6.2+ (VTK 9.7+) |
+| Dataset attribute designations (`Scalars`, `Vectors`, `Tensors`, `GlobalIds`, etc.) | ParaView 6.2+ (VTK 9.7+); older readers ignore these designations |
 
-**ImageData reader limitations:** ParaView 6.2.0 includes VTK 9.7.1 and still
-has two geometry reader defects. For affected readers, use **zero-based global
-point bounds** on every axis and trailing singleton axes: `(nx,ny,1)` for 2D
-or `(nx,1,1)` for 1D. Positive local block indices and a nonzero physical origin
-are supported. Both defects are fixed in the
-[tested upstream development source](https://github.com/Kitware/VTK/commit/9f0588e2fe0d10573555834a66ac3dab95be4114)
-and the fixes have been backported and queued for VTK 9.7.2. The corresponding
-ParaView release has not yet been identified. fVTKHDF preserves the supplied
-global bounds and physical origin. See the [ImageData manual](doc/sphinx/image.rst)
-for details.
+Readers earlier than VTK 9.7.2 (ParaView 6.2.1) require trailing singleton axes
+for structured grids: use `(nx,ny,1)` for 2D and `(nx,1,1)` for 1D. For
+**ImageData only**, these readers also require zero-based global logical point
+lower bounds. A nonzero physical origin and nonzero local write bounds remain
+supported.
 
-**Dataset Support**
-
-**fVTKHDF** currently supports the following VTK data models:
-
-* **UnstructuredGrid (UG):** For meshes with arbitrary cell types
-  (tetrahedra, hexahedra, etc.).
-
-  * Supports a **static** workflow and three **transient** workflows:
-    fixed, moving, and dynamic mesh.
-
-  * Supports point-centered, cell-centered, and field data.
-
-* **ImageData, RectilinearGrid, and StructuredGrid:** Fixed geometry with static and temporal
-  point/cell arrays assembled from rectangular blocks, including halo
-  exclusion, multiple blocks per rank, and empty collective contributions.
-
-  * Geometry uses regular spacing, rank-zero axis vectors, or distributed
-    explicit point coordinates, respectively.
-  * Uses explicit three-dimensional spatial array shapes and component-first
-    multicomponent arrays.
-  * Temporal fields support complete replacement or whole-field reuse.
-  * FieldData retains the existing UG semantics.
-
-* **MultiBlockDataSet (MB):** Supports a flat assembly/collection of
-  UnstructuredGrid blocks.
-
-  * Mixed-Mode Support: Each block can independently utilize any of the
-    UG workflows within the same file.
-
-  * All transient blocks share a common set of time steps.
-
-  * Useful for a logical decomposition of a model into distinct components
-    (e.g., piston, cylinder, valves), independent of any parallel domain
-    decomposition.
-
-  * Hierarchical assembly of MultiBlock datasets is not supported.
-
+VTK 9.7.1 also has a reader-cache defect affecting out-of-order time requests.
+It is fixed in VTK 9.7.2 (ParaView 6.2.1); disable **Use Cache** with an affected
+reader. See the [reference manual](https://nncarlson.github.io/fvtkhdf/) for
+format-specific interfaces and reader limitations.
 
 ## Documentation
+
 See the [Reference Manual](https://nncarlson.github.io/fvtkhdf/).
 
 For local documentation work, install `sphinx`, `furo`, and `sphinx-autobuild`,
@@ -100,10 +89,13 @@ sphinx-build -b html doc/sphinx build-doc/doc/sphinx/html
 CMake builds configured with `-DBUILD_HTML=ON` can also use
 `cmake --build <build-dir> --target docs`.
 
-
+The [developer guide](doc/developer.md) describes source organization,
+ownership, runtime checks, and validation practices.
 
 ## Installation
+
 ### Prerequisites
+
 * Fortran 2018 Compiler (GCC 13+, Intel oneAPI, etc.)
 * CMake (3.28+)
 * HDF5 C Library (1.10+) (Parallel HDF5 for MPI-enabled build)
@@ -113,11 +105,13 @@ CMake builds configured with `-DBUILD_HTML=ON` can also use
 Limited `fpm` build instructions are available in [fpm/README.md](./fpm/README.md).
 
 ### Build and Install
+
 By default, the library builds with MPI support enabled. Use
 `-DENABLE_MPI=OFF` for a serial-only build. If your MPI installation does
 not provide the `mpi_f08` module, use `-DUSE_MPI_F08=OFF` to disable the
 `mpi_f08` communicator overloads while keeping the integer-communicator MPI
 interface enabled.
+
 ```bash
 git clone https://github.com/nncarlson/fvtkhdf
 cd fvtkhdf
@@ -127,7 +121,9 @@ cmake -B build --install-prefix /path/to/install
 cmake --build build --parallel
 cmake --install build
 ```
+
 Run the tests for your chosen build configuration with:
+
 ```bash
 ctest --test-dir build --output-on-failure
 ```
@@ -144,6 +140,7 @@ The Spack package builds the MPI-enabled configuration and currently
 targets parallel HDF5 1.14.x.
 
 ## Using fVTKHDF in your Project
+
 Once installed, you can use **fVTKHDF** in your own CMake-based project by
 adding the following to your `CMakeLists.txt`:
 
@@ -155,11 +152,12 @@ target_link_libraries(my_simulation PRIVATE fVTKHDF::fvtkhdf)
 ```
 
 ## Quick Start
+
 Here is a minimal serial example that writes a **VTKHDF** UnstructuredGrid
 dataset for an unstructured mesh consisting of a single tetrahedral cell
 with a scalar field. More complete examples (serial and MPI-parallel,
-UnstructuredGrid, ImageData, RectilinearGrid, StructuredGrid, and MultiBlockDataSet) are provided in the `example`
-directory.
+UnstructuredGrid, ImageData, RectilinearGrid, StructuredGrid, and
+MultiBlockDataSet) are provided in the [example directory](example/README.md).
 
 ```fortran
 program quick_start
@@ -203,8 +201,8 @@ program quick_start
 end program quick_start
 ```
 
-
 ## Development Roadmap
+
 Planned and prospective features include:
 
 * Completing UnstructuredGrid (UG) feature coverage
@@ -212,6 +210,7 @@ Planned and prospective features include:
   - Add support for [polyhedron cells](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#polyhedron-support)
 
 * Composite VTK datasets
+  - Add structured block types to MultiBlockDataSet.
   - Replace the legacy MB with PartitionedDataSetCollection (PDC) ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26))
   - Implement a general `Assembly` tree for PDC to replace the existing flat tree.
 
@@ -230,7 +229,7 @@ If you are interested in contributing support for one of these
 dataset types, please open an issue to discuss design and implementation
 details.
 
-
 ## License
+
 **fVTKHDF** is distributed under the 2-clause BSD license.
 See [LICENSE.md](./LICENSE.md) for details.
