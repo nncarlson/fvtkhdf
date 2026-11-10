@@ -11,10 +11,10 @@ File management, point and cell data, and time stepping use the
 :doc:`shared interface for structured VTK datasets <structured>`.
 Field data uses the :doc:`common field data interface <field_data>`.
 
-The StructuredGrid writer supports ``VTKHDF_STATIC``
-(default), ``VTKHDF_FIXED_MESH``, and ``VTKHDF_MOVING_MESH``. The logical grid
-is fixed for the lifetime of the file. Moving-mesh mode permits changing
-point coordinates and static or temporal point, cell, and field data.
+The writer supports ``VTKHDF_STATIC`` (default), ``VTKHDF_FIXED_MESH``, and
+``VTKHDF_MOVING_MESH``. The logical grid is fixed for the lifetime of the file.
+Moving-mesh mode permits changing point coordinates. Point, cell, and field
+data may be static or temporal in all supported temporal modes.
 
 .. code-block:: fortran
 
@@ -29,7 +29,7 @@ Mesh Data
    call file%write_mesh(point_bounds)
 
    Define the global logical grid. Call exactly once, before writing geometry
-   or writing/registering point/cell data.
+   or writing or registering point/cell data.
 
    * ``point_bounds(3,2)``: inclusive global logical point bounds of kind
      ``int32``. Column 1 contains lower bounds and column 2 upper bounds,

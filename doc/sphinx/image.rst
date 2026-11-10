@@ -19,7 +19,10 @@ Field data uses the :doc:`common field data interface <field_data>`.
 Mesh Data
 ---------
 
-``call file%write_mesh(point_bounds, origin, spacing [, direction])``
+.. method-doc::
+
+   call file%write_mesh(point_bounds, origin, spacing [, direction])
+
    Define the global grid geometry. Call exactly once, before writing or
    registering point/cell data or starting time stepping. All ranks must
    supply identical arguments.

@@ -27,8 +27,8 @@ layout for point and cell data.
 The optional ``attribute`` argument to point and cell data creation or
 registration designates a VTK role, such as ``Scalars``, ``Vectors``,
 ``Tensors``, or ``GlobalIds``. This is separate from the array's component
-count. See the VTK dataset chapters for supported shapes and the VTKHDF
-specification for the full set of
+count. Blank values are ignored. See the VTK dataset chapters for supported
+shapes and the VTKHDF specification for the full set of
 `attribute roles <https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#attribute-data>`_.
 These designations are supported by VTK 9.7.0 and later and ParaView 6.2.0
 and later; earlier versions ignore them.
@@ -44,7 +44,7 @@ appending a suffix such as ``_1``. The resulting name is what VTK and ParaView
 see. The original name is written as the ``Name`` attribute on the HDF5
 dataset for user reference.
 
-Each name-based write or temporal registration creates a new data array.
+Each write by name or temporal registration creates a new dataset.
 Repeating a name does not select an existing array. Where subsequent writes
 are supported, they identify the array by an opaque handle:
 ``vtkhdf_cell_data_handle``, ``vtkhdf_point_data_handle``, or
@@ -59,10 +59,10 @@ to ``create``. All ranks must call the same methods in the same order.
 Non-distributed arguments, including filenames, modes, names, and attribute
 designations, must have identical values on all ranks. Distributed arrays and
 placement arguments may differ as specified by the writer interface.
-For ``start_time_step``, only rank 0's time value is used.
+For ``start_time_step``, only rank zero's time value is used.
 
 Field data has a distinct rule: all ranks supply arguments with matching type,
-kind, and shape, but only rank 0 contributes values.
+kind, and shape, but only rank zero contributes values.
 
 In serial builds, the same methods are used with the communicator argument
 omitted from ``create``. Always call ``close`` explicitly; automatic Fortran

@@ -1,10 +1,4 @@
-/* Keep paired signatures in one scrolling code block above their description. */
+/* Indent method descriptions beneath their signatures. */
 .method-description {
   margin-left: 2em;
-}
-
-/* Keep glossary signatures on one line and scroll long entries. */
-dl.glossary > dt {
-  overflow-x: auto;
-  white-space: nowrap;
 }

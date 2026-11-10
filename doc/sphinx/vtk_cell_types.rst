@@ -1,11 +1,11 @@
-The vtkhdf_vtk_cell_types module
-================================
+VTK Cell Types
+==============
 
-This module defines named ``int8`` parameters corresponding to
-VTK cell type identifiers.
+The ``vtkhdf_vtk_cell_types`` module defines named ``int8`` parameters
+corresponding to VTK cell type identifiers.
 
 These parameters are intended for use in the ``types`` argument of
-``write_mesh``.
+the UnstructuredGrid mesh-writing methods.
 
 The set of named parameters provided here is not intended to be
 exhaustive. In general, any VTK cell type code that is valid for
@@ -15,8 +15,8 @@ does not attempt to restrict or reinterpret these codes.
 The integer values are defined by VTK and are reproduced here for
 convenience. The authoritative definitions may be found in:
 
-* The VTKHDF file format documentation:
-  https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html
+* The `VTKHDF file format specification
+  <https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html>`_.
 * ``Common/DataModel/vtkCellType.h`` in the VTK source tree.
 
 Standard Cell Types

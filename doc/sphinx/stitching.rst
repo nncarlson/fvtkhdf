@@ -1,13 +1,13 @@
 Parallel Stitching and Ghost Cells
 ==================================
 
-When visualizing partitioned unstructured grids, ParaView treats each
-VTKHDF partition as a separate piece of geometry. To produce a seamless
-visualization and ensure mathematical correctness across the global domain,
-specifically named mesh-centered arrays may be written to the file.
-When ParaView encounters these arrays, it interprets them as metadata
-rather than ordinary point or cell data. These arrays are written using
-the standard point and cell data procedures.
+UnstructuredGrid files store each MPI rank's mesh as a separate partition.
+To produce a seamless visualization and support correct calculations across
+partition boundaries, additional point and cell arrays identify shared
+entities and ghost copies. Without this information, rendering artifacts
+and incorrect results can occur. VTK and ParaView filters may use these
+arrays when processing the global mesh. Write them using the standard point
+and cell data procedures.
 
 * ``"vtkGhostType"``: an ``int8`` array that may be written for cells,
   points, or both, using the same name in their respective data groups.
@@ -30,6 +30,9 @@ the standard point and cell data procedures.
 
 * ``"vtkGlobalCellIds"``: an ``int64`` cell-centered array providing a
   unique global index for every cell.
+
+Copies of the same point or cell in different partitions must have the same
+global ID.
 
 .. note::
 

@@ -47,7 +47,7 @@ it does not require three components or assign a geometric vector role.
 For a rank-2 argument, each Fortran column is one tuple.
 
 In MPI builds, all field data calls are collective. All ranks must supply
-matching argument types, kinds, and shapes. Only rank 0 contributes the
+matching argument types, kinds, and shapes. Only rank zero contributes the
 written values; values on other ranks are never referenced.
 
 .. note::
@@ -58,7 +58,10 @@ written values; values on other ranks are never referenced.
 Static Field Data
 -----------------
 
-``call file%write_field_data(name, array [, as_vector])``
+.. method-doc::
+
+   call file%write_field_data(name, array [, as_vector])
+
    Write a complete static field dataset.
 
    * ``name``: character name, handled according to :doc:`common`.
@@ -82,7 +85,10 @@ Temporal Field Data
    ! The handle type is exported by each file-type module.
    type(vtkhdf_field_data_handle) :: field_var
 
-``field_var = file%register_temporal_field_data(name, mold)``
+.. method-doc::
+
+   field_var = file%register_temporal_field_data(name, mold)
+
    Register a time-dependent field dataset and return an opaque handle.
 
    * ``name``: character name, handled according to :doc:`common`.
@@ -93,7 +99,10 @@ Temporal Field Data
    Registration is allowed only in a temporal mode and must precede the first
    call to ``start_time_step``.
 
-``call file%write_field_data(field_var, array [, as_vector])``
+.. method-doc::
+
+   call file%write_field_data(field_var, array [, as_vector])
+
    Write the complete value for the current time step to the registered field.
 
    * ``field_var``: handle returned by registration.

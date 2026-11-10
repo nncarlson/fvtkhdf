@@ -135,7 +135,7 @@ Static Point and Cell Data
    A ``write_bounds`` selection from ``[11,0,0]`` to ``[13,0,0]`` writes
    ``a(1:3,1,1)``.
 
-   Each name-based call creates a new dataset. Repeating the name creates
+   Each call by name creates a new dataset. Repeating the name creates
    another dataset with a disambiguated name.
 
 .. method-doc::
@@ -144,7 +144,7 @@ Static Point and Cell Data
    call file%write_point_data(point_var, array, array_origin [, write_bounds])
 
    Write another region to the dataset identified by a handle. Placement and
-   array arguments have the same meaning as in the name-based calls.
+   array arguments have the same meaning as in the calls by name.
 
    Static point and cell data are supported in all structured writer modes.
    Define the mesh before creating or writing these datasets. In a temporal
@@ -228,7 +228,7 @@ could be written as follows:
 
 Write the mask for every location whose visibility must be specified.
 Unwritten mask entries default to zero (visible). Other datasets may be left
-unwritten at hidden locations; HDF5 supplies their fill values. NaN values
+unwritten at hidden locations, where their default values are used. NaN values
 alone do not mark locations hidden.
 
 Temporal Point and Cell Data
@@ -287,16 +287,14 @@ step. All-empty collective writes still begin a replacement; reuse requires
 omitting the calls on all ranks.
 
 Region shapes and rank ownership may change between replacements. Every
-replacement must cover the entire dataset exactly once before the step is
+replacement must cover all visible locations exactly once before the step is
 finalized.
 
-.. note::
+.. warning::
 
-   VTK 9.7.1 can leave stale point/cell data attached when time steps are
-   requested out of order. This reader-cache limitation also affects fixed
-   meshes. It is `fixed in VTK 9.7.2
-   <https://gitlab.kitware.com/vtk/vtk/-/merge_requests/13775>`_; ParaView 6.2.1
-   is expected to include the fix. For affected versions, disable caching:
+   VTK 9.7.1 can return stale point/cell data when time steps are requested
+   out of order, including for fixed meshes. This is fixed in VTK 9.7.2
+   (ParaView 6.2.1). For affected readers, disable caching:
    clear **Use Cache** in the ParaView reader properties and click **Apply**,
    or call ``reader.SetUseCache(False)`` when using VTK in Python.
 
