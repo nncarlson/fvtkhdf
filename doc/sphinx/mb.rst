@@ -4,22 +4,15 @@ MultiBlockDataSet
 The ``vtkhdf_mb_file_type`` module defines the ``vtkhdf_mb_file``
 derived type for writing VTKHDF MultiBlockDataSet files.
 
-Optional VTK attribute roles, specified with the ``attribute`` argument, are
-recognized by VTK 9.7.0 / ParaView 6.2.0 and later; older readers ignore these
-designations while still reading the data. See :doc:`common`.
-
 MultiBlockDataSet is a composite VTK dataset: a container for simple VTK
 datasets. This interface supports a flat collection of named UnstructuredGrid
 blocks; hierarchical nesting and other simple VTK dataset types are not
-supported.
+currently supported.
 
 Each block has the same semantics as a VTK dataset written by
 ``vtkhdf_ug_file``, with its own selected mode, mesh, and associated cell,
-point, and field datasets. Each block has its own mode and data; all temporal
-blocks share a common timeline.
-
-As in ``vtkhdf_ug_file``, partitions correspond 1:1 with MPI ranks.
-Each MPI rank contributes one VTKHDF partition for every block.
+point, and field datasets. Each block has its own mode and data; however, all
+temporal blocks share a common timeline.
 
 In the MPI build, all type-bound procedures are collective over the
 communicator passed to ``create`` and must be called in the same order
@@ -63,10 +56,6 @@ File Creation and Management
 Block Definition
 ----------------
 
-The shared ``VTKHDF_*`` mode constants are exported by
-``vtkhdf_mb_file_type``. The original ``UG_*`` names remain available as
-compatibility aliases.
-
 .. code-block:: fortran
 
    use vtkhdf_mb_file_type
@@ -83,7 +72,8 @@ compatibility aliases.
    ``VTKHDF_MOVING_MESH``, or ``VTKHDF_DYNAMIC_MESH`` and defaults to
    ``VTKHDF_STATIC``.
 
-   Block names follow the naming conventions in :doc:`common`.
+   Block names form a separate namespace within the file and follow the
+   naming conventions in :doc:`common`.
    The original name is preserved as the value of the block group
    ``Name`` attribute for user reference.
 
@@ -93,6 +83,15 @@ compatibility aliases.
 The file is temporal if at least one block uses a temporal UG mode
 (``VTKHDF_FIXED_MESH``, ``VTKHDF_MOVING_MESH``, or ``VTKHDF_DYNAMIC_MESH``). All
 temporal blocks share calls to ``start_time_step`` and ``finalize_time_step``.
+
+.. warning::
+
+   VTK readers, including versions 9.6.1 and 9.7.2, fail when a file contains
+   both static and temporal blocks; see
+   `VTK issue 19963 <https://gitlab.kitware.com/vtk/vtk/-/work_items/19963>`_.
+   For compatibility, make all blocks temporal if any block is temporal.
+   Use ``VTKHDF_FIXED_MESH`` for otherwise static blocks; these blocks need
+   no registered temporal data or repeated mesh or data writes.
 
 Mesh Data
 ---------
@@ -135,13 +134,9 @@ same as for ``vtkhdf_ug_file``; see its description for details omitted
 here. Field data values, array interpretation, and reuse rules are described
 in :doc:`field_data`.
 
-For field data, ``file`` is a ``vtkhdf_mb_file`` object, and each registration
-or write takes the block handle returned by ``file%add_block`` as its first
-argument, as shown below.
-
-Within each block, cell data, point data, and field data have their
-own namespaces. Names are normalized and deduplicated exactly as in
-``vtkhdf_ug_file``.
+Each block has independent namespaces for cell, point, and field data.
+Names are normalized and disambiguated within each namespace, following
+the rules in :doc:`common`.
 
 If multiple blocks contain datasets with the same name and
 association (cell or point), ParaView treats them as a single variable across
