@@ -398,7 +398,6 @@ contains
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
     INSIST(this%root_id >= 0 .and. this%logical_grid_defined .and. this%geometry_written)
-    INSIST(.not.this%allow_geometry_change)
     ASSERT(this%ctx%identical(trim(name)))
     ASSERT(this%ctx%identical([merge(1,0,present(attribute))]))
     ASSERT(this%ctx%identical([${nums.index((kind,decl,h5type))}$]))

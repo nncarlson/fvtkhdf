@@ -119,6 +119,16 @@ for mask in masks:
                         np.testing.assert_array_equal(root["CellData/vector"], np.stack([(cells+10*p).reshape(cell_shape) for p in DATA_PHASES]))
                         np.testing.assert_array_equal(root["Steps/PointDataOffsets/value"], DATA)
                         np.testing.assert_array_equal(root["Steps/CellDataOffsets/vector"], DATA)
+                        for group, name, expected in (
+                                ("Point", "late_points", value+700),
+                                ("Cell", "between_cells", ci+10*cj+100*ck+700),
+                                ("Cell", "end_cells", ci+10*cj+100*ck+700)):
+                            shape = point_shape if group == "Point" else cell_shape[:-1]
+                            payload = root[f"{group}Data/{name}"]
+                            assert payload.shape == (1, *shape)
+                            assert payload.maxshape == payload.shape
+                            np.testing.assert_array_equal(payload[0], expected.reshape(shape))
+                            np.testing.assert_array_equal(root[f"Steps/{group}DataOffsets/{name}"], np.zeros(7))
                         np.testing.assert_array_equal(root["FieldData/energy"], np.array([42, 44, 46, 48])[:, None])
                         np.testing.assert_array_equal(root["Steps/FieldDataOffsets/energy"], [0, 0, 1, 1, 2, 2, 3])
                 else:
@@ -137,6 +147,10 @@ for mask in masks:
                             np.testing.assert_array_equal(vtk_to_numpy(output.GetPointData().GetArray("value")), value.ravel()+10*DATA_PHASES[DATA[step]])
                             np.testing.assert_array_equal(vtk_to_numpy(output.GetCellData().GetArray("vector")), cells.reshape(-1, 2)+10*DATA_PHASES[DATA[step]])
                             np.testing.assert_array_equal(vtk_to_numpy(output.GetFieldData().GetArray("energy")), [42+step-step % 2])
+                            np.testing.assert_array_equal(vtk_to_numpy(output.GetPointData().GetArray("late_points")), value.ravel()+700)
+                            for name in ("between_cells", "end_cells"):
+                                np.testing.assert_array_equal(vtk_to_numpy(output.GetCellData().GetArray(name)),
+                                                              (ci+10*cj+100*ck+700).ravel())
             if mask == 7:
                 path = directory / f"moving_{grid}_{kind}_reopen.vtkhdf"
                 if mode == "layout":

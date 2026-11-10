@@ -10,8 +10,7 @@ File management, point and cell data, and time stepping use :doc:`structured`.
 Field data uses :doc:`field_data`. The module exports ``VTKHDF_STATIC``
 (default), ``VTKHDF_FIXED_MESH``, and ``VTKHDF_MOVING_MESH``. The logical grid
 is fixed for the lifetime of the file. Moving-mesh mode permits changing
-point coordinates and requires temporal point and cell data. Field data may
-be static or temporal.
+point coordinates and static or temporal point, cell, and field data.
 
 .. code-block:: fortran
 
@@ -88,17 +87,15 @@ have a shared structured-data defect for nontrailing singleton axes. With an
 affected reader, use ``(nx,ny,1)`` for 2D and ``(nx,1,1)`` for 1D. Arbitrary
 logical lower bounds remain supported because the file uses zero-based storage.
 
-Example
--------
+Examples
+--------
 
-``example/structured_fixed_mesh.F90`` demonstrates distributed point
-coordinates and temporal cell data in serial and MPI builds.
+``example/structured_fixed_mesh.F90`` follows the fixed-mesh examples, mapping
+the logical grid to an annular strip whose height increases with azimuth.
+It demonstrates distributed point coordinates, static cell data, temporal point
+and field data, and shared-point ownership in serial and MPI builds.
 
-.. literalinclude:: ../../example/structured_fixed_mesh.F90
-   :language: fortran
-
-``example/structured_moving_mesh.F90`` demonstrates distributed moving
-coordinates with independent geometry and data reuse.
-
-.. literalinclude:: ../../example/structured_moving_mesh.F90
-   :language: fortran
+``example/structured_moving_mesh.F90`` follows the fixed-mesh example, rotating
+the strip about z by one angular increment at each successive step. Static cell
+data and temporal point and field data are written as in the fixed-mesh example.
+It supports serial and MPI builds.

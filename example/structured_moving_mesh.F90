@@ -1,18 +1,22 @@
-! Moving StructuredGrid point coordinates with fixed logical connectivity.
 program structured_moving_mesh_example
-  use,intrinsic :: iso_fortran_env, only: real64
+
   use vtkhdf_structured_file_type
 #ifdef USE_MPI
   use mpi
 #endif
   implicit none
+
   type(vtkhdf_structured_file) :: file
-  type(vtkhdf_cell_data_handle) :: temperature_var
-  type(vtkhdf_field_data_handle) :: energy_var
-  real(real64), allocatable :: points(:,:,:,:)
-  real(real64) :: temperature(4,3,1), time
-  integer :: point_bounds(3,2), cell_origin(3), first, last, rank, nproc, stat, step, i, j
+  type(vtkhdf_point_data_handle) :: temp_var
+  type(vtkhdf_field_data_handle) :: cpu_var
+  real, allocatable :: temp(:,:,:), diff(:,:,:)
+  real, allocatable :: points(:,:,:,:)
+  real, parameter :: pi = acos(-1.0), dtheta = pi/12.0, dr = 0.5
+  real :: theta, radius
+  integer :: rank, nproc, stat, step, i, j
+  integer :: point_bounds(3,2), array_origin(3), write_bounds(3,2)
   character(:), allocatable :: errmsg
+
 #ifdef USE_MPI
   call MPI_Init(stat)
   call MPI_Comm_rank(MPI_COMM_WORLD,rank,stat)
@@ -21,47 +25,81 @@ program structured_moving_mesh_example
   rank = 0
   nproc = 1
 #endif
-  point_bounds(:,1) = 0
-  point_bounds(:,2) = [4*nproc,3,0]
+
+  ! Create the file with support for moving geometry and time-dependent data.
 #ifdef USE_MPI
-  call file%create('structured_moving_mesh.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=VTKHDF_MOVING_MESH)
+  call file%create('structured_moving_mesh.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_MOVING_MESH)
+  if (stat /= 0) then
+    call MPI_Finalize(stat)
+    error stop errmsg
+  end if
 #else
-  call file%create('structured_moving_mesh.vtkhdf',stat,errmsg,mode=VTKHDF_MOVING_MESH)
-#endif
+  call file%create('structured_moving_mesh.vtkhdf', stat, errmsg, mode=VTKHDF_MOVING_MESH)
   if (stat /= 0) error stop errmsg
+#endif
+
+  ! Define the global 2D logical grid.
+  ! Each rank owns one unique 4-wide slab of cells.
+  point_bounds(:,1) = [0,0,0]
+  point_bounds(:,2) = [4*nproc,3,0]
   call file%write_mesh(point_bounds)
-  temperature_var = file%register_temporal_cell_data('temperature',0.0_real64,attribute='Scalars')
-  energy_var = file%register_temporal_field_data('energy',0.0_real64)
-  ! Every shared slab-boundary point belongs to the rank on its right.
-  first = 4*rank
-  last = first+3
-  if (rank == nproc-1) last = last+1
-  allocate(points(3,last-first+1,4,1))
-  cell_origin = [4*rank,0,0]
-  do step = 0,4
-    time = real(step,real64)
-    call file%start_time_step(time)
-    if (modulo(step,2) == 0) then
-      do j = 0,3
-        do i = first,last
-          points(:,i-first+1,j+1,1) = [0.1_real64*i,0.1_real64*j,0.01_real64*i*j*time]
+  array_origin = [4*rank,0,0] ! global index of the first local array element
+
+  ! Map the grid to an annular strip with uniform angular and radial increments.
+  ! Raise z by one per revolution so successive turns do not overlap.
+  allocate(points(3,5,4,1))
+  do j = 1, 4
+    radius = 2.0 + dr*(j-1)
+    do i = 1, 5
+      theta = dtheta*(array_origin(1)+i-1)
+      points(:,i,j,1) = [radius*cos(theta),radius*sin(theta),theta/(2.0*pi)]
+    end do
+  end do
+  ! Shared points are owned by the slab to the left, for geometry and point data.
+  write_bounds(:,1) = array_origin
+  write_bounds(:,2) = array_origin + [4,3,0]
+  write_bounds(1,1) = write_bounds(1,1) + merge(0,1,(rank==0)) ! omit unowned overlap
+  call file%write_mesh_geometry(points, array_origin, write_bounds)
+
+  ! Write time-independent (static) diffusivity variable on cells
+  allocate(diff(4,3,1), source=real(rank+1))
+  call file%write_cell_data('diffusivity', diff, array_origin)
+
+  ! Register time-dependent temperature on points.
+  ! Use the same shared-point ownership as for the geometry.
+  allocate(temp(5,4,1))
+  temp_var = file%register_temporal_point_data('temperature', mold=0.0)
+
+  ! We'll write the cummulative cpu time as field data.
+  cpu_var = file%register_temporal_field_data('cpu_time', mold=0.0)
+
+  do step = 0, 4
+    call file%start_time_step(real(step))
+    if (step > 0) then
+      ! Rotate about z by dtheta per step, keeping each point's height fixed.
+      do j = 1, 4
+        radius = 2.0 + dr*(j-1)
+        do i = 1, 5
+          theta = dtheta*(array_origin(1)+i-1+step)
+          points(1:2,i,j,1) = [radius*cos(theta),radius*sin(theta)]
         end do
       end do
-      call file%write_mesh_geometry(points,array_origin=[first,0,0])
+      call file%write_mesh_geometry(points, array_origin, write_bounds)
     end if
-    if (step == 0 .or. step == 3) then
-      do j = 1,3
-        do i = 1,4
-          temperature(i,j,1) = cell_origin(1)+i-1+10*(j-1)+time
-        end do
+    do j = 1, 4
+      do i = 1, 5
+        temp(i,j,1) = array_origin(1)+i-1+10*(j-1)+step
       end do
-      call file%write_cell_data(temperature_var,temperature,array_origin=cell_origin)
-    end if
-    call file%write_field_data(energy_var,time)
+    end do
+    call file%write_point_data(temp_var, temp, array_origin, write_bounds)
+    call file%write_field_data(cpu_var, 10.0*step)
     call file%finalize_time_step
   end do
+
   call file%close
+
 #ifdef USE_MPI
   call MPI_Finalize(stat)
 #endif
+
 end program

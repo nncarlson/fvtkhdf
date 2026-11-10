@@ -24,17 +24,29 @@ All examples produce an `example.vtkhdf` output file.
 
 `image_fixed_mesh.F90` writes a regular 2D grid with one disjoint cell slab
 per MPI rank (or one slab in a serial build). It demonstrates `VTKHDF_FIXED_MESH`,
-global logical bounds, explicit array placement, full temporal replacement,
-omitted-write reuse, and independent rank-zero FieldData. See the ImageData
+global logical bounds, static cell data, temporal point and field data, and
+shared-point ownership using `write_bounds`. See the ImageData
 manual for multiple blocks, halo exclusion, empty contributions, and reader
 limitations.
 
-`rectilinear_fixed_mesh.F90` and `structured_fixed_mesh.F90` use the same
-fixed-geometry temporal workflow with rank-zero coordinate vectors and
-distributed explicit coordinates, respectively. Both support serial and MPI builds.
+`rectilinear_fixed_mesh.F90` follows the ImageData example with nonuniform
+coordinate vectors supplied by rank zero. The data and shared-point ownership
+are identical; only the mesh geometry differs. It supports serial and MPI builds.
+
+`structured_fixed_mesh.F90` follows the fixed-mesh examples, mapping the same
+logical grid to an annular strip with uniform angular and radial increments.
+Height increases with azimuth so successive turns do not overlap. Distributed
+point coordinates and temporal point data use the same shared-point ownership;
+static cell data and temporal field data match the other examples. It supports
+serial and MPI builds.
 
 
-The `rectilinear_moving_mesh` and `structured_moving_mesh` examples keep their
-logical grids fixed while changing physical coordinates. Geometry is replaced
-on even-numbered steps and reused otherwise; temporal cell data is updated on
-an independent schedule. Both programs support serial and MPI builds.
+`rectilinear_moving_mesh.F90` follows the fixed-mesh example, shrinking x and
+expanding y at each successive step while keeping the logical grid fixed.
+Static diffusivity and temporal point and field data are written as in the
+fixed-mesh example. It supports serial and MPI builds.
+
+`structured_moving_mesh.F90` follows the fixed-mesh example, rotating the strip
+about z by one angular increment at each successive step while keeping each
+point's height fixed. Static diffusivity and temporal point and field data are
+written as in the fixed-mesh example. It supports serial and MPI builds.

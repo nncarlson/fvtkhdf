@@ -117,9 +117,6 @@ The following serial example defines an XY grid with eight by six points:
 Complete Temporal Example
 -------------------------
 
-``example/image_fixed_mesh.F90`` supports serial and MPI builds and demonstrates
-geometry definition, temporal registration, rank-local regions, omitted-write
-reuse, field data, and explicit close.
-
-.. literalinclude:: ../../example/image_fixed_mesh.F90
-   :language: fortran
+``example/image_fixed_mesh.F90`` demonstrates static cell data, temporal point
+and field data, and shared-point ownership using ``write_bounds``. It supports
+serial and MPI builds.

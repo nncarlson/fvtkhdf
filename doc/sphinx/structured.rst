@@ -148,11 +148,13 @@ Static Point and Cell Data
    Write another region to the dataset identified by a handle. Placement and
    array arguments have the same meaning as in the name-based calls.
 
-   Static point and cell data are supported in ``VTKHDF_STATIC`` and
-   ``VTKHDF_FIXED_MESH`` modes. Define the mesh before creating or writing these
-   datasets. In a temporal file, static datasets may also be written after time
-   stepping begins; they remain independent of time. Moving-mesh mode requires
-   temporal point and cell datasets, registered before time stepping.
+   Static point and cell data are supported in all structured writer modes.
+   Define the mesh before creating or writing these datasets. In a temporal
+   file, static datasets may also be written after time stepping begins,
+   including after the last step has been finalized and before closing the file.
+   Their values apply to every step, including earlier steps. Further writes
+   through a static handle modify the same dataset for all steps; they do not
+   create temporal replacements.
 
 Region Ownership and Collective Writes
 --------------------------------------

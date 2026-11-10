@@ -131,18 +131,3 @@ The library can be configured for either parallel or serial environments:
 * Serial Build: Requires only a standard HDF5 installation. The API remains
   identical, with the exception that the file creation method does not require
   a communicator argument.
-
-
-Visualization Compatibility
-===========================
-For UG and MB, ParaView 5.13+ is the existing compatibility target. ImageData
-reader limitations are described in :doc:`image`. By default, ParaView
-treats internal partitions as independent mesh entities. Its filters therefore
-process each partition independently.
-This can lead to discontinuities in spatial filters (e.g., Contour, Slice) and
-'Z-fighting' artifacts in the renderer if overlapping ghost cells are present.
-Users can resolve these issues by including special VTK data arrays in the
-VTKHDF file which allow ParaView to "stitch" the partitions into a single
-logical mesh.
-For more information on these arrays see the
-:doc:`Parallel Stitching and Ghost Cells <stitching>` guide.

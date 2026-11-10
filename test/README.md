@@ -176,6 +176,10 @@ replacement schedule. Geometry ownership changes across snapshots; tests include
 halo sections, empty contributions, all-empty geometry replacements, writer
 reuse, and both two- and four-rank execution. The shared lifecycle test also
 uses moving geometry in borrowed leaves.
+Static point/cell data is introduced during an open step, between steps, and
+after the last step (open or finalized). Incremental static writes span different
+steps; layout and reader checks verify their final values at every time, including
+earlier steps, with a single snapshot and complete zero-offset histories.
 
 `vtkhdf_moving_grid_check.py` independently verifies payloads and per-step offsets
 with h5py, then checks geometry and data with VTK. Sequential reads use the
@@ -187,4 +191,5 @@ reader cases use the same existing version-dependent skips as fixed grids;
 all layout checks run.
 
 `vtkhdf_moving_grid_fail_test.F90` checks mode, geometry ordering, immutable
-bounds, coordinate kind/size consistency, and rejection of static data.
+bounds, coordinate kind/size consistency, and the required initial temporal-data
+write before reuse.

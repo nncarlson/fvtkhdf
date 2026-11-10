@@ -4,6 +4,11 @@ The vtkhdf_ug_file_type module
 This module defines the ``vtkhdf_ug_file`` derived type for writing
 VTKHDF UnstructuredGrid files.
 
+The reader compatibility target is ParaView 5.13 and later.
+Optional VTK attribute roles, specified with the ``attribute`` argument, are
+recognized by VTK 9.7.0 / ParaView 6.2.0 and later; older readers ignore these
+designations while still reading the data. See :doc:`common`.
+
 In the MPI build, all type-bound procedures are collective over the
 communicator passed to ``create``. Every rank must call the same method
 in the same order and supply identical values for all non-distributed

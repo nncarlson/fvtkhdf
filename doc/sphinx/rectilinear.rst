@@ -10,8 +10,7 @@ File management, point and cell data, and time stepping use :doc:`structured`.
 Field data uses :doc:`field_data`. The module exports ``VTKHDF_STATIC``
 (default), ``VTKHDF_FIXED_MESH``, and ``VTKHDF_MOVING_MESH``. The logical grid
 is fixed for the lifetime of the file. Moving-mesh mode permits changing
-coordinate vectors and requires temporal point and cell data. Field data may
-be static or temporal.
+coordinate vectors and static or temporal point, cell, and field data.
 
 .. code-block:: fortran
 
@@ -81,17 +80,15 @@ have a shared structured-data defect for nontrailing singleton axes. With an
 affected reader, use ``(nx,ny,1)`` for 2D and ``(nx,1,1)`` for 1D. Arbitrary
 logical lower bounds remain supported because the file uses zero-based storage.
 
-Example
--------
+Examples
+--------
 
-``example/rectilinear_fixed_mesh.F90`` demonstrates rank-zero coordinate
-vectors, distributed cell data, and temporal reuse in serial and MPI builds.
+``example/rectilinear_fixed_mesh.F90`` follows the ImageData example, replacing
+its geometry definition with nonuniform coordinate vectors supplied by rank
+zero. It demonstrates static cell data, temporal point and field data, and
+shared-point ownership using ``write_bounds`` in serial and MPI builds.
 
-.. literalinclude:: ../../example/rectilinear_fixed_mesh.F90
-   :language: fortran
-
-``example/rectilinear_moving_mesh.F90`` demonstrates moving coordinate
-vectors with independent geometry and data reuse.
-
-.. literalinclude:: ../../example/rectilinear_moving_mesh.F90
-   :language: fortran
+``example/rectilinear_moving_mesh.F90`` follows the fixed-mesh example,
+shrinking the x coordinates and expanding the y coordinates at each successive
+step. Static diffusivity and temporal point and field data are written as in
+the fixed-mesh example. It supports serial and MPI builds.

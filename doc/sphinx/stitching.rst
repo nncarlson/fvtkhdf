@@ -13,10 +13,11 @@ the standard point and cell data procedures.
   points, or both, using the same name in their respective data groups.
 
   For cells, value 0 identifies a real cell owned by the local rank and
-  value 1 a ghost (duplicate) cell. This prevents duplicate cells from being
-  rendered as overlapping geometry. While not required, the inclusion of
-  ghost cells in mesh output provides the context needed for filters to
-  interpolate values across partition boundaries.
+  value 1 a ghost (duplicate) cell. Marking duplicate cells allows supporting
+  VTK filters to exclude them from rendering or calculations where appropriate.
+  While not required, the inclusion of ghost cells in mesh output provides
+  the context needed for filters to interpolate values across partition
+  boundaries.
 
   For points, value 0 identifies the owned copy and value 1 a duplicate copy
   of a point shared between partitions. Shared boundary points can be
@@ -25,13 +26,10 @@ the standard point and cell data procedures.
   status.
 
 * ``"vtkGlobalPointIds"``: an ``int64`` point-centered array providing a
-  unique global index for every node. This prevents visual "cracks" in
-  filters such as Contour or Slice.
+  unique global index for every node.
 
 * ``"vtkGlobalCellIds"``: an ``int64`` cell-centered array providing a
-  unique global index for every cell. This is required for accurate data
-  integration (e.g., the Integrate Variables filter), ensuring that ghost
-  or duplicate cells are not double-counted.
+  unique global index for every cell.
 
 .. note::
 

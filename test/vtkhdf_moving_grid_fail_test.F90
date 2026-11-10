@@ -79,10 +79,10 @@ program vtkhdf_moving_grid_fail_test
     case ('duplicate')
       call file%start_time_step(0.0)
       call geometry()
-    case ('static_data')
-      selected(:,2) = [1,0,0]
-      if (rank /= 0) selected(1,2) = -1
-      call file%write_cell_data('cell',values,[0,0,0],selected)
+    case ('missing_data')
+      cell_var = file%register_temporal_cell_data('cell',0.0_real64)
+      call file%start_time_step(0.0)
+      call file%finalize_time_step
     case ('between_steps')
       call file%start_time_step(0.0)
       call file%finalize_time_step
