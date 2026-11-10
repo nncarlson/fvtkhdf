@@ -17,34 +17,22 @@ library itself depends on HDF5, with MPI required only for parallel builds.
 ## Dataset Support
 
 * **ImageData, RectilinearGrid, and StructuredGrid:** Logically rectangular
-  grids defined by uniform spacing, the tensor product of coordinate vectors,
-  or explicit point coordinates, respectively.
+  grids defined by uniform spacing, coordinate vectors, or explicit point
+  coordinates, respectively. RectilinearGrid and StructuredGrid support moving
+  geometry; ImageData geometry remains fixed.
 
-  - Point and cell data are assembled from rectangular regions, with support
-    for halos, multiple regions per rank, and empty collective contributions.
-  - RectilinearGrid and StructuredGrid support moving geometry with fixed
-    logical grids; ImageData geometry remains fixed.
-  - Static point/cell data may be written incrementally. Temporal data supports
-    complete replacement or reuse of the previous value.
-
-* **UnstructuredGrid (UG):** Meshes with arbitrary cell connectivity, including
+* **UnstructuredGrid:** Meshes with arbitrary cell connectivity, including
   moving geometry and changing topology. Each MPI rank supplies a separate
   mesh partition.
 
-* **MultiBlockDataSet (MB):** A flat collection of UnstructuredGrid blocks.
+* **MultiBlockDataSet:** A flat collection of UnstructuredGrid blocks.
   Each block selects its own writer mode, and all temporal blocks share a
   common timeline. Structured block types and hierarchical nesting are not
   supported.
 
-All simple dataset writers support point, cell, and field data. They use the
-shared mode names `VTKHDF_STATIC`, `VTKHDF_FIXED_MESH`, `VTKHDF_MOVING_MESH`, and
-`VTKHDF_DYNAMIC_MESH`, with each writer supporting the applicable subset.
-The original `UG_*` mode names remain available as compatibility aliases.
-
-Field data uses a common interface for scalar and multicomponent numeric
-values. Static field data is supported in every mode, including within MB
-blocks. In temporal files, a static value applies to every step. Registered
-temporal fields may change between steps or reuse their preceding values.
+All simple dataset writers support static and time-dependent point, cell, and
+field data. Depending on the dataset type, the mesh can remain fixed, move,
+or change topology between time steps.
 
 ## Reader Compatibility
 
@@ -56,41 +44,12 @@ Older releases may work, but compatibility is not guaranteed.
 | RectilinearGrid and StructuredGrid | ParaView 6.2+ (VTK 9.7+) |
 | Dataset attribute designations (`Scalars`, `Vectors`, `Tensors`, `GlobalIds`, etc.) | ParaView 6.2+ (VTK 9.7+); older readers ignore these designations |
 
-Readers earlier than VTK 9.7.2 (ParaView 6.2.1) require trailing singleton axes
-for structured grids: use `(nx,ny,1)` for 2D and `(nx,1,1)` for 1D. For
-**ImageData only**, these readers also require zero-based global logical point
-lower bounds. A nonzero physical origin and nonzero local write bounds remain
-supported.
-
-VTK 9.7.1 also has a reader-cache defect affecting out-of-order time requests.
-It is fixed in VTK 9.7.2 (ParaView 6.2.1); disable **Use Cache** with an affected
-reader. See the [reference manual](https://nncarlson.github.io/fvtkhdf/) for
-format-specific interfaces and reader limitations.
+See the [reference manual](https://nncarlson.github.io/fvtkhdf/) for
+format-specific reader limitations and workarounds.
 
 ## Documentation
 
 See the [Reference Manual](https://nncarlson.github.io/fvtkhdf/).
-
-For local documentation work, install `sphinx`, `furo`, and `sphinx-autobuild`,
-then run from the repository root:
-
-```sh
-sphinx-autobuild doc/sphinx build-doc/doc/sphinx/html
-```
-
-Open the local URL printed by the command. Changes to the documentation rebuild
-and reload the preview automatically. No CMake configuration or compiler is
-required. For a single build, use:
-
-```sh
-sphinx-build -b html doc/sphinx build-doc/doc/sphinx/html
-```
-
-CMake builds configured with `-DBUILD_HTML=ON` can also use
-`cmake --build <build-dir> --target docs`.
-
-The [developer guide](doc/developer.md) describes source organization,
-ownership, runtime checks, and validation practices.
 
 ## Installation
 
@@ -105,6 +64,9 @@ ownership, runtime checks, and validation practices.
 Limited `fpm` build instructions are available in [fpm/README.md](./fpm/README.md).
 
 ### Build and Install
+
+Before configuring, select the intended compiler and HDF5 environment, along
+with a compatible MPI installation for parallel builds.
 
 By default, the library builds with MPI support enabled. Use
 `-DENABLE_MPI=OFF` for a serial-only build. If your MPI installation does
@@ -121,6 +83,9 @@ cmake -B build --install-prefix /path/to/install
 cmake --build build --parallel
 cmake --install build
 ```
+
+Add `-DBUILD_EXAMPLES=ON` to the CMake configure command to build the example
+programs. The executables are placed in `build/example/`.
 
 Run the tests for your chosen build configuration with:
 
@@ -153,11 +118,11 @@ target_link_libraries(my_simulation PRIVATE fVTKHDF::fvtkhdf)
 
 ## Quick Start
 
-Here is a minimal serial example that writes a **VTKHDF** UnstructuredGrid
-dataset for an unstructured mesh consisting of a single tetrahedral cell
-with a scalar field. More complete examples (serial and MPI-parallel,
-UnstructuredGrid, ImageData, RectilinearGrid, StructuredGrid, and
-MultiBlockDataSet) are provided in the [example directory](example/README.md).
+This minimal example requires a serial build configured with `-DENABLE_MPI=OFF`.
+It writes a **VTKHDF** UnstructuredGrid dataset containing a single tetrahedral
+cell with scalar point data. For MPI usage, see [ug_static.F90](example/ug_static.F90).
+More complete examples for all supported dataset types are provided in the
+[example directory](example/README.md).
 
 ```fortran
 program quick_start
@@ -205,14 +170,14 @@ end program quick_start
 
 Planned and prospective features include:
 
-* Completing UnstructuredGrid (UG) feature coverage
+* Completing UnstructuredGrid feature coverage
 
   - Add support for [polyhedron cells](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#polyhedron-support)
 
 * Composite VTK datasets
   - Add structured block types to MultiBlockDataSet.
-  - Replace the legacy MB with PartitionedDataSetCollection (PDC) ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26))
-  - Implement a general `Assembly` tree for PDC to replace the existing flat tree.
+  - Replace the legacy MultiBlockDataSet with PartitionedDataSetCollection ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26))
+  - Implement a general `Assembly` tree for PartitionedDataSetCollection to replace the existing flat tree.
 
 ### Additional Dataset Types
 
@@ -220,14 +185,8 @@ The [VTKHDF format specification](https://docs.vtk.org/en/latest/vtk_file_format
 defines the format for additional VTK dataset types (e.g., HyperTreeGrid,
 OverlappingAMR, etc.) that are not currently supported.
 
-Contributions adding support for these formats are very welcome.
-I am happy to collaborate on design and integration so that new
-functionality fits naturally within the existing API and internal
-infrastructure.
-
-If you are interested in contributing support for one of these
-dataset types, please open an issue to discuss design and implementation
-details.
+Contributions supporting additional dataset types are welcome. Please open an
+issue to discuss design and integration before starting an implementation.
 
 ## License
 
