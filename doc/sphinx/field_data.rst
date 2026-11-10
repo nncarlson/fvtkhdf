@@ -41,7 +41,7 @@ VTK and ParaView interpret these values as tuples with one or more components:
      - ``ntuples``
      - ``ncomp``
 
-``as_vector`` is optional and defaults to ``.false.``. It may be ``.true.``
+``as_vector`` is optional and defaults to false. It may be true
 only for rank-1 arguments. It changes the grouping into components and tuples;
 it does not require three components or assign a geometric vector role.
 For a rank-2 argument, each Fortran column is one tuple.
@@ -82,7 +82,6 @@ Temporal Field Data
 
 .. code-block:: fortran
 
-   ! The handle type is exported by each file-type module.
    type(vtkhdf_field_data_handle) :: field_var
 
 .. method-doc::

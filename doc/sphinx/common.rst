@@ -45,8 +45,8 @@ see. The original name is written as the ``Name`` attribute on the HDF5
 dataset for user reference.
 
 Each write by name or temporal registration creates a new dataset.
-Repeating a name does not select an existing array. Where subsequent writes
-are supported, they identify the array by an opaque handle:
+Repeating a name does not select an existing dataset. Where subsequent writes
+are supported, they identify the dataset by an opaque handle:
 ``vtkhdf_cell_data_handle``, ``vtkhdf_point_data_handle``, or
 ``vtkhdf_field_data_handle``. These types are exported by the file-type
 modules. Store the returned handle and use it only with its owning file.

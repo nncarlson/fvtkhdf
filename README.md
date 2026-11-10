@@ -97,7 +97,7 @@ ctest --test-dir build --output-on-failure
 
 ### Fortran Package Manager (fpm)
 
-See [fpm/README.md](fpm/README.md) for instructions on using fVTKHDF with the
+See [fpm/README.md](fpm/README.md) for instructions on building fVTKHDF with the
 Fortran Package Manager.
 
 ### Spack
