@@ -48,13 +48,13 @@ program mb_example1
   !   when nproc > 1.
   ! - Both blocks have a time-independent temperature.
   ! - The liquid block also has time-dependent pressure and velocity.
-  ! - The solid block is UG_STATIC; the liquid block is UG_FIXED_MESH.
+  ! - The solid block is VTKHDF_STATIC; the liquid block is VTKHDF_FIXED_MESH.
 
   ! Get the local piece of the liquid block mesh.
   call get_liquid_mesh_data(points, cnode, xcnode, types)
 
   ! Add the liquid block and write the local mesh piece.
-  liq_blk = file%add_block('liquid', mode=UG_FIXED_MESH)
+  liq_blk = file%add_block('liquid', mode=VTKHDF_FIXED_MESH)
   call file%write_mesh(liq_blk, points, cnode, xcnode, types)
 
   ! local mesh sizes
@@ -68,8 +68,8 @@ program mb_example1
   ! Add the solid block and write the local mesh piece.
   ! Collective: rank with 0-sized mesh must participate!
   ! NB: Paraview reader bug requires it to be temporal; see issue #27.
-  !sol_blk = file%add_block('solid', mode=UG_STATIC)
-  sol_blk = file%add_block('solid', mode=UG_FIXED_MESH)
+  !sol_blk = file%add_block('solid', mode=VTKHDF_STATIC)
+  sol_blk = file%add_block('solid', mode=VTKHDF_FIXED_MESH)
   call file%write_mesh(sol_blk, points, cnode, xcnode, types)
 
   ! local mesh sizes

@@ -30,13 +30,13 @@ program ug_moving_mesh_example
 #endif
 
 #ifdef USE_MPI
-  call file%create('example.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_MOVING_MESH)
+  call file%create('example.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_MOVING_MESH)
   if (stat /= 0) then
     if (rank == 0) print *, errmsg
     call MPI_Abort(MPI_COMM_WORLD, stat, ierr)
   end if
 #else
-  call file%create('example.vtkhdf', stat, errmsg, mode=UG_MOVING_MESH)
+  call file%create('example.vtkhdf', stat, errmsg, mode=VTKHDF_MOVING_MESH)
   if (stat /= 0) error stop errmsg
 #endif
 
@@ -58,7 +58,7 @@ program ug_moving_mesh_example
   !! Write mesh topology now; it doesn't change, only geometry.
   call file%write_mesh_topology(cnode, xcnode, types)
 
-  !! In UG_MOVING_MESH mode all datasets are necessarily temporal and need
+  !! In VTKHDF_MOVING_MESH mode all datasets are necessarily temporal and need
   !! to be registered. For this example we have cell-centered pressure and
   !! point-centered velocity, and a scalar "cpu time" field data.
 

@@ -7,7 +7,7 @@ on:
 jobs:
   build-test:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
-    name: Build & Test (Ubuntu/GFortran)
+    name: Build & Test (MPI ${{ matrix.mpi }}, VTK ${{ matrix.vtk }})
     runs-on: ubuntu-latest
     container: ghcr.io/${{ github.repository }}/fvtkhdf-ci:latest
     
@@ -15,20 +15,24 @@ jobs:
       fail-fast: false
       matrix:
         mpi: [ON, OFF]
+        vtk: [9.6.1, 9.7.2]
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Ensure VTK Python reader is available
+    - name: Select VTK Python reader
+      env:
+        VTK_VERSION: ${{ matrix.vtk }}
       run: |
-        if python3 -c "import vtk" >/dev/null 2>&1; then
-          python3 -c "import vtk; print(vtk.vtkVersion.GetVTKVersion())"
-          exit 0
+        if ! python3 -c 'import os, vtk; assert vtk.vtkVersion.GetVTKVersion() == os.environ["VTK_VERSION"]' >/dev/null 2>&1; then
+          python3 -m pip install --break-system-packages "vtk==$VTK_VERSION"
         fi
+        python3 -c 'import os, vtk; print(vtk.vtkVersion.GetVTKVersion()); assert vtk.vtkVersion.GetVTKVersion() == os.environ["VTK_VERSION"]'
 
-        python3 -m pip install --break-system-packages vtk==9.6.1
-        python3 -c "import vtk; print(vtk.vtkVersion.GetVTKVersion())"
+    - name: Ensure layout validation dependencies
+      run: |
+        python3 -c "import h5py, numpy" || python3 -m pip install --break-system-packages h5py numpy
 
     - name: Configure CMake
       run: |
@@ -38,7 +42,8 @@ jobs:
         fi
         cmake -B build \
           -DCMAKE_BUILD_TYPE=Debug \
-          -DENABLE_MPI=${{ matrix.mpi }}
+          -DENABLE_MPI=${{ matrix.mpi }} \
+          -DBUILD_EXAMPLES=ON
 
     - name: Build
       run: cmake --build build --parallel 2

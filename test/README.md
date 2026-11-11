@@ -55,6 +55,11 @@ test rather than just the execution mode.
 These are expected-failure tests registered with `WILL_FAIL`. They protect API
 ordering and handle-usage assertions that intentionally abort.
 
+The MPI `geometry_mismatch`, `name_mismatch`, and `mode_mismatch` checks are
+registered only for Debug configurations: they exercise debug-only `ASSERT`
+diagnostics. Local argument and lifecycle checks use unconditional `INSIST`
+and remain tested in Release. See the [runtime checking policy](../doc/developer.md).
+
 - `vtkhdf_ug_fail_late_register`
 - `vtkhdf_ug_fail_wrong_cell_count`
 - `vtkhdf_ug_fail_data_before_mesh`
@@ -89,3 +94,104 @@ skipped.
 The pure Fortran executable tests are the best candidates for eventual `fpm`
 coverage. The Python reader smoke tests, `h5dump`-based checks, and `CTest`
 `WILL_FAIL` negative tests are CMake-first by design.
+
+## ImageData Checks
+
+`vtkhdf_image_file_type` produces static, temporal, dimensionality, numeric-kind,
+and all-empty snapshot fixtures in serial and MPI configurations. It includes
+halo selections, differing Fortran actual bounds, repeated field names,
+sanitization collisions, changed decomposition, unequal block counts padded
+with zero-sized contributions, late static fields, and every generated numeric
+kind for both scalar and multicomponent temporal data.
+Registration-name checks exercise duplicate and blank labels, sanitization
+collisions, and static/temporal label collisions in both creation orders.
+Readback verifies that each returned handle writes its own dataset and that
+name-based static writes create distinct fields. Static cell/point handles
+assemble additional blocks, including empty first contributions, for every
+numeric kind and both scalar and multicomponent data. A UG/ImageData parity fixture
+checks the same labels in every association, with blank names, trimming,
+sanitization collisions, caller-supplied suffixes, and mixed static/temporal
+fields; HDF5 metadata and VTK readback must agree. Repeated static names
+may have different numeric kinds or component counts; static FieldData writes
+remain complete, independent values.
+
+`vtkhdf_image_layout` requires NumPy and h5py. It independently checks values,
+dataset rank/order, chunks, 32-bit WholeExtent, 64-bit offsets, and snapshot
+counts. It compares static and temporal FieldData datasets and metadata with
+UG reference files, including variable shape, initial omission, and reuse.
+An internal structured-core fixture creates independently named static and
+temporal leaves under an existing HDF5 group, checks their data and temporal
+offsets, and verifies that closing the leaves leaves the parent handles open.
+Its temporal leaf exercises moving-mode attribute storage independently of
+the ImageData wrapper's more restrictive mode policy.
+Independent temporal FieldData checks cover all four numeric kinds, growth
+and reduction of component counts, varying tuple counts, noncontiguous input,
+empty writes, fields never written, and non-root ranks supplying different
+values. Both dataset axes must be extendible and offsets must count tuples.
+
+`vtkhdf_image_reader_*` checks geometry, physical coordinates, every static
+numeric kind, and temporal point/cell values with `vtkHDFReader`. Positive-extent
+and nontrailing-singleton checks are skipped for VTK versions earlier than
+9.7.2; they are mandatory for 9.7.2 and later so reader regressions fail the
+tests. Layout checks remain enabled for all versions. Complete mesh-associated
+validation was performed with a VTK source
+build reporting 9.7.20261022. The temporal FieldData reader test strictly checks
+component counts, tuple counts, types, and every value for both ImageData and
+UG files; it does not skip a malformed FieldData result.
+
+The expected-failure ImageData tests cover local selection validity, type and
+component consistency, ordering, missing initial snapshots, foreign handles,
+field-data ordering and repeated writes to one field-data handle in a step,
+and MPI metadata disagreement.
+Creation rejects moving, dynamic, and invalid ImageData modes, including
+disagreement between MPI ranks about otherwise supported modes.
+Tests intentionally do not diagnose global coverage or overlap.
+
+`vtkhdf_constant_field_test.F90.fypp` covers by-name constant field data for all
+simple writers and supported modes, including changing UG topology. It writes
+all four numeric kinds as scalars, scalar tuples, vectors, and noncontiguous
+multicomponent arrays. Temporal files also include empty constants. Fields are
+created before mesh definition, during an open step, between steps, and after
+the last finalized step. Mixed constant/registered names exercise disambiguation
+in both creation orders. Independent layout and VTK checks verify complete
+offset/size histories, values at every step, rank-zero payload selection, and
+unchanged registered-field omission, reuse, and shape changes. Non-temporal
+files retain their original layouts without a Steps group. VTK versions before
+9.7 read the UG and ImageData fixtures; the RectilinearGrid and StructuredGrid
+reader cases run only with VTK 9.7 or later. Layout checks cover all types.
+
+The simple writers own their registries and construct public data handles.
+MultiBlock adds and checks each handle's block index before forwarding it.
+Foreign-file handle checks cover cell, point, and field data in UG and
+MultiBlock, including matching field and block indices, alongside the existing
+ImageData ownership check.
+
+See the [developer guide](../doc/developer.md) for writer organization,
+resource ownership, shared data helpers, and the runtime checking policy.
+
+## Moving RectilinearGrid and StructuredGrid
+
+`vtkhdf_moving_grid_test.F90.fypp` writes both real kinds, all seven active-axis
+combinations, and initial geometry before or during the first step. Seven time
+steps reference three geometry snapshots, while point/cell data uses a different
+replacement schedule. Geometry ownership changes across snapshots; tests include
+halo sections, empty contributions, all-empty geometry replacements, writer
+reuse, and both two- and four-rank execution. The shared lifecycle test also
+uses moving geometry in borrowed leaves.
+Static point/cell data is introduced during an open step, between steps, and
+after the last step (open or finalized). Incremental static writes span different
+steps; layout and reader checks verify their final values at every time, including
+earlier steps, with a single snapshot and complete zero-offset histories.
+
+`vtkhdf_moving_grid_check.py` independently verifies payloads and per-step offsets
+with h5py, then checks geometry and data with VTK. Sequential reads use the
+default cache. Nonsequential reads disable the legacy cache where that API is
+available: VTK 9.7.1 can retain a previously attached point/cell array on a cache
+hit. This defect is fixed in VTK 9.7.2, and ParaView 6.2.1 is expected to include
+the fix. The file's offsets and uncached values are correct. Nontrailing singleton
+reader cases use the same existing version-dependent skips as fixed grids;
+all layout checks run.
+
+`vtkhdf_moving_grid_fail_test.F90` checks mode, geometry ordering, immutable
+bounds, coordinate kind/size consistency, and the required initial temporal-data
+write before reuse.

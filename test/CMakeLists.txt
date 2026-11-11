@@ -12,13 +12,13 @@ endfunction()
 function(vtkhdf_add_runtime_test test_name target)
   if(ENABLE_MPI)
     add_test(${test_name} ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
-             ${CMAKE_CURRENT_BINARY_DIR}/${target} ${MPIEXEC_POSTFLAGS})
+             ${CMAKE_CURRENT_BINARY_DIR}/${target} ${MPIEXEC_POSTFLAGS} ${ARGN})
     set_tests_properties(${test_name} PROPERTIES
       PROCESSORS 4
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
   else()
-    add_test(${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${target})
+    add_test(${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${target} ${ARGN})
     set_tests_properties(${test_name} PROPERTIES
       PROCESSORS 1
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -40,6 +40,7 @@ vtkhdf_add_test_target(vtkhdf_mb_fail_late_block_test vtkhdf_mb_fail_late_block_
 vtkhdf_add_test_target(vtkhdf_moving_ug_test vtkhdf_moving_ug_test.F90)
 vtkhdf_add_test_target(vtkhdf_dynamic_ug_test vtkhdf_dynamic_ug_test.F90)
 vtkhdf_add_test_target(vtkhdf_chunk_test vtkhdf_chunk_test.F90)
+vtkhdf_add_test_target(vtkhdf_fail_foreign_data_handle_test vtkhdf_fail_foreign_data_handle_test.F90)
 
 vtkhdf_add_runtime_test(vtkhdf_mb_fixture_file vtkhdf_mb_test)
 vtkhdf_add_runtime_test(vtkhdf_mb_basic_blocks_file_type vtkhdf_mb_basic_blocks_test)
@@ -65,6 +66,14 @@ set_tests_properties(
   PROPERTIES
   WILL_FAIL TRUE
 )
+
+foreach(format ug mb)
+  foreach(association cell point field)
+    set(test_name vtkhdf_${format}_fail_foreign_${association}_handle)
+    vtkhdf_add_runtime_test(${test_name} vtkhdf_fail_foreign_data_handle_test ${format} ${association})
+    set_tests_properties(${test_name} PROPERTIES WILL_FAIL TRUE)
+  endforeach()
+endforeach()
 
 set_tests_properties(vtkhdf_chunk_settings PROPERTIES
   FIXTURES_SETUP vtkhdf_chunk_files
@@ -371,3 +380,149 @@ add_executable(test_leak test_leak.F90)
 target_link_libraries(test_leak PRIVATE vtkhdf_test_support)
 add_test(NAME test_leak COMMAND ${CMAKE_CURRENT_BINARY_DIR}/test_leak)
 set_tests_properties(test_leak PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# ImageData fixtures and contract failures.
+add_fypp_sources(IMAGE_TEST_SRC SOURCES vtkhdf_image_test.F90.fypp FLAGS --line-numbering)
+vtkhdf_add_test_target(vtkhdf_image_test "${IMAGE_TEST_SRC}")
+vtkhdf_add_runtime_test(vtkhdf_image_file_type vtkhdf_image_test)
+set_tests_properties(vtkhdf_image_file_type PROPERTIES FIXTURES_SETUP vtkhdf_image_files)
+vtkhdf_add_test_target(vtkhdf_image_fail_test vtkhdf_image_fail_test.F90)
+foreach(case bounds source type components late outside_step missing field_duplicate
+             before_mesh register_before_mesh field_outside_step wrong_handle static_type
+             static_components ug_duplicate mode_moving mode_dynamic mode_invalid)
+  vtkhdf_add_runtime_test(vtkhdf_image_fail_${case} vtkhdf_image_fail_test ${case})
+  set_tests_properties(vtkhdf_image_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+endforeach()
+# Rank-disagreement checks use ASSERT and are absent with NDEBUG.
+if(ENABLE_MPI)
+  foreach(case geometry_mismatch name_mismatch mode_mismatch)
+    set(test_name vtkhdf_image_fail_${case})
+    if(CMAKE_CONFIGURATION_TYPES)
+      add_test(NAME ${test_name}
+        COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
+                ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_image_fail_test ${MPIEXEC_POSTFLAGS} ${case}
+        CONFIGURATIONS Debug)
+      set_tests_properties(${test_name} PROPERTIES
+        PROCESSORS 4 WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+      vtkhdf_add_runtime_test(${test_name} vtkhdf_image_fail_test ${case})
+    else()
+      continue()
+    endif()
+    set_tests_properties(${test_name} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+  endforeach()
+endif()
+
+add_test(NAME vtkhdf_image_layout
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_image_check.py
+          layout ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(vtkhdf_image_layout PROPERTIES
+  FIXTURES_REQUIRED vtkhdf_image_files SKIP_RETURN_CODE 77)
+foreach(case static temporal temporal_fielddata registration_names numeric dim_1 dim_2 dim_3 dim_4 dim_5 dim_6 dim_7)
+  add_test(NAME vtkhdf_image_reader_${case}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_image_check.py
+            reader ${CMAKE_CURRENT_BINARY_DIR} ${case})
+  set_tests_properties(vtkhdf_image_reader_${case} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_image_files SKIP_RETURN_CODE 77)
+endforeach()
+
+if(ENABLE_MPI)
+  # Two ranks own unequal numbers of blocks, including multiple blocks on
+  # one rank. Keep these output files separate from the four-rank fixture.
+  set(IMAGE_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/image-two-rank)
+  file(MAKE_DIRECTORY ${IMAGE_TWO_RANK_DIR})
+  add_test(NAME vtkhdf_image_two_rank
+    COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
+            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_image_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_image_two_rank PROPERTIES PROCESSORS 2
+    WORKING_DIRECTORY ${IMAGE_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_image_two_rank_files)
+  add_test(NAME vtkhdf_image_two_rank_layout
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_image_check.py
+            layout ${IMAGE_TWO_RANK_DIR})
+  set_tests_properties(vtkhdf_image_two_rank_layout PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_image_two_rank_files SKIP_RETURN_CODE 77)
+endif()
+
+# Explicit structured geometry: coordinate kinds, distributed regions, and time reuse.
+add_fypp_sources(GRID_TEST_SRC SOURCES vtkhdf_grid_test.F90.fypp FLAGS --line-numbering)
+vtkhdf_add_test_target(vtkhdf_grid_test "${GRID_TEST_SRC}")
+vtkhdf_add_runtime_test(vtkhdf_grid_file_types vtkhdf_grid_test)
+set_tests_properties(vtkhdf_grid_file_types PROPERTIES FIXTURES_SETUP vtkhdf_grid_files)
+add_test(NAME vtkhdf_grid_layout
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_grid_check.py
+          layout ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(vtkhdf_grid_layout PROPERTIES
+  FIXTURES_REQUIRED vtkhdf_grid_files SKIP_RETURN_CODE 77)
+foreach(mask RANGE 1 7)
+  add_test(NAME vtkhdf_grid_reader_dim_${mask}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_grid_check.py
+            reader ${CMAKE_CURRENT_BINARY_DIR} ${mask})
+  set_tests_properties(vtkhdf_grid_reader_dim_${mask} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_grid_files SKIP_RETURN_CODE 77)
+endforeach()
+vtkhdf_add_test_target(vtkhdf_grid_fail_test vtkhdf_grid_fail_test.F90)
+foreach(case axis_length before_mesh missing_close missing_step components bounds source kind late duplicate
+             cell_before_geometry point_before_geometry temporal_before_geometry geometry_after_data)
+  vtkhdf_add_runtime_test(vtkhdf_grid_fail_${case} vtkhdf_grid_fail_test ${case})
+  set_tests_properties(vtkhdf_grid_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+endforeach()
+
+vtkhdf_add_test_target(vtkhdf_simple_dataset_test vtkhdf_simple_dataset_test.F90)
+vtkhdf_add_runtime_test(vtkhdf_simple_dataset_lifecycle vtkhdf_simple_dataset_test)
+
+add_fypp_sources(CONSTANT_FIELD_TEST_SRC SOURCES vtkhdf_constant_field_test.F90.fypp FLAGS --line-numbering)
+vtkhdf_add_test_target(vtkhdf_constant_field_test "${CONSTANT_FIELD_TEST_SRC}")
+vtkhdf_add_runtime_test(vtkhdf_constant_field_files vtkhdf_constant_field_test)
+set_tests_properties(vtkhdf_constant_field_files PROPERTIES FIXTURES_SETUP vtkhdf_constant_field_files)
+foreach(check layout reader)
+  add_test(NAME vtkhdf_constant_field_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_constant_field_check.py
+            ${check} ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties(vtkhdf_constant_field_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_constant_field_files SKIP_RETURN_CODE 77)
+endforeach()
+
+# Moving geometry uses snapshots independently of time steps and data writes.
+add_fypp_sources(MOVING_GRID_TEST_SRC SOURCES vtkhdf_moving_grid_test.F90.fypp FLAGS --line-numbering)
+vtkhdf_add_test_target(vtkhdf_moving_grid_test "${MOVING_GRID_TEST_SRC}")
+vtkhdf_add_runtime_test(vtkhdf_moving_grid_file_types vtkhdf_moving_grid_test)
+set_tests_properties(vtkhdf_moving_grid_file_types PROPERTIES FIXTURES_SETUP vtkhdf_moving_grid_files)
+add_test(NAME vtkhdf_moving_grid_layout
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_moving_grid_check.py
+          layout ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(vtkhdf_moving_grid_layout PROPERTIES
+  FIXTURES_REQUIRED vtkhdf_moving_grid_files SKIP_RETURN_CODE 77)
+foreach(mask RANGE 1 7)
+  add_test(NAME vtkhdf_moving_grid_reader_dim_${mask}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_moving_grid_check.py
+            reader ${CMAKE_CURRENT_BINARY_DIR} ${mask})
+  set_tests_properties(vtkhdf_moving_grid_reader_dim_${mask} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_moving_grid_files SKIP_RETURN_CODE 77)
+endforeach()
+if(ENABLE_MPI)
+  set(MOVING_GRID_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/moving-grid-two-rank)
+  file(MAKE_DIRECTORY ${MOVING_GRID_TWO_RANK_DIR})
+  add_test(NAME vtkhdf_moving_grid_two_rank
+    COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
+            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_moving_grid_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_moving_grid_two_rank PROPERTIES PROCESSORS 2
+    WORKING_DIRECTORY ${MOVING_GRID_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_moving_grid_two_rank_files)
+  add_test(NAME vtkhdf_moving_grid_two_rank_layout
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_moving_grid_check.py
+            layout ${MOVING_GRID_TWO_RANK_DIR})
+  set_tests_properties(vtkhdf_moving_grid_two_rank_layout PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_moving_grid_two_rank_files SKIP_RETURN_CODE 77)
+endif()
+vtkhdf_add_test_target(vtkhdf_moving_grid_fail_test vtkhdf_moving_grid_fail_test.F90)
+foreach(grid rectilinear structured)
+  foreach(case before_grid missing data_before_geometry after_data missing_data between_steps kind bounds_change dynamic)
+    set(test_name vtkhdf_moving_${grid}_fail_${case})
+    vtkhdf_add_runtime_test(${test_name} vtkhdf_moving_grid_fail_test ${grid} ${case})
+    set_tests_properties(${test_name} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+  endforeach()
+endforeach()
+foreach(case duplicate axis_length)
+  set(test_name vtkhdf_moving_rectilinear_fail_${case})
+  vtkhdf_add_runtime_test(${test_name} vtkhdf_moving_grid_fail_test rectilinear ${case})
+  set_tests_properties(${test_name} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+endforeach()

@@ -40,5 +40,6 @@ program vtkhdf_ug_fail_wrong_cell_count_test
   ! Must fail: temporal cell data length must match the local cell count.
   call vizfile%write_cell_data(hcell_radius, bad_scalar_cell_data)
 
-  error stop 'expected wrong cell count assertion'
+  ! Return successfully if the expected assertion did not fire.
+  call test_env_finalize()
 end program vtkhdf_ug_fail_wrong_cell_count_test

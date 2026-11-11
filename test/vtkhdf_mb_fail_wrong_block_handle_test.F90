@@ -44,5 +44,6 @@ program vtkhdf_mb_fail_wrong_block_handle_test
   ! Must fail: the temporal handle belongs to Block-A, not Block-B.
   call vizfile%write_point_data(hblk_b, hpoint_radius, scalar_point_data)
 
-  error stop 'expected wrong-block-handle assertion'
+  ! Return successfully if the expected assertion did not fire.
+  call test_env_finalize()
 end program vtkhdf_mb_fail_wrong_block_handle_test

@@ -1,0 +1,272 @@
+! Moving structured geometry: snapshots, omission reuse, and independent data.
+#:set grids = ['rectilinear','structured']
+#:set kinds = ['real32','real64']
+program vtkhdf_moving_grid_test
+  use,intrinsic :: iso_fortran_env
+  use vtkhdf_rectilinear_file_type
+  use vtkhdf_structured_file_type
+  use vtkhdf_structured_base_class, only: vtkhdf_structured_base
+  use vtkhdf_test_env
+#ifdef USE_MPI
+  use mpi
+#endif
+  implicit none
+  integer :: rank, nproc, mask
+  call test_env_init(rank,nproc)
+  do mask = 1,7
+#:for grid in grids
+#:for kind in kinds
+    call moving_${grid}$_${kind}$(mask,.false.)
+    call moving_${grid}$_${kind}$(mask,.true.)
+#:endfor
+#:endfor
+  end do
+#:for kind in kinds
+  call empty_${kind}$()
+#:endfor
+  call test_env_finalize()
+contains
+
+#:for grid in grids
+#:for kind in kinds
+  subroutine moving_${grid}$_${kind}$(mask, initial_before)
+    integer, intent(in) :: mask
+    logical, intent(in) :: initial_before
+    type(vtkhdf_${grid}$_file) :: file
+    type(vtkhdf_point_data_handle) :: point_var, static_point_var
+    type(vtkhdf_cell_data_handle) :: cell_var, static_cell_var
+    type(vtkhdf_field_data_handle) :: field_var
+    integer :: dims(3), lo(3), bounds(3,2), step, stat
+    character(100) :: filename
+    character(:), allocatable :: errmsg
+    dims = 1
+    if (btest(mask,0)) dims(1) = 5
+    if (btest(mask,1)) dims(2) = 3
+    if (btest(mask,2)) dims(3) = 2
+    lo = [-4,9,2]
+    bounds(:,1) = lo
+    bounds(:,2) = lo+dims-1
+    write(filename,'(a,i0,a,i0,a)') 'moving_${grid}$_${kind}$_',mask,'_',merge(1,0,initial_before),'.vtkhdf'
+#ifdef USE_MPI
+    call file%create(trim(filename),MPI_COMM_WORLD,stat,errmsg,mode=VTKHDF_MOVING_MESH,data_chunk_bytes=64_int64)
+#else
+    call file%create(trim(filename),stat,errmsg,mode=VTKHDF_MOVING_MESH,data_chunk_bytes=64_int64)
+#endif
+    if (stat /= 0) error stop errmsg
+#:if grid == 'rectilinear'
+    if (initial_before) then
+      ! Preserve the combined setup interface in moving mode too.
+      call geometry_${grid}$_${kind}$(file,dims,lo,0,define=.true.)
+    else
+      call file%write_mesh(bounds)
+    end if
+#:else
+    call file%write_mesh(bounds)
+#:endif
+    point_var = file%register_temporal_point_data('value',0.0_${kind}$)
+    cell_var = file%register_temporal_cell_data('vector',[0.0_${kind}$,0.0_${kind}$])
+    field_var = file%register_temporal_field_data('energy',0.0_${kind}$)
+#:if grid == 'structured'
+    if (initial_before) call geometry_${grid}$_${kind}$(file,dims,lo,0)
+#:endif
+    do step = 0,6
+      call file%start_time_step(real(step,${kind}$))
+      if ((step == 0 .and. .not.initial_before) .or. step == 2 .or. step == 4) then
+        call geometry_${grid}$_${kind}$(file,dims,lo,step)
+      end if
+      if (step == 3) call static_point_${kind}$(file,dims,lo,'late_points',static_point_var,0)
+      if (step == 5) call static_point_${kind}$(file,dims,lo,'late_points',static_point_var,1)
+      if (step == 0 .or. step == 3 .or. step == 5) then
+        call data_${kind}$(file,point_var,cell_var,dims,lo,step)
+      end if
+      if (mod(step,2) == 0) call file%write_field_data(field_var,real(42+step,${kind}$))
+      if (mod(step,2) == 0 .and. step < 6) call file%finalize_time_step
+      if (step == 2) then
+        ! Introduce static data between finalized steps.
+        call static_cell_${kind}$(file,dims,lo,'between_cells',static_cell_var,0)
+        call static_cell_${kind}$(file,dims,lo,'between_cells',static_cell_var,1)
+      end if
+    end do
+    ! Exercise late creation with the final step either open or finalized.
+    call file%flush
+    if (initial_before) call file%finalize_time_step
+    call static_cell_${kind}$(file,dims,lo,'end_cells',static_cell_var,0)
+    call static_cell_${kind}$(file,dims,lo,'end_cells',static_cell_var,1)
+    call file%close
+    call file%close
+    if (mask == 7 .and. .not.initial_before) then
+      ! Reuse must reset geometry offsets and their dataset-creation state.
+      filename = 'moving_${grid}$_${kind}$_reopen.vtkhdf'
+#ifdef USE_MPI
+      call file%create(trim(filename),MPI_COMM_WORLD,stat,errmsg,mode=VTKHDF_MOVING_MESH)
+#else
+      call file%create(trim(filename),stat,errmsg,mode=VTKHDF_MOVING_MESH)
+#endif
+      if (stat /= 0) error stop errmsg
+      call file%write_mesh(bounds)
+      call file%start_time_step(0.0_${kind}$)
+      call geometry_${grid}$_${kind}$(file,dims,lo,0)
+      call file%close
+    end if
+  end subroutine
+
+  subroutine geometry_${grid}$_${kind}$(file,dims,lo,phase${',define' if grid == 'rectilinear' else ''}$)
+    type(vtkhdf_${grid}$_file), intent(inout) :: file
+    integer, intent(in) :: dims(3), lo(3), phase
+#:if grid == 'rectilinear'
+    logical, intent(in), optional :: define
+    real(${kind}$), allocatable :: x(:), y(:), z(:)
+    integer :: i, bounds(3,2)
+    if (rank == 0) then
+      allocate(x(2*dims(1)),y(2*dims(2)),z(2*dims(3)))
+      x = -999
+      y = -999
+      z = -999
+      x(::2) = [(real(i*i,${kind}$)+phase*0.5_${kind}$,i=0,dims(1)-1)]
+      y(::2) = [(real(2*i+1,${kind}$)+phase*0.25_${kind}$,i=0,dims(2)-1)]
+      z(::2) = [(real(-i-1,${kind}$)+phase*0.125_${kind}$,i=0,dims(3)-1)]
+    else
+      allocate(x(0),y(2),z(0))
+      y = -999
+    end if
+    if (present(define)) then
+      if (define) then
+        bounds(:,1) = lo
+        bounds(:,2) = lo+dims-1
+        call file%write_mesh(bounds,x(::2),y(::2),z(::2))
+        return
+      end if
+    end if
+    call file%write_mesh_geometry(x(::2),y(::2),z(::2))
+#:else
+    real(${kind}$), allocatable :: points(:,:,:,:)
+    integer :: ix, round, i, j, k, origin(3), selected(3,2)
+    do round = 0,(dims(1)-1)/nproc
+      ! Geometry ownership changes between snapshots.
+      ix = 1+modulo(rank+phase/2,nproc)+round*nproc
+      origin = lo+[ix-2,0,0]
+      selected(:,1) = lo+[ix-1,0,0]
+      selected(:,2) = lo+dims-1
+      selected(1,2) = selected(1,1)
+      if (ix <= dims(1)) then
+        allocate(points(3,6,dims(2),dims(3)))
+        points = -999
+        do k = 1,dims(3)
+          do j = 1,dims(2)
+            do i = 1,3
+              points(:,2*i-1,j,k) = [real(ix+i-3,${kind}$)+0.125_${kind}$*(j-1)**2+phase*0.5_${kind}$, &
+                  2.0_${kind}$*(j-1)+0.25_${kind}$*(k-1)**2+phase*0.25_${kind}$, &
+                  3.0_${kind}$*(k-1)+0.5_${kind}$*(ix+i-3)*(j-1)+phase*0.125_${kind}$]
+            end do
+          end do
+        end do
+        call file%write_mesh_geometry(points(:,::2,:,:),origin,selected)
+      else
+        allocate(points(3,0,0,0))
+        call file%write_mesh_geometry(points,[0,0,0])
+      end if
+      deallocate(points)
+    end do
+    ! Empty contributions still target the same snapshot after other regions.
+    allocate(points(3,0,0,0))
+    call file%write_mesh_geometry(points,[0,0,0])
+#:endif
+  end subroutine
+#:endfor
+#:endfor
+
+#:for kind in kinds
+#:for loc in ['point','cell']
+  subroutine static_${loc}$_${kind}$(file,dims,lo,name,var,part)
+    class(vtkhdf_structured_base), intent(inout) :: file
+    integer, intent(in) :: dims(3), lo(3), part
+    character(*), intent(in) :: name
+    type(vtkhdf_${loc}$_data_handle), intent(inout) :: var
+    real(${kind}$), allocatable :: values(:,:,:)
+    integer :: shape_(3), first, last, i, j, k, selected(3,2), split
+    shape_ = ${'dims' if loc == 'point' else 'max(1,dims-1)'}$
+    first = rank*shape_(1)/nproc+1
+    last = (rank+1)*shape_(1)/nproc
+    allocate(values(last-first+1,shape_(2),shape_(3)))
+    do k = 1,shape_(3)
+      do j = 1,shape_(2)
+        do i = first,last
+          values(i-first+1,j,k) = real(i-1+10*(j-1)+100*(k-1)+700,${kind}$)
+        end do
+      end do
+    end do
+    selected(:,1) = lo+[first-1,0,0]
+    selected(:,2) = lo+[last-1,shape_(2)-1,shape_(3)-1]
+    split = lo(1)+shape_(1)/2
+    if (part == 0) then
+      selected(1,2) = min(selected(1,2),split-1)
+      call file%write_${loc}$_data(name,values,lo+[first-1,0,0],selected,handle=var)
+    else
+      selected(1,1) = max(selected(1,1),split)
+      call file%write_${loc}$_data(var,values,lo+[first-1,0,0],selected)
+    end if
+  end subroutine
+#:endfor
+
+  subroutine data_${kind}$(file,point_var,cell_var,dims,lo,step)
+    class(vtkhdf_structured_base), intent(inout) :: file
+    type(vtkhdf_point_data_handle), intent(in) :: point_var
+    type(vtkhdf_cell_data_handle), intent(in) :: cell_var
+    integer, intent(in) :: dims(3), lo(3), step
+    real(${kind}$), allocatable :: values(:,:,:), cells(:,:,:,:)
+    integer :: first, last, i, j, k, c, cdims(3)
+    first = rank*dims(1)/nproc+1
+    last = (rank+1)*dims(1)/nproc
+    allocate(values(last-first+1,dims(2),dims(3)))
+    do k = 1,dims(3)
+      do j = 1,dims(2)
+        do i = first,last
+          values(i-first+1,j,k) = real(i-1+10*(j-1)+100*(k-1)+10*step,${kind}$)
+        end do
+      end do
+    end do
+    call file%write_point_data(point_var,values,lo+[first-1,0,0])
+    cdims = max(1,dims-1)
+    first = rank*cdims(1)/nproc+1
+    last = (rank+1)*cdims(1)/nproc
+    allocate(cells(2,last-first+1,cdims(2),cdims(3)))
+    do k = 1,cdims(3)
+      do j = 1,cdims(2)
+        do i = first,last
+          do c = 1,2
+            cells(c,i-first+1,j,k) = real(i-1+10*(j-1)+100*(k-1)+1000*c+10*step,${kind}$)
+          end do
+        end do
+      end do
+    end do
+    call file%write_cell_data(cell_var,cells,lo+[first-1,0,0])
+  end subroutine
+
+  subroutine empty_${kind}$()
+    type(vtkhdf_structured_file) :: file
+    real(${kind}$) :: points(3,2,2,2), empty(3,0,0,0)
+    integer :: bounds(3,2), selected(3,2), stat
+    character(:), allocatable :: errmsg
+    bounds(:,1) = 0
+    bounds(:,2) = 1
+    selected = bounds
+    if (rank /= 0) selected(1,2) = -1
+    points = 1.0_${kind}$
+#ifdef USE_MPI
+    call file%create('moving_structured_${kind}$_empty.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=VTKHDF_MOVING_MESH)
+#else
+    call file%create('moving_structured_${kind}$_empty.vtkhdf',stat,errmsg,mode=VTKHDF_MOVING_MESH)
+#endif
+    if (stat /= 0) error stop errmsg
+    call file%write_mesh(bounds)
+    call file%start_time_step(0.0_${kind}$)
+    call file%write_mesh_geometry(points,[0,0,0],selected)
+    call file%start_time_step(1.0_${kind}$)
+    call file%start_time_step(2.0_${kind}$)
+    call file%write_mesh_geometry(empty,[0,0,0])
+    call file%write_mesh_geometry(empty,[0,0,0])
+    call file%start_time_step(3.0_${kind}$)
+    call file%close
+  end subroutine
+#:endfor
+end program

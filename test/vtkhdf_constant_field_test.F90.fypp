@@ -1,0 +1,149 @@
+! Constant field values in every writer mode, including late creation.
+#:set nums = [('int32','integer(int32)'), ('int64','integer(int64)'), ('real32','real(real32)'), ('real64','real(real64)')]
+program vtkhdf_constant_field_test
+  use,intrinsic :: iso_fortran_env
+  use vtkhdf_simple_dataset_class
+  use vtkhdf_structured_base_class, only: vtkhdf_structured_base
+  use vtkhdf_ug_file_type
+  use vtkhdf_image_file_type
+  use vtkhdf_rectilinear_file_type
+  use vtkhdf_structured_file_type
+  use vtkhdf_test_env
+#ifdef USE_MPI
+  use mpi
+#endif
+  implicit none
+  class(vtkhdf_simple_dataset), allocatable :: file
+  type(vtkhdf_field_data_handle) :: temporal_var
+  integer :: rank, nproc, grid, mode, step, stat
+  character(80) :: filename
+  character(:), allocatable :: errmsg
+
+  call test_env_init(rank,nproc)
+  do grid = 1,4
+    do mode = VTKHDF_STATIC,VTKHDF_DYNAMIC_MESH
+      if (grid == 2 .and. mode > VTKHDF_FIXED_MESH) cycle
+      if (grid > 2 .and. mode == VTKHDF_DYNAMIC_MESH) cycle
+      select case (grid)
+      case (1)
+        allocate(vtkhdf_ug_file :: file)
+      case (2)
+        allocate(vtkhdf_image_file :: file)
+      case (3)
+        allocate(vtkhdf_rectilinear_file :: file)
+      case (4)
+        allocate(vtkhdf_structured_file :: file)
+      end select
+      write(filename,'(a,i0,a,i0,a)') 'constant_fields_',grid,'_',mode,'.vtkhdf'
+      select type (writer => file)
+#:for guard in ['type is (vtkhdf_ug_file)', 'class is (vtkhdf_structured_base)']
+      ${guard}$
+#ifdef USE_MPI
+        call writer%create(trim(filename),MPI_COMM_WORLD,stat,errmsg,mode=mode,data_chunk_bytes=64_int64)
+#else
+        call writer%create(trim(filename),stat,errmsg,mode=mode,data_chunk_bytes=64_int64)
+#endif
+#:endfor
+      end select
+      if (stat /= 0) error stop errmsg
+      call constants('before')
+      if (mode /= VTKHDF_STATIC) then
+        ! Both creation orders must preserve distinct constant/temporal identities.
+        select type (writer => file)
+#:for guard in ['type is (vtkhdf_ug_file)', 'class is (vtkhdf_structured_base)']
+        ${guard}$
+          temporal_var = writer%register_temporal_field_data('before_real64_scalar',0.0_real64)
+          call writer%write_field_data('before_real64_scalar',222_int32)
+#:endfor
+        end select
+      end if
+      call geometry(-1)
+      if (mode == VTKHDF_STATIC) then
+        call constants('after')
+      else
+        do step = 0,3
+          call file%start_time_step(real(step))
+          if (mode >= VTKHDF_MOVING_MESH .and. step > 0) call geometry(step)
+          if (step == 1) call constants('open')
+          select type (writer => file)
+#:for guard in ['type is (vtkhdf_ug_file)', 'class is (vtkhdf_structured_base)']
+          ${guard}$
+            if (step == 1) call writer%write_field_data(temporal_var,111.0_real64)
+            if (step == 3) call writer%write_field_data(temporal_var,[301.0_real64,302.0_real64],as_vector=.true.)
+#:endfor
+          end select
+          call file%finalize_time_step
+          if (step == 1) call constants('between')
+        end do
+        call constants('after')
+      end if
+      call file%close
+      deallocate(file)
+    end do
+  end do
+  call test_env_finalize()
+contains
+  subroutine constants(prefix)
+    character(*), intent(in) :: prefix
+#:for kind, decl in nums
+    ${decl}$ :: scalar_${kind}$, values_${kind}$(4), matrix_${kind}$(2,6)
+#:endfor
+    select type (writer => file)
+#:for guard in ['type is (vtkhdf_ug_file)', 'class is (vtkhdf_structured_base)']
+    ${guard}$
+#:for kind, decl in nums
+    ! Non-root values deliberately differ; only rank zero contributes.
+    scalar_${kind}$ = 42+1000*rank
+    values_${kind}$ = [11,12,13,14]+1000*rank
+    matrix_${kind}$ = -999
+    matrix_${kind}$(:,::2) = reshape([31,32,33,34,35,36]+1000*rank,[2,3])
+    call writer%write_field_data(prefix//'_${kind}$_scalar',scalar_${kind}$)
+    call writer%write_field_data(prefix//'_${kind}$_tuples',values_${kind}$)
+    call writer%write_field_data(prefix//'_${kind}$_vector',values_${kind}$(:3),as_vector=.true.)
+    call writer%write_field_data(prefix//'_${kind}$_matrix',matrix_${kind}$(:,::2))
+    if (mode /= VTKHDF_STATIC) call writer%write_field_data(prefix//'_${kind}$_empty',values_${kind}$(:0))
+#:endfor
+#:endfor
+    end select
+  end subroutine
+
+  subroutine geometry(phase)
+    integer, intent(in) :: phase
+    real(real64) :: points(3,5)
+    integer :: bounds(3,2), selected(3,2), count
+    bounds(:,1) = 0
+    bounds(:,2) = [1,1,0]
+    selected = bounds
+    if (rank /= 0) selected(1,2) = -1
+    points = reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,1.,1.,0.,.5,.5,0.],[3,5])
+    points(1,:) = points(1,:)+0.1_real64*max(phase,0)
+    select type (file)
+    type is (vtkhdf_ug_file)
+      count = 4
+      if (mode == VTKHDF_DYNAMIC_MESH .and. phase >= 2) count = 5
+      if (rank /= 0) count = 0
+      if (phase < 0 .or. (mode == VTKHDF_DYNAMIC_MESH .and. phase == 2)) then
+        if (rank /= 0) then
+          call file%write_mesh(points(:,:0),[integer::],[1],[integer(int8)::])
+        else if (count == 4) then
+          call file%write_mesh(points(:,:4),[1,2,4,3],[1,5],[9_int8])
+        else
+          call file%write_mesh(points,[1,2,5,2,4,5,4,3,5,3,1,5],[1,4,7,10,13],[5_int8,5_int8,5_int8,5_int8])
+        end if
+      else
+        call file%write_mesh_geometry(points(:,:count))
+      end if
+    type is (vtkhdf_image_file)
+      call file%write_mesh(bounds,[0.,0.,0.],[1.,1.,1.])
+    type is (vtkhdf_rectilinear_file)
+      if (phase < 0) then
+        call file%write_mesh(bounds,[0.,1.],[0.,1.],[0.])
+      else
+        call file%write_mesh_geometry([0.,1.+0.1*phase],[0.,1.],[0.])
+      end if
+    type is (vtkhdf_structured_file)
+      if (phase < 0) call file%write_mesh(bounds)
+      call file%write_mesh_geometry(reshape(points(:,:4),[3,2,2,1]),bounds(:,1),selected)
+    end select
+  end subroutine
+end program

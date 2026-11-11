@@ -5,65 +5,74 @@
 
 A modern Fortran library for writing **VTKHDF** format files.
 
-This library provides a high-level, object-oriented Fortran interface for
-generating **VTKHDF** files, a relatively new and evolving HDF5-based VTK
-file format used by ParaView. The library is designed for high-performance
-computing (HPC) applications, offering robust MPI-parallel output via HDF5,
-while also supporting serial workflows. By utilizing HDF5 as the underlying
-storage mechanism, **fVTKHDF** provides a more scalable alternative to older
-VTK ASCII or XML formats.
+fVTKHDF provides a Fortran 2018 interface for writing HDF5-based VTKHDF files
+readable by VTK and ParaView. It supports collective output to a single file
+using parallel HDF5 and MPI, as well as serial builds without MPI.
 
-* Targets version 2.8 of the [VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html).
-* ParaView 5.13 and 6.0 are expected to work for most generated files, but
-  ParaView 6.1+ is recommended for full VTKHDF 2.8 support.
+fVTKHDF targets version 2.8 of the
+[VTKHDF File Format Specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html)
+for the dataset types it supports. The library depends on HDF5, with MPI
+required only for parallel builds.
 
-**Dataset Support**
+## Dataset Support
 
-**fVTKHDF** currently supports the following VTK data models:
+* **ImageData, RectilinearGrid, and StructuredGrid:** Logically rectangular
+  grids defined by uniform spacing, coordinate vectors, or explicit point
+  coordinates, respectively. RectilinearGrid and StructuredGrid support moving
+  geometry; ImageData geometry remains fixed.
 
-* **UnstructuredGrid (UG):** For meshes with arbitrary cell types
-  (tetrahedra, hexahedra, etc.).
+* **UnstructuredGrid:** Meshes with arbitrary cell connectivity, including
+  moving geometry and changing topology. Each MPI rank supplies a separate
+  mesh partition.
 
-  * Supports a **static** workflow and three **transient** workflows:
-    fixed, moving, and dynamic mesh.
+* **MultiBlockDataSet:** A flat collection of UnstructuredGrid blocks.
+  Each block selects its own writer mode, and all temporal blocks share a
+  common timeline. Structured block types and hierarchical nesting are not
+  supported.
 
-  * Supports point-centered, cell-centered, and field data.
+All simple dataset writers support static and time-dependent point, cell, and
+field data. Depending on the dataset type, the mesh can remain fixed, move,
+or change topology between time steps.
 
-* **MultiBlockDataSet (MB):** Supports a flat assembly/collection of
-  UnstructuredGrid blocks.
+## Reader Compatibility
 
-  * Mixed-Mode Support: Each block can independently utilize any of the
-    UG workflows within the same file.
+Unless otherwise indicated, reader support targets ParaView 5.13 and later.
+Older releases may work, but compatibility is not guaranteed.
 
-  * All transient blocks share a common set of time steps.
+| Feature | Reader requirement |
+| --- | --- |
+| RectilinearGrid and StructuredGrid | ParaView 6.2+ (VTK 9.7+) |
+| Dataset attribute designations (`Scalars`, `Vectors`, `Tensors`, `GlobalIds`, etc.) | ParaView 6.2+ (VTK 9.7+); older readers ignore these designations |
 
-  * Useful for a logical decomposition of a model into distinct components
-    (e.g., piston, cylinder, valves), independent of any parallel domain
-    decomposition.
-
-  * Hierarchical assembly of MultiBlock datasets is not supported.
-
+See the [reference manual](https://nncarlson.github.io/fvtkhdf/) for
+format-specific reader limitations and workarounds.
 
 ## Documentation
+
 See the [Reference Manual](https://nncarlson.github.io/fvtkhdf/).
 
-
 ## Installation
+
 ### Prerequisites
+
 * Fortran 2018 Compiler (GCC 13+, Intel oneAPI, etc.)
 * CMake (3.28+)
 * HDF5 C Library (1.10+) (Parallel HDF5 for MPI-enabled build)
-* Python 3 + `fypp` (`pip install fypp`)
+* Python 3 + `fypp`; `vtk` is recommended for reader-validation tests
+  (`pip install fypp vtk`)
 * MPI (Optional)
 
-Limited `fpm` build instructions are available in [fpm/README.md](./fpm/README.md).
-
 ### Build and Install
+
+Before configuring, select the intended compiler and HDF5 environment, along
+with a compatible MPI installation for parallel builds.
+
 By default, the library builds with MPI support enabled. Use
 `-DENABLE_MPI=OFF` for a serial-only build. If your MPI installation does
 not provide the `mpi_f08` module, use `-DUSE_MPI_F08=OFF` to disable the
 `mpi_f08` communicator overloads while keeping the integer-communicator MPI
 interface enabled.
+
 ```bash
 git clone https://github.com/nncarlson/fvtkhdf
 cd fvtkhdf
@@ -73,10 +82,23 @@ cmake -B build --install-prefix /path/to/install
 cmake --build build --parallel
 cmake --install build
 ```
+
+The installation includes CMake package configuration files for use with
+`find_package(fVTKHDF)`, as shown below.
+
+Add `-DBUILD_EXAMPLES=ON` to the CMake configure command to build the example
+programs. The executables are placed in `build/example/`.
+
 Run the tests for your chosen build configuration with:
+
 ```bash
 ctest --test-dir build --output-on-failure
 ```
+
+### Fortran Package Manager (fpm)
+
+See [fpm/README.md](fpm/README.md) for instructions on building fVTKHDF with the
+Fortran Package Manager.
 
 ### Spack
 
@@ -90,6 +112,7 @@ The Spack package builds the MPI-enabled configuration and currently
 targets parallel HDF5 1.14.x.
 
 ## Using fVTKHDF in your Project
+
 Once installed, you can use **fVTKHDF** in your own CMake-based project by
 adding the following to your `CMakeLists.txt`:
 
@@ -100,12 +123,17 @@ add_executable(my_simulation main.f90)
 target_link_libraries(my_simulation PRIVATE fVTKHDF::fvtkhdf)
 ```
 
+For an installation in a custom location, add
+`-DCMAKE_PREFIX_PATH=/path/to/install` when configuring your project so CMake
+can find the package.
+
 ## Quick Start
-Here is a minimal serial example that writes a **VTKHDF** UnstructuredGrid
-dataset for an unstructured mesh consisting of a single tetrahedral cell
-with a scalar field. More complete examples (serial and MPI-parallel,
-UnstructuredGrid and MultiBlockDataSet) are provided in the `example`
-directory.
+
+This minimal example requires a serial build configured with `-DENABLE_MPI=OFF`.
+It writes a **VTKHDF** UnstructuredGrid dataset containing a single tetrahedral
+cell with scalar point data. For MPI usage, see [ug_static.F90](example/ug_static.F90).
+More complete examples for all supported dataset types are provided in the
+[example directory](example/README.md).
 
 ```fortran
 program quick_start
@@ -135,7 +163,7 @@ program quick_start
   temperature = [100.0, 200.0, 300.0, 400.0] ! Point data
 
   ! 3. Create and Write
-  call myfile%create("simple.vtkhdf", stat, errmsg, mode=UG_STATIC)
+  call myfile%create("simple.vtkhdf", stat, errmsg, mode=VTKHDF_STATIC)
   if (stat /= 0) error stop errmsg
 
   ! Write the mesh topology (Static Mesh)
@@ -149,17 +177,18 @@ program quick_start
 end program quick_start
 ```
 
-
 ## Development Roadmap
+
 Planned and prospective features include:
 
-* Completing UnstructuredGrid (UG) feature coverage
+* Completing UnstructuredGrid feature coverage
 
   - Add support for [polyhedron cells](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#polyhedron-support)
 
 * Composite VTK datasets
-  - Replace the legacy MB with PartitionedDataSetCollection (PDC) ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26))
-  - Implement a general `Assembly` tree for PDC to replace the existing flat tree.
+  - Add structured block types to MultiBlockDataSet.
+  - Replace the legacy MultiBlockDataSet with PartitionedDataSetCollection ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26))
+  - Implement a general `Assembly` tree for PartitionedDataSetCollection to replace the existing flat tree.
 
 ### Additional Dataset Types
 
@@ -167,16 +196,10 @@ The [VTKHDF format specification](https://docs.vtk.org/en/latest/vtk_file_format
 defines the format for additional VTK dataset types (e.g., HyperTreeGrid,
 OverlappingAMR, etc.) that are not currently supported.
 
-Contributions adding support for these formats are very welcome.
-I am happy to collaborate on design and integration so that new
-functionality fits naturally within the existing API and internal
-infrastructure.
-
-If you are interested in contributing support for one of these
-dataset types, please open an issue to discuss design and implementation
-details.
-
+Contributions supporting additional dataset types are welcome. Please open an
+issue to discuss design and integration before starting an implementation.
 
 ## License
+
 **fVTKHDF** is distributed under the 2-clause BSD license.
 See [LICENSE.md](./LICENSE.md) for details.

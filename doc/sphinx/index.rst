@@ -2,7 +2,8 @@
 The fVTKHDF Library
 ===================
 
-fVTKHDF is a modern Fortran library for writing VTKHDF files readable by ParaView.
+fVTKHDF is a modern Fortran library for writing VTKHDF files readable by VTK
+and ParaView.
 It targets MPI-parallel HPC workflows and uses parallel HDF5 for collective I/O.
 A serial build is also available.
 
@@ -11,7 +12,28 @@ A serial build is also available.
    :caption: Reference Manual
 
    overview
-   ug
-   mb
+   common
+   field_data
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Structured VTK Dataset Types
+
+   Common Interface <structured>
+   ImageData <image>
+   RectilinearGrid <rectilinear>
+   StructuredGrid <structured_grid>
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Unstructured VTK Dataset Types
+
+   UnstructuredGrid <ug>
    vtk_cell_types
    stitching
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Composite VTK Dataset Types
+
+   MultiBlockDataSet <mb>

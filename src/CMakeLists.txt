@@ -2,11 +2,16 @@ include(CMakePackageConfigHelpers)
 
 # --- Source Definitions ---
 set(FYPP_SRC
+  vtkhdf_file_context_type.F90.fypp
+  vtkhdf_field_data_type.F90.fypp
+  vtkhdf_structured_base_class.F90.fypp
+  vtkhdf_rectilinear_file_type.F90.fypp
+  vtkhdf_structured_file_type.F90.fypp
+  vtkhdf_image_file_type.F90.fypp
   vtkhdf_h5.F90.fypp
-  vtkhdf_ug_type.F90.fypp
   vtkhdf_ug_file_type.F90.fypp
   vtkhdf_mb_file_type.F90.fypp
-  vtkhdf_ctx_type.F90.fypp
+  vtkhdf_context_type.F90.fypp
 )
 
 if(ENABLE_MPI)
@@ -16,13 +21,18 @@ if(ENABLE_MPI)
   endif()
 endif()
 
-add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC} FLAGS --line-numbering ${FYPP_DEFINES})
+add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC}
+  FLAGS --line-numbering ${FYPP_DEFINES})
 
 set(SRC
+  vtkhdf_simple_dataset_class.F90
+  vtkhdf_data_handle_types.F90
+  vtkhdf_data_support.F90
   vtkhdf_assert.F90
   vtkhdf_vtk_cell_types.F90
   vtkhdf_h5_c_binding.F90
   vtkhdf_version_param.F90
+  vtkhdf_file_modes.F90
   vtkhdf_h5e_context_type.F90
 )
 
@@ -35,7 +45,7 @@ configure_file(
 list(APPEND SRC "${CMAKE_CURRENT_BINARY_DIR}/fvtkhdf_lib_info.F90")
 
 # Suppress mismatch warnings for legacy MPI interfaces (GNU/NAG)
-set(MPI_USERS vtkhdf_ctx_type.F90)
+set(MPI_USERS vtkhdf_context_type.F90)
 set_property(SOURCE ${MPI_USERS} APPEND PROPERTY COMPILE_OPTIONS
   "$<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-fallow-argument-mismatch;-w>"
   "$<$<COMPILE_LANG_AND_ID:Fortran,NAG>:-mismatch;-w>")

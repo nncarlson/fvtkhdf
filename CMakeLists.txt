@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28..3.30)
 
-project(fVTKHDF VERSION 0.6.1 LANGUAGES Fortran C)
+project(fVTKHDF VERSION 0.7.0 LANGUAGES Fortran C)
 
 # CMake does not currently provide the PIC flag for LLVMFlang on Linux.
 # LLVMFlang 23 requires it for shared-library builds; older tested versions
@@ -54,6 +54,11 @@ if(ENABLE_MPI AND NOT HDF5_IS_PARALLEL)
   message(FATAL_ERROR "Parallel HDF5 is required when MPI is enabled, but only serial HDF5 was found.")
 endif()
 
+# Older parallel HDF5 can write data from ranks with H5S_NULL memory spaces.
+if(ENABLE_MPI AND HDF5_VERSION VERSION_LESS "1.13.0")
+  add_compile_definitions(HDF5_NULL_MEMSPACE_BUG)
+endif()
+
 # 3. Python & Fypp
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_program(FYPP_EXECUTABLE fypp)
@@ -83,7 +88,10 @@ if(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
   add_compile_definitions(INTEL_BUG20240327)
 endif()
 if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
-  add_compile_definitions(GNU_PR123899)
+  add_compile_definitions(GNU_PR123899 GNU_PR128230)
+  if(CMAKE_Fortran_COMPILER_VERSION VERSION_LESS "16.1.0")
+    add_compile_definitions(GNU_BUG20261103)
+  endif()
 endif()
 
 # --- Subdirectories ---

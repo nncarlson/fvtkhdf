@@ -1,0 +1,134 @@
+!!
+!! VTKHDF_STRUCTURED_FILE_TYPE
+!!
+!! Standalone StructuredGrid writer with distributed point coordinates.
+!!
+!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
+!! SPDX-License-Identifier: BSD-2-Clause
+!!
+
+#include "vtkhdf_assert.inc"
+
+#:set reals = [('real32','real(real32)','H5T_NATIVE_FLOAT'), ('real64','real(real64)','H5T_NATIVE_DOUBLE')]
+
+module vtkhdf_structured_file_type
+
+  use,intrinsic :: iso_fortran_env
+  use vtkhdf_structured_base_class
+  use vtkhdf_h5_c_binding
+  use vtkhdf_h5
+  use vtkhdf_h5e_context_type
+  use vtkhdf_data_handle_types
+  use vtkhdf_version_param
+  use vtkhdf_file_modes, only: VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH
+  implicit none
+  private
+
+  public :: vtkhdf_version, VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH
+  public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
+
+  type, extends(vtkhdf_structured_base), public :: vtkhdf_structured_file
+    private
+    integer(int64) :: point_offset = 0
+    logical :: offsets_initialized = .false.
+  contains
+    procedure :: dataset_type, supports_mode, append_geometry_offsets
+    procedure :: write_mesh
+    generic :: write_mesh_geometry => write_mesh_geometry_real32, write_mesh_geometry_real64
+    procedure, private :: write_mesh_geometry_real32, write_mesh_geometry_real64
+  end type
+
+contains
+
+  pure logical function supports_mode(this, mode)
+    class(vtkhdf_structured_file), intent(in) :: this
+    integer, intent(in) :: mode
+    supports_mode = mode == VTKHDF_STATIC .or. mode == VTKHDF_FIXED_MESH .or. mode == VTKHDF_MOVING_MESH
+  end function
+
+  pure function dataset_type(this) result(name)
+    class(vtkhdf_structured_file), intent(in) :: this
+    character(:), allocatable :: name
+    name = 'StructuredGrid'
+  end function
+
+  subroutine write_mesh(this, point_bounds)
+    class(vtkhdf_structured_file), intent(inout) :: this
+    integer(int32), intent(in) :: point_bounds(3,2)
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture()
+    call this%define_logical_grid(point_bounds, geometry_pending=.true.)
+    call h5_write_attr(this%ctx, this%root(), 'Dimensions', int(this%point_dimensions(),int32))
+    call err_ctx%restore(0)
+  end subroutine
+
+#:for kind, decl, h5type in reals
+  subroutine write_mesh_geometry_${kind}$(this, points, array_origin, write_bounds)
+
+    class(vtkhdf_structured_file), intent(inout) :: this
+    ${decl}$, contiguous, intent(in) :: points(:,:,:,:)
+    integer(int32), intent(in) :: array_origin(3)
+    integer(int32), intent(in), optional :: write_bounds(3,2)
+
+    integer(hid_t) :: dataset_id, type_id
+    integer(hsize_t) :: dims(3), ms(3), mc(3), fs(3), spatial_shape(3)
+    integer(hsize_t), allocatable :: file_dims(:), maxdims(:), file_start(:), file_count(:)
+    integer :: ierr
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    INSIST(this%geometry_writable())
+    ASSERT(this%ctx%identical([${kind}$]))
+    INSIST(size(points,1) == 3)
+
+    call err_ctx%capture
+
+    if (.not.this%geometry_written) then
+      dims = this%point_dimensions()
+      ! Retain all three spatial dimensions, including singleton axes.
+      file_dims = [dims(3:1:-1),3_hsize_t]
+      if (this%moving_mesh()) file_dims = [0_hsize_t,file_dims]
+      maxdims = file_dims
+      if (this%moving_mesh()) maxdims(1) = H5S_UNLIMITED
+      call h5_create_region_dataset(this%ctx, this%root(), 'Points', ${h5type}$, &
+          file_dims, int(storage_size(points)/8,int64), this%data_chunk_bytes, dataset_id, maxdims)
+    else
+      dataset_id = H5Dopen(this%root(), 'Points')
+      INSIST(this%ctx%global_all(dataset_id >= 0))
+      type_id = H5Dget_type(dataset_id)
+      INSIST(H5Tequal(type_id, ${h5type}$) > 0)
+      ierr = H5Tclose(type_id)
+    end if
+    if (this%moving_mesh() .and. .not.this%geometry_written_this_step) then
+      call h5_reserve_snapshot(this%ctx, dataset_id, this%point_offset)
+    end if
+    spatial_shape = [size(points,2,kind=hsize_t),size(points,3,kind=hsize_t),size(points,4,kind=hsize_t)]
+    call this%map_point_region(spatial_shape, array_origin, write_bounds, ms, mc, fs)
+    file_start = [fs(3:1:-1),0_hsize_t]
+    file_count = [mc(3:1:-1),3_hsize_t]
+    if (this%moving_mesh()) then
+      file_start = [this%point_offset,file_start]
+      file_count = [1_hsize_t,file_count]
+    end if
+    call h5_write_region(this%ctx, dataset_id, points, [0_hsize_t,ms], [3_hsize_t,mc], file_start, file_count)
+    ierr = H5Dclose(dataset_id)
+    INSIST(ierr >= 0)
+    this%geometry_written = .true.
+    this%geometry_written_this_step = .true.
+
+    call err_ctx%restore(0)
+
+  end subroutine
+#:endfor
+
+  subroutine append_geometry_offsets(this, steps_id)
+    use vtkhdf_data_support, only: STEPS_CHUNK_SIZE
+    class(vtkhdf_structured_file), intent(inout) :: this
+    integer(hid_t), intent(in) :: steps_id
+    if (.not.this%offsets_initialized) then
+      call h5_create_unlimited_dataset(this%ctx, steps_id, 'PointOffsets', 0_int64, STEPS_CHUNK_SIZE)
+      this%offsets_initialized = .true.
+    end if
+    call h5_append_to_dataset(this%ctx, steps_id, 'PointOffsets', this%point_offset, root=0)
+  end subroutine
+
+end module vtkhdf_structured_file_type

@@ -30,13 +30,13 @@ program ug_dynamic_mesh_example
 #endif
 
 #ifdef USE_MPI
-  call file%create('example.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_DYNAMIC_MESH)
+  call file%create('example.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_DYNAMIC_MESH)
   if (stat /= 0) then
     call MPI_Finalize(stat)
     error stop errmsg
   end if
 #else
-  call file%create('example.vtkhdf', stat, errmsg, mode=UG_DYNAMIC_MESH)
+  call file%create('example.vtkhdf', stat, errmsg, mode=VTKHDF_DYNAMIC_MESH)
   if (stat /= 0) error stop errmsg
 #endif
 
@@ -55,7 +55,7 @@ program ug_dynamic_mesh_example
   ncells = size(types)
   npoints = size(points,dim=2)
 
-  ! In UG_MOVING_MESH mode all datasets are necessarily temporal and need
+  ! In VTKHDF_MOVING_MESH mode all datasets are necessarily temporal and need
   ! to be registered. For this example we have cell-centered pressure and
   ! point-centered velocity, and a scalar "cpu time" field data.
 

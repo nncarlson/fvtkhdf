@@ -3,7 +3,7 @@ FROM ubuntu:24.04
 # Avoid prompts from apt
 ENV DEBIAN_FRONTEND=noninteractive
 ARG FPM_VERSION=0.13.0
-ARG VTK_VERSION=9.6.1
+ARG VTK_VERSION=9.7.2
 
 RUN apt-get update && apt-get install -y \
     gfortran \
@@ -23,6 +23,8 @@ RUN python3 -m pip install --break-system-packages \
     fypp \
     sphinx \
     furo \
+    h5py \
+    numpy \
     "vtk==${VTK_VERSION}"
 
 # Install fpm in the image so the workflow does not need to download it on

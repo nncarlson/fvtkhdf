@@ -21,21 +21,30 @@ EXAMPLE_OUT = OUT / "example"
 LIB_INFO_TEMPLATE = SRC_IN / "fvtkhdf_lib_info.F90.in"
 
 SRC_COPY_FILES = (
+    "vtkhdf_simple_dataset_class.F90",
+    "vtkhdf_data_handle_types.F90",
+    "vtkhdf_data_support.F90",
     "vtkhdf_assert.F90",
     "vtkhdf_assert.inc",
     "vtkhdf_vtk_cell_types.F90",
     "vtkhdf_h5_c_binding.F90",
     "vtkhdf_version_param.F90",
+    "vtkhdf_file_modes.F90",
     "vtkhdf_h5e_context_type.F90",
     "vtkhdf_h5_c_shim.c",
 )
 
 FYPP_FILES = (
+    "vtkhdf_file_context_type.F90.fypp",
+    "vtkhdf_field_data_type.F90.fypp",
+    "vtkhdf_structured_base_class.F90.fypp",
+    "vtkhdf_rectilinear_file_type.F90.fypp",
+    "vtkhdf_structured_file_type.F90.fypp",
+    "vtkhdf_image_file_type.F90.fypp",
     "vtkhdf_h5.F90.fypp",
-    "vtkhdf_ug_type.F90.fypp",
     "vtkhdf_ug_file_type.F90.fypp",
     "vtkhdf_mb_file_type.F90.fypp",
-    "vtkhdf_ctx_type.F90.fypp",
+    "vtkhdf_context_type.F90.fypp",
 )
 
 EXAMPLE_GLOBS = (

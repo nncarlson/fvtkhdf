@@ -28,13 +28,13 @@ program ug_static_example
 
   ! Create a time-independent file.
 #ifdef USE_MPI
-  call file%create('example.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_STATIC)
+  call file%create('example.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_STATIC)
   if (stat /= 0) then
     call MPI_Finalize(stat)
     error stop errmsg
   end if
 #else
-  call file%create('example.vtkhdf', stat, errmsg, mode=UG_STATIC)
+  call file%create('example.vtkhdf', stat, errmsg, mode=VTKHDF_STATIC)
   if (stat /= 0) error stop errmsg
 #endif
 

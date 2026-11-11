@@ -321,6 +321,13 @@ module vtkhdf_h5_c_binding
       integer(hid_t) :: prop_id
     end function
 
+    function H5Pset_fill_value(plist_id, type_id, value) result(hdferr) bind(c,name='H5Pset_fill_value')
+      import :: hid_t, c_ptr, c_int
+      integer(hid_t), value :: plist_id, type_id
+      type(c_ptr), value :: value
+      integer(c_int) :: hdferr
+    end function
+
     function H5Pset_chunk(plist_id, ndims, dim) result(hdferr) bind(c,name='H5Pset_chunk')
       import :: hid_t, hsize_t, c_int
       integer(hid_t), value :: plist_id
@@ -368,7 +375,7 @@ module vtkhdf_h5_c_binding
     end function
   end interface
 
-  public :: H5Pcreate, H5Pclose, H5Pset_chunk, H5Pset_link_creation_order, &
+  public :: H5Pcreate, H5Pclose, H5Pset_chunk, H5Pset_fill_value, H5Pset_link_creation_order, &
             H5Pset_all_coll_metadata_ops, H5Pset_coll_metadata_write, H5Pset_dxpl_mpio
 
   interface ! to wrapper functions that take Fortran comm instead of C comm
