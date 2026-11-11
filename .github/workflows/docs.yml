@@ -31,6 +31,11 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
 
+      - name: Enable Git metadata access in the container
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git rev-parse HEAD
+
       - name: Configure CMake
         run: |
           cmake -B build \
