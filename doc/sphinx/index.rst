@@ -34,6 +34,12 @@ A serial build is also available.
 
 .. toctree::
    :maxdepth: 1
+   :caption: Tree-Based AMR VTK Dataset Types
+
+   HyperTreeGrid <htg>
+
+.. toctree::
+   :maxdepth: 1
    :caption: Composite VTK Dataset Types
 
    MultiBlockDataSet <mb>
