@@ -526,3 +526,38 @@ foreach(case duplicate axis_length)
   vtkhdf_add_runtime_test(${test_name} vtkhdf_moving_grid_fail_test rectilinear ${case})
   set_tests_properties(${test_name} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
 endforeach()
+
+# HyperTreeGrid: breadth-first tree descriptors, per-part coordinates, and a mask.
+vtkhdf_add_test_target(vtkhdf_htg_test vtkhdf_htg_test.F90)
+vtkhdf_add_runtime_test(vtkhdf_htg_file_types vtkhdf_htg_test)
+set_tests_properties(vtkhdf_htg_file_types PROPERTIES FIXTURES_SETUP vtkhdf_htg_files)
+foreach(check layout reader)
+  add_test(NAME vtkhdf_htg_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_htg_check.py
+            ${check} ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties(vtkhdf_htg_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_htg_files SKIP_RETURN_CODE 77)
+endforeach()
+if(ENABLE_MPI)
+  set(HTG_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/htg-two-rank)
+  file(MAKE_DIRECTORY ${HTG_TWO_RANK_DIR})
+  add_test(NAME vtkhdf_htg_two_rank
+    COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
+            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_htg_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_htg_two_rank PROPERTIES PROCESSORS 2
+    WORKING_DIRECTORY ${HTG_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_htg_two_rank_files)
+  foreach(check layout reader)
+    add_test(NAME vtkhdf_htg_two_rank_${check}
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_htg_check.py
+              ${check} ${HTG_TWO_RANK_DIR})
+    set_tests_properties(vtkhdf_htg_two_rank_${check} PROPERTIES
+      FIXTURES_REQUIRED vtkhdf_htg_two_rank_files SKIP_RETURN_CODE 77)
+  endforeach()
+endif()
+vtkhdf_add_test_target(vtkhdf_htg_fail_test vtkhdf_htg_fail_test.F90)
+foreach(case no_grid bad_dims bad_branch_factor grid_twice axis_length tree_id_range missing_cells extra_cells
+             masked_refined topology_twice data_before_topology data_before_geometry wrong_cell_count
+             geometry_change late_register mesh_after_data static_data missing_data)
+  vtkhdf_add_runtime_test(vtkhdf_htg_fail_${case} vtkhdf_htg_fail_test ${case})
+  set_tests_properties(vtkhdf_htg_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+endforeach()

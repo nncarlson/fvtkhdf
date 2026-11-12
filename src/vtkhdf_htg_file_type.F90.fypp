@@ -1,0 +1,986 @@
+!!
+!! VTKHDF_HTG_FILE_TYPE
+!!
+!! This module defines the HyperTreeGrid file writer, with static, fixed,
+!! moving, and dynamic mesh workflows for cell and field data. The internal
+!! INIT entry point creates a leaf under an existing group and borrows its
+!! context; CREATE owns a standalone file and communicator.
+!!
+!! SPDX-License-Identifier: BSD-2-Clause
+!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!
+!! NOTES
+!!
+!! The latest specification for the VTKHDF file format is available at:
+!! https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html#
+!!
+!! A HyperTreeGrid is a rectilinear grid of root cells, each the root of a
+!! tree obtained by recursively subdividing cells by BranchFactor along every
+!! nonsingleton axis. VTKHDF stores each MPI rank's trees as one part:
+!!
+!! * TreeIds, DepthPerTree, and NumberOfCellsPerTreeDepth describe the trees
+!!   of a part; NumberOfTrees, NumberOfDepths, NumberOfCells, and
+!!   DescriptorsSize hold one entry per part.
+!! * Descriptors is a bit stream, packed most significant bit first, holding
+!!   one refinement flag per cell in breadth-first order for all but the
+!!   deepest level of each tree. Mask is a similar stream with one bit per
+!!   cell. Each part starts on a byte boundary, so their temporal offsets
+!!   count bytes while DescriptorsSize counts bits.
+!! * The reader expects one copy of the coordinate vectors per part. Rank
+!!   zero supplies the vectors and writes all of the copies.
+!!
+!! Unlike UnstructuredGrid, every rank contributes a part, including a rank
+!! without trees. VTK 9.7.2 reads such 0-sized HyperTreeGrid parts correctly,
+!! but its reader fails when the number of parts of a temporal file drops
+!! from several to one, which omitting them could cause as trees migrate.
+!!
+
+#include "vtkhdf_assert.inc"
+
+#:set ints = [('int8','integer(int8)','H5T_NATIVE_UINT8'), ('int32','integer(int32)','H5T_NATIVE_INT32'), ('int64','integer(int64)','H5T_NATIVE_INT64')]
+#:set reals = [('real32','real(real32)','H5T_NATIVE_FLOAT'), ('real64','real(real64)','H5T_NATIVE_DOUBLE')]
+#:set nums = ints + reals
+#:set ints_no_int8 = ints[1:]
+#:set nums_no_int8 = nums[1:]
+#:set axes = ['x', 'y', 'z']
+
+module vtkhdf_htg_file_type
+
+  use,intrinsic :: iso_fortran_env
+  use,intrinsic :: iso_c_binding, only: c_sizeof
+  use vtkhdf_h5_c_binding
+  use vtkhdf_h5
+  use vtkhdf_data_support, only: dataset_record, data_groups
+  use vtkhdf_field_data_type, only: field_data_list
+  use vtkhdf_file_modes
+  use vtkhdf_context_type
+  use vtkhdf_h5e_context_type
+  use vtkhdf_simple_dataset_class
+  use vtkhdf_file_context_type
+  use vtkhdf_data_handle_types
+  use vtkhdf_version_param
+  implicit none
+  private
+
+  public :: VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
+  public :: vtkhdf_version
+  public :: vtkhdf_cell_data_handle, vtkhdf_field_data_handle
+
+  ! Adds information for validating data reuse with dynamic meshes.
+  type, extends(dataset_record) :: cell_dataset
+    integer(int64) :: last_entity_count = 0
+  end type
+
+  type, extends(data_groups) :: cell_dataset_list
+    type(cell_dataset), allocatable :: vars(:)
+  end type
+
+  type, extends(vtkhdf_simple_dataset), public :: vtkhdf_htg_file
+    private
+    type(vtkhdf_file_context) :: file
+    type(vtkhdf_context) :: ctx ! unowned copy
+    integer(hid_t) :: root_id=H5I_INVALID_HID
+    integer(int64) :: data_chunk_bytes = 128_int64*1024
+    integer(int32) :: dims(3) = 0     ! root grid point dimensions
+    integer(int64) :: nroot = 0       ! number of root cells in the grid
+    integer :: nchild = 0             ! number of children of a refined cell
+    integer(int64) :: ntree = 0, ncell = 0, ncell_tot = 0
+    integer :: npart = 1              ! one part per MPI rank
+    logical :: is_temporal = .false., allow_geometry_change = .false., allow_topology_change = .false.
+    logical :: allow_static_cell_data = .true.
+    integer :: nsteps = -1
+    logical :: step_open = .false., mesh_locked = .false.
+    integer(hid_t) :: steps_id=H5I_INVALID_HID
+    logical :: grid_defined = .false.
+    logical :: geometry_written_this_step = .false., geometry_defined = .false.
+    logical :: topology_written_this_step = .false., topology_defined = .false.
+    logical :: has_mask = .false.
+    integer(int64) :: coord_offset(3) = 0, coord_next_offset(3) = 0
+    integer(int64) :: tree_offset = 0, tree_next_offset = 0
+    integer(int64) :: depth_offset = 0, depth_next_offset = 0
+    integer(int64) :: desc_offset = 0, desc_next_offset = 0
+    integer(int64) :: mask_offset = 0, mask_next_offset = 0
+    integer(int64) :: part_offset = 0, part_next_offset = 0
+    type(cell_dataset_list) :: cell_data
+    type(field_data_list) :: field_data
+  contains
+    ! User-facing interface and its specific bindings.
+    ! START_TIME_STEP is inherited from vtkhdf_simple_dataset.
+    procedure :: close, flush
+#ifdef USE_MPI_F08
+    generic :: create => create_f08, create_int
+    procedure, private :: create_f08, create_int
+#elif defined(USE_MPI)
+    generic :: create => create_int
+    procedure, private :: create_int
+#else
+    procedure :: create
+#endif
+    procedure :: write_mesh
+#:for rkind, rdecl, rh5type in reals
+    generic :: write_mesh_geometry => write_mesh_geometry_${rkind}$
+    procedure, private :: write_mesh_geometry_${rkind}$
+#:endfor
+#:for ikind, idecl, ih5type in ints_no_int8
+    generic :: write_mesh_topology => write_mesh_topology_${ikind}$
+    procedure, private :: write_mesh_topology_${ikind}$
+#:endfor
+#:for kind, decl, h5type in nums
+    generic :: write_cell_data => write_cell_data_${kind}$
+    procedure, private :: write_cell_data_${kind}$
+#:endfor
+#:for kind, decl, h5type in nums_no_int8
+    generic :: write_field_data => write_field_data_${kind}$
+    procedure, private :: write_field_data_${kind}$
+#:endfor
+#:for kind, decl, h5type in nums
+    generic :: register_temporal_cell_data => register_temporal_cell_data_${kind}$
+    procedure, private :: register_temporal_cell_data_${kind}$
+#:endfor
+#:for kind, decl, h5type in nums_no_int8
+    generic :: register_temporal_field_data => register_temporal_field_data_${kind}$
+    procedure, private :: register_temporal_field_data_${kind}$
+#:endfor
+#:for kind, decl, h5type in nums
+    generic :: write_cell_data => write_temporal_cell_data_${kind}$
+    procedure, private :: write_temporal_cell_data_${kind}$
+#:endfor
+#:for kind, decl, h5type in nums_no_int8
+    generic :: write_field_data => write_temporal_field_data_${kind}$
+    procedure, private :: write_temporal_field_data_${kind}$
+#:endfor
+    procedure :: start_time_step_real64, finalize_time_step
+
+    ! Internal interface for composite writers; public for cross-module calls.
+    procedure :: init
+    procedure :: root, temporal_enabled, step_is_open
+
+    ! Private helpers and finalization.
+    procedure, private :: write_topology
+    procedure, private :: reserve_cell_data_name
+    final :: vtkhdf_htg_delete
+  end type
+
+contains
+
+#ifdef USE_MPI_F08
+  subroutine create_f08(this, filename, comm, stat, errmsg, mode, data_chunk_bytes)
+    use mpi_f08, only: MPI_Comm
+    class(vtkhdf_htg_file), intent(out) :: this
+    character(*), intent(in) :: filename
+    type(MPI_Comm), intent(in) :: comm
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
+    type(vtkhdf_h5e_context) :: err_ctx
+    call init_hdf5
+    call err_ctx%capture
+    call this%create(filename, comm%mpi_val, stat, errmsg, mode, data_chunk_bytes)
+    call err_ctx%restore(stat)
+  end subroutine
+#endif
+#ifdef USE_MPI
+  subroutine create_int(this, filename, comm, stat, errmsg, mode, data_chunk_bytes)
+    class(vtkhdf_htg_file), intent(out) :: this
+    character(*), intent(in) :: filename
+    integer, intent(in) :: comm
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
+    type(vtkhdf_h5e_context) :: err_ctx
+    call init_hdf5
+    call err_ctx%capture
+    call this%file%open(filename, comm, stat, errmsg)
+    if (stat == 0) call this%init(this%file%id(), 'VTKHDF', this%file%context(), mode, data_chunk_bytes)
+    call err_ctx%restore(stat)
+  end subroutine
+#else
+  subroutine create(this, filename, stat, errmsg, mode, data_chunk_bytes)
+    class(vtkhdf_htg_file), intent(out) :: this
+    character(*), intent(in) :: filename
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: errmsg
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
+    type(vtkhdf_h5e_context) :: err_ctx
+    call init_hdf5
+    call err_ctx%capture
+    call this%file%open(filename, stat, errmsg)
+    if (stat == 0) call this%init(this%file%id(), 'VTKHDF', this%file%context(), mode, data_chunk_bytes)
+    call err_ctx%restore(stat)
+  end subroutine
+#endif
+
+  subroutine flush(this)
+    class(vtkhdf_htg_file), intent(in) :: this
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    call this%file%flush
+    call err_ctx%restore(0)
+  end subroutine
+
+  subroutine close(this)
+    class(vtkhdf_htg_file), intent(inout) :: this
+    integer :: ierr
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    if (this%root_id >= 0) then
+      if (this%step_open) call this%finalize_time_step
+      call this%cell_data%close
+      call this%field_data%close
+      if (H5Iis_valid(this%steps_id) > 0) ierr = H5Gclose(this%steps_id)
+      if (H5Iis_valid(this%root_id) > 0) ierr = H5Gclose(this%root_id)
+    end if
+    call this%file%close
+    call finalize(this) ! finalize via intent(out) this
+    call err_ctx%restore(0)
+  contains
+    subroutine finalize(this)
+      class(vtkhdf_htg_file), intent(out) :: this
+    end subroutine
+  end subroutine
+
+  !! Finalizer for VTKHDF_HTG_FILE objects. We free heap memory we own but avoid
+  !! doing things that may require syncronization with other ranks (MPI/PHDF5)
+  !! because implicit finalization is not guaranteed to be collective or
+  !! ordered with respect to other ranks when it occurs. This can leak HDF5
+  !! IDs, but that is unavoidable. Users should always use CLOSE to do a proper
+  !! collective cleanup.
+  impure elemental subroutine vtkhdf_htg_delete(this)
+    type(vtkhdf_htg_file), intent(inout) :: this
+    this%cell_data%offsets_id = H5I_INVALID_HID
+    this%field_data%offsets_id = H5I_INVALID_HID
+    this%field_data%sizes_id = H5I_INVALID_HID
+    this%steps_id = H5I_INVALID_HID
+    this%cell_data%group_id  = H5I_INVALID_HID
+    this%field_data%group_id  = H5I_INVALID_HID
+    this%root_id  = H5I_INVALID_HID
+  end subroutine
+
+!!!! INTERNAL INTERFACES FOR COMPOSITE VTKHDF DATASET WRITERS !!!!!!!!!!!!!!!!!!
+
+  subroutine init(this, loc_id, name, ctx, mode, data_chunk_bytes)
+
+    use vtkhdf_data_support, only: data_chunk_size, STEPS_CHUNK_SIZE
+
+    class(vtkhdf_htg_file), intent(inout) :: this
+    integer(hid_t), intent(in) :: loc_id
+    character(*), intent(in) :: name
+    type(vtkhdf_context), intent(in) :: ctx
+    integer, intent(in), optional :: mode
+    integer(int64), intent(in), optional :: data_chunk_bytes
+
+    integer :: mode_
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    call err_ctx%capture
+
+    mode_ = VTKHDF_STATIC
+    if (present(mode)) mode_ = mode
+    INSIST(VTKHDF_STATIC <= mode_ .and. mode_ <= VTKHDF_DYNAMIC_MESH)
+
+    this%data_chunk_bytes = 128_int64*1024
+    if (present(data_chunk_bytes)) this%data_chunk_bytes = data_chunk_bytes
+    INSIST(this%data_chunk_bytes > 0)
+
+    this%is_temporal = (mode_ > VTKHDF_STATIC)
+    this%allow_geometry_change = (mode_ >= VTKHDF_MOVING_MESH)
+    this%allow_topology_change = (mode_ >= VTKHDF_DYNAMIC_MESH)
+    this%allow_static_cell_data = (mode_ <= VTKHDF_MOVING_MESH)
+
+    this%ctx = ctx
+    this%npart = this%ctx%size
+    ASSERT(this%ctx%identical([mode_]))
+    ASSERT(this%ctx%identical([this%data_chunk_bytes]))
+
+    INSIST(this%ctx%global_all(loc_id >= 0))
+
+    this%root_id = H5Gcreate(loc_id, name)
+    INSIST(this%ctx%global_all(this%root_id >= 0))
+
+    call h5_write_attr(this%ctx, this%root_id, 'Version', vtkhdf_version)
+    call h5_write_attr(this%ctx, this%root_id, 'Type', 'HyperTreeGrid')
+
+    this%cell_data%group_id = H5Gcreate(this%root_id, 'CellData')
+    INSIST(this%ctx%global_all(this%cell_data%group_id >= 0))
+
+    this%field_data%group_id = H5Gcreate(this%root_id, 'FieldData')
+    INSIST(this%ctx%global_all(this%field_data%group_id >= 0))
+
+    if (this%is_temporal) then
+      this%steps_id = H5Gcreate(this%root_id, 'Steps')
+      INSIST(this%ctx%global_all(this%steps_id >= 0))
+
+      this%cell_data%offsets_id = H5Gcreate(this%steps_id, 'CellDataOffsets')
+      INSIST(this%ctx%global_all(this%cell_data%offsets_id >= 0))
+
+      this%field_data%offsets_id = H5Gcreate(this%steps_id, 'FieldDataOffsets')
+      INSIST(this%ctx%global_all(this%field_data%offsets_id >= 0))
+
+      this%field_data%sizes_id = H5Gcreate(this%steps_id, 'FieldDataSizes')
+      INSIST(this%ctx%global_all(this%field_data%sizes_id >= 0))
+
+      this%nsteps = 0
+      call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps)
+
+      associate (mold => 1.0_real64, chunk_size => STEPS_CHUNK_SIZE)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'Values', mold, chunk_size)
+      end associate
+
+      associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
+#:for axis in axes
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, '${axis.upper()}$CoordinatesOffsets', mold, chunk_size)
+#:endfor
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'TreeIdsOffsets', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'DepthPerTreeOffsets', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'NumberOfCellsPerTreeDepthOffsets', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'DescriptorsOffsets', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'MaskOffsets', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'PartOffsets', mold, chunk_size)
+      end associate
+      associate (mold => 0, chunk_size => STEPS_CHUNK_SIZE)
+        call h5_create_unlimited_dataset(this%ctx, this%steps_id, 'NumberOfParts', mold, chunk_size)
+      end associate
+
+      !! Mesh datasets are extendable; the optional Mask is created on demand.
+      associate (mold => 0.0_real64, chunk_size => data_chunk_size(this%data_chunk_bytes, c_sizeof(0.0_real64)))
+#:for axis in axes
+        call h5_create_unlimited_dataset(this%ctx, this%root_id, '${axis.upper()}$Coordinates', mold, chunk_size)
+#:endfor
+      end associate
+      associate (mold => 0_int64, chunk_size => data_chunk_size(this%data_chunk_bytes, c_sizeof(0_int64)))
+        call h5_create_unlimited_dataset(this%ctx, this%root_id, 'TreeIds', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%root_id, 'DepthPerTree', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%root_id, 'NumberOfCellsPerTreeDepth', mold, chunk_size)
+      end associate
+      associate (mold => 0_int8, chunk_size => data_chunk_size(this%data_chunk_bytes, c_sizeof(0_int8)))
+        call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Descriptors', mold, chunk_size)
+      end associate
+      associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
+        call h5_create_unlimited_dataset(this%ctx, this%root_id, 'NumberOfTrees', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%root_id, 'NumberOfDepths', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%root_id, 'NumberOfCells', mold, chunk_size)
+        call h5_create_unlimited_dataset(this%ctx, this%root_id, 'DescriptorsSize', mold, chunk_size)
+      end associate
+    end if
+
+    call err_ctx%restore(0)
+
+  end subroutine init
+
+  function root(this) result(id)
+    class(vtkhdf_htg_file), intent(in) :: this
+    integer(hid_t) :: id
+    id = this%root_id
+  end function
+
+  pure function temporal_enabled(this) result(enabled)
+    class(vtkhdf_htg_file), intent(in) :: this
+    logical :: enabled
+    enabled = this%is_temporal
+  end function
+
+  pure function step_is_open(this) result(is_open)
+    class(vtkhdf_htg_file), intent(in) :: this
+    logical :: is_open
+    is_open = this%step_open
+  end function
+
+!!!! MESH GEOMETRY AND TOPOLOGY !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  !! Define the grid of root cells. DIMS holds the number of grid points along
+  !! each axis, as for a RectilinearGrid; a singleton axis has one point.
+
+  subroutine write_mesh(this, dims, branch_factor, transposed_root_indexing)
+
+    class(vtkhdf_htg_file), intent(inout) :: this
+    integer, intent(in) :: dims(:)
+    integer, intent(in), optional :: branch_factor
+    logical, intent(in), optional :: transposed_root_indexing
+
+    integer :: branch_factor_, j
+    logical :: transposed
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    INSIST(this%root_id >= 0)
+    INSIST(.not.this%grid_defined)
+    INSIST(size(dims) == 3)
+    INSIST(all(dims >= 1))
+    INSIST(any(dims > 1))
+
+    branch_factor_ = 2
+    if (present(branch_factor)) branch_factor_ = branch_factor
+    INSIST(branch_factor_ == 2 .or. branch_factor_ == 3)
+
+    transposed = .false.
+    if (present(transposed_root_indexing)) transposed = transposed_root_indexing
+
+    ASSERT(this%ctx%identical([dims, branch_factor_, merge(1,0,transposed)]))
+
+    call err_ctx%capture
+
+    this%dims = int(dims, int32)
+    this%nroot = 1
+    this%nchild = 1
+    do j = 1, 3
+      if (dims(j) == 1) cycle
+      INSIST(this%nroot <= huge(0_int64)/(dims(j)-1))
+      this%nroot = this%nroot * (dims(j)-1)
+      this%nchild = this%nchild * branch_factor_
+    end do
+
+    call h5_write_attr(this%ctx, this%root_id, 'Dimensions', this%dims)
+    call h5_write_attr(this%ctx, this%root_id, 'BranchFactor', int(branch_factor_,int32))
+    call h5_write_attr(this%ctx, this%root_id, 'TransposedRootIndexing', merge(1_int32, 0_int32, transposed))
+
+    this%grid_defined = .true.
+
+    call err_ctx%restore(0)
+
+  end subroutine write_mesh
+
+  !! Rank zero supplies the coordinate vectors and writes one copy per part.
+
+#:for rkind, rdecl, rh5type in reals
+  subroutine write_mesh_geometry_${rkind}$(this, x, y, z)
+
+    class(vtkhdf_htg_file), intent(inout) :: this
+    ${rdecl}$, intent(in) :: x(:), y(:), z(:)
+
+    integer :: j
+    real(real64), allocatable :: copies(:)
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    INSIST(this%root_id >= 0)
+    INSIST(this%grid_defined)
+    INSIST(.not.this%mesh_locked)
+
+    if (this%geometry_defined) then ! geometry was previously written
+      INSIST(this%allow_geometry_change)  ! it is allowed to change
+      INSIST(.not.this%geometry_written_this_step) ! but at most once per step
+    end if
+
+    if (this%ctx%rank == 0) then
+      INSIST(all([size(x),size(y),size(z)] == this%dims))
+    end if
+
+    call err_ctx%capture
+
+#:for i, axis in enumerate(axes, 1)
+    if (this%ctx%rank == 0) then
+      copies = [(real(${axis}$,real64), j = 1, this%npart)]
+    else
+      allocate(copies(0))
+    end if
+    if (this%is_temporal) then
+      call h5_append_to_dataset(this%ctx, this%root_id, '${axis.upper()}$Coordinates', copies, root=0)
+    else
+      call h5_write_dataset(this%ctx, this%root_id, '${axis.upper()}$Coordinates', copies, root=0)
+    end if
+    deallocate(copies)
+    this%coord_offset(${i}$) = this%coord_next_offset(${i}$)
+    this%coord_next_offset(${i}$) = this%coord_offset(${i}$) + int(this%dims(${i}$),int64)*this%npart
+#:endfor
+
+    this%geometry_written_this_step = .true.
+    this%geometry_defined = .true.
+
+    call err_ctx%restore(0)
+
+  end subroutine write_mesh_geometry_${rkind}$
+#:endfor
+
+#:for ikind, idecl, ih5type in ints_no_int8
+  subroutine write_mesh_topology_${ikind}$(this, tree_ids, xtree, refined, mask)
+    class(vtkhdf_htg_file), intent(inout) :: this
+    ${idecl}$, intent(in) :: tree_ids(:), xtree(:)
+    logical, intent(in) :: refined(:)
+    logical, intent(in), optional :: mask(:)
+    integer(int64), allocatable :: tree_ids_(:), xtree_(:)
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    tree_ids_ = int(tree_ids, int64)
+    xtree_ = int(xtree, int64)
+    call this%write_topology(tree_ids_, xtree_, refined, mask)
+    call err_ctx%restore(0)
+  end subroutine
+#:endfor
+
+  subroutine write_topology(this, tree_ids, xtree, refined, mask)
+
+    use vtkhdf_data_support, only: data_chunk_size
+
+    class(vtkhdf_htg_file), intent(inout) :: this
+    integer(int64), intent(in) :: tree_ids(:), xtree(:)
+    logical, intent(in) :: refined(:)
+    logical, intent(in), optional :: mask(:)
+
+    integer(int64) :: ndepth, nbits, n, desc_bytes_tot
+    integer(int64), allocatable :: tree_ids0(:), depth_per_tree(:), cells_per_depth(:)
+    logical, allocatable :: descriptor_bits(:), mask_bits(:)
+    integer(int8), allocatable :: descriptors(:), mask_bytes(:)
+    logical :: valid, first_write
+
+    INSIST(this%root_id >= 0)
+    INSIST(this%grid_defined)
+    INSIST(.not.this%mesh_locked)
+
+    first_write = (this%ncell_tot <= 0)
+    if (.not.first_write) then ! topology was previously written
+      INSIST(this%allow_topology_change)  ! it is allowed to change
+      INSIST(.not.this%topology_written_this_step) ! but at most once per step
+    end if
+
+    this%ntree = size(tree_ids, kind=int64)
+    INSIST(size(xtree, kind=int64) == this%ntree+1)
+    INSIST(xtree(1) == 1)
+    this%ncell = xtree(this%ntree+1) - 1
+    INSIST(size(refined, kind=int64) == this%ncell)
+    if (this%ntree > 0) then
+      INSIST(minval(tree_ids) >= 1)
+      INSIST(maxval(tree_ids) <= this%nroot)
+    end if
+
+    ASSERT(this%ctx%identical([merge(1,0,present(mask))]))
+    if (present(mask)) then
+      INSIST(size(mask, kind=int64) == this%ncell)
+      INSIST(.not.any(mask .and. refined)) ! refined cells cannot be masked
+    end if
+
+    call analyze_trees(xtree, refined, this%nchild, depth_per_tree, cells_per_depth, descriptor_bits, valid)
+    INSIST(valid)
+
+    ndepth = size(cells_per_depth, kind=int64)
+    nbits = size(descriptor_bits, kind=int64)
+    call pack_bits(descriptor_bits, descriptors)
+    tree_ids0 = tree_ids - 1 ! 0-based indexing
+
+    call this%ctx%global_sum(this%ncell, this%ncell_tot)
+    INSIST(this%ncell_tot > 0)
+
+    this%part_offset = this%part_next_offset
+    this%part_next_offset = this%part_offset + this%npart
+
+    !! A temporal mesh topology always stores a mask, so that MaskOffsets
+    !! remain meaningful should only some of the topologies supply one.
+    if (first_write) then
+      this%has_mask = present(mask) .or. this%allow_topology_change
+      if (this%has_mask .and. this%is_temporal) then
+        associate (mold => 0_int8, chunk_size => data_chunk_size(this%data_chunk_bytes, c_sizeof(0_int8)))
+          call h5_create_unlimited_dataset(this%ctx, this%root_id, 'Mask', mold, chunk_size)
+        end associate
+      end if
+    end if
+    if (this%has_mask) then
+      if (present(mask)) then
+        mask_bits = mask
+      else
+        allocate(mask_bits(this%ncell), source=.false.)
+      end if
+      call pack_bits(mask_bits, mask_bytes)
+    end if
+
+    call this%ctx%global_sum(size(descriptors, kind=int64), desc_bytes_tot)
+
+    if (this%is_temporal) then
+      call append_to_datasets
+    else
+      !! A grid of unrefined trees has no descriptor bits, but H5_WRITE_DATASET
+      !! cannot create an empty dataset. Store one unused byte instead; readers
+      !! consume only the DescriptorsSize bits of each part.
+      if (desc_bytes_tot == 0 .and. this%ctx%rank == 0) descriptors = [0_int8]
+      call write_datasets
+    end if
+
+    call this%ctx%global_sum(this%ntree, n)
+    this%tree_offset = this%tree_next_offset
+    this%tree_next_offset = this%tree_offset + n
+
+    call this%ctx%global_sum(ndepth, n)
+    this%depth_offset = this%depth_next_offset
+    this%depth_next_offset = this%depth_offset + n
+
+    this%desc_offset = this%desc_next_offset
+    this%desc_next_offset = this%desc_offset + desc_bytes_tot
+
+    if (this%has_mask) then
+      call this%ctx%global_sum(size(mask_bytes, kind=int64), n)
+      this%mask_offset = this%mask_next_offset
+      this%mask_next_offset = this%mask_offset + n
+    end if
+
+    this%topology_written_this_step = .true.
+    this%topology_defined = .true.
+
+  contains
+
+#:for mode in ["write", "append_to"]
+    subroutine ${mode}$_datasets
+
+      !! One entry per part
+      call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfTrees', this%ntree)
+      call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfCells', this%ncell)
+      call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfDepths', ndepth)
+      call h5_${mode}$_dataset(this%ctx, this%root_id, 'DescriptorsSize', nbits)
+
+      call h5_${mode}$_dataset(this%ctx, this%root_id, 'TreeIds', tree_ids0)
+      call h5_${mode}$_dataset(this%ctx, this%root_id, 'DepthPerTree', depth_per_tree)
+      call h5_${mode}$_dataset(this%ctx, this%root_id, 'NumberOfCellsPerTreeDepth', cells_per_depth)
+#:if mode == "write"
+      if (desc_bytes_tot == 0) then
+        call h5_write_dataset(this%ctx, this%root_id, 'Descriptors', descriptors, root=0)
+      else
+        call h5_write_dataset(this%ctx, this%root_id, 'Descriptors', descriptors)
+      end if
+#:else
+      call h5_${mode}$_dataset(this%ctx, this%root_id, 'Descriptors', descriptors)
+#:endif
+      if (this%has_mask) call h5_${mode}$_dataset(this%ctx, this%root_id, 'Mask', mask_bytes)
+
+    end subroutine ${mode}$_datasets
+#:endfor
+
+  end subroutine write_topology
+
+!!!! STATIC DATA !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+#:for kind, decl, h5type in nums
+  subroutine write_cell_data_${kind}$(this, name, array, attribute)
+    class(vtkhdf_htg_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    ${decl}$, intent(in) :: array(..)
+    character(*), intent(in), optional :: attribute
+    integer, allocatable :: dims(:)
+    integer :: var_index
+    character(:), allocatable :: external_name, internal_name
+    type(vtkhdf_h5e_context) :: err_ctx
+    INSIST(this%allow_static_cell_data)
+    INSIST(this%geometry_defined)
+    INSIST(this%topology_defined)
+    call err_ctx%capture
+    dims = shape(array)
+    INSIST(size(dims) >= 1 .and. size(dims) <= 2)
+    INSIST(this%ctx%global_all(dims(size(dims)) == this%ncell))
+    call this%reserve_cell_data_name(name, external_name, internal_name, var_index)
+    call h5_write_dataset(this%ctx, this%cell_data%group_id, internal_name, array)
+    call h5_write_data_name_attr(this%ctx, this%cell_data%group_id, internal_name, external_name, attribute)
+    this%mesh_locked = .true. ! set barrier for changing the mesh
+    call err_ctx%restore(0)
+  end subroutine
+#:endfor
+
+#:for kind, decl, h5type in nums_no_int8
+  subroutine write_field_data_${kind}$(this, name, array, as_vector)
+    class(vtkhdf_htg_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    ${decl}$, intent(in) :: array(..)
+    logical, intent(in), optional :: as_vector
+    type(vtkhdf_h5e_context) :: err_ctx
+    INSIST(this%root_id >= 0)
+    call err_ctx%capture
+    call this%field_data%write(this%ctx, name, array, as_vector, this%data_chunk_bytes, &
+        max(0,this%nsteps-merge(1,0,this%step_open)))
+    call err_ctx%restore(0)
+  end subroutine
+#:endfor
+
+!!!! TEMPORAL REGISTRATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+#:for kind, decl, h5type in nums
+  function register_temporal_cell_data_${kind}$(this, name, mold, attribute) result(handle)
+
+    use vtkhdf_data_support, only: data_chunk_size, STEPS_CHUNK_SIZE
+
+    class(vtkhdf_htg_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    ${decl}$, intent(in) :: mold(..)
+    character(*), intent(in), optional :: attribute
+    type(vtkhdf_cell_data_handle) :: handle
+
+    integer :: index
+    character(:), allocatable :: external_name, internal_name
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    INSIST(this%nsteps >= 0) ! must be configured for temporal
+    INSIST(this%nsteps == 0) ! cannot register new dataset after time stepping has begun
+    INSIST(rank(mold) <= 1)
+
+    call err_ctx%capture
+
+    call this%reserve_cell_data_name(name, external_name, internal_name, index, is_temporal=.true.)
+    call handle%set(index, this%root_id)
+
+    !! Dataset for the cell data
+    associate (chunk_size => data_chunk_size(this%data_chunk_bytes, c_sizeof(mold)))
+      call h5_create_unlimited_dataset(this%ctx, this%cell_data%group_id, internal_name, mold, chunk_size)
+    end associate
+    call h5_write_data_name_attr(this%ctx, this%cell_data%group_id, internal_name, external_name, attribute)
+
+    !! Dataset for its time step offsets
+    associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
+      call h5_create_unlimited_dataset(this%ctx, this%cell_data%offsets_id, internal_name, mold, chunk_size)
+    end associate
+
+    call err_ctx%restore(0)
+
+  end function register_temporal_cell_data_${kind}$
+#:endfor
+
+#:for kind, decl, h5type in nums_no_int8
+  function register_temporal_field_data_${kind}$(this, name, mold) result(handle)
+    class(vtkhdf_htg_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    ${decl}$, intent(in) :: mold
+    integer :: index
+    type(vtkhdf_field_data_handle) :: handle
+    type(vtkhdf_h5e_context) :: err_ctx
+    INSIST(this%nsteps == 0)
+    call err_ctx%capture
+    index = this%field_data%register_temporal(this%ctx, name, mold, &
+        this%data_chunk_bytes)
+    call handle%set(index, this%root_id)
+    call err_ctx%restore(0)
+  end function register_temporal_field_data_${kind}$
+#:endfor
+
+!!!! TEMPORAL WRITES !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+#:for kind, decl, h5type in nums
+  subroutine write_temporal_cell_data_${kind}$(this, var, array)
+
+    class(vtkhdf_htg_file), intent(inout) :: this
+    type(vtkhdf_cell_data_handle), intent(in) :: var
+    ${decl}$, intent(in) :: array(..)
+
+    integer, allocatable :: dims(:)
+    integer :: index
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    index = var%index(this%root_id)
+    INSIST(this%nsteps > 0)
+    INSIST(this%step_open)
+    INSIST(this%geometry_defined)
+    INSIST(this%topology_defined)
+
+    call err_ctx%capture
+
+    dims = shape(array)
+    INSIST(size(dims) >= 1 .and. size(dims) <= 2)
+    INSIST(dims(size(dims)) == this%ncell)
+    INSIST(index >= 1)
+    INSIST(allocated(this%cell_data%vars))
+    INSIST(index <= size(this%cell_data%vars))
+    INSIST(this%cell_data%vars(index)%is_temporal)
+    INSIST(.not.this%cell_data%vars(index)%wrote_this_step) ! no double writing in a single step
+    this%cell_data%vars(index)%offset = this%cell_data%vars(index)%next_offset
+    call h5_append_to_dataset(this%ctx, this%cell_data%group_id, this%cell_data%vars(index)%internal_name, array)
+    this%cell_data%vars(index)%next_offset = this%cell_data%vars(index)%next_offset + this%ncell_tot
+    this%cell_data%vars(index)%last_entity_count = this%ncell
+    this%cell_data%vars(index)%wrote_this_step = .true. ! dataset has been written for this step
+
+    this%mesh_locked = .true. ! set barrier for changing the mesh
+
+    call err_ctx%restore(0)
+
+  end subroutine write_temporal_cell_data_${kind}$
+#:endfor
+
+#:for kind, decl, h5type in nums_no_int8
+  subroutine write_temporal_field_data_${kind}$(this, var, array, as_vector)
+    class(vtkhdf_htg_file), intent(inout) :: this
+    type(vtkhdf_field_data_handle), intent(in) :: var
+    ${decl}$, intent(in) :: array(..)
+    logical, intent(in), optional :: as_vector
+    type(vtkhdf_h5e_context) :: err_ctx
+    call err_ctx%capture
+    INSIST(this%step_open)
+    call this%field_data%write_temporal(this%ctx, var%index(this%root_id), array, as_vector)
+    call err_ctx%restore(0)
+  end subroutine
+#:endfor
+
+!!!! TIME STEPPING !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  subroutine start_time_step_real64(this, time)
+
+    class(vtkhdf_htg_file), intent(inout) :: this
+    real(real64), intent(in) :: time
+
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    call err_ctx%capture
+
+    INSIST(this%nsteps >= 0)
+    if (this%step_open) call this%finalize_time_step
+
+    this%nsteps = this%nsteps + 1
+    call h5_write_attr(this%ctx, this%steps_id, 'NSteps', this%nsteps)
+
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'Values', time, root=0)
+
+    if (this%nsteps > 1) then
+      this%geometry_written_this_step = .false.
+      this%topology_written_this_step = .false.
+    end if
+
+    if (allocated(this%cell_data%vars))  call this%cell_data%vars%reset_step_flags
+    if (allocated(this%field_data%vars)) call this%field_data%vars%reset_step_flags
+    this%step_open = .true.
+    this%mesh_locked = .false. ! release barrier for changing the mesh
+
+    call err_ctx%restore(0)
+
+  end subroutine start_time_step_real64
+
+
+  subroutine finalize_time_step(this)
+
+    class(vtkhdf_htg_file), intent(inout) :: this
+
+    integer :: j
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    INSIST(this%step_open)
+    INSIST(this%geometry_defined .and. this%topology_defined)
+
+    call err_ctx%capture
+
+    if (allocated(this%cell_data%vars)) then
+      do j = 1, size(this%cell_data%vars)
+        if (this%cell_data%vars(j)%is_temporal) then
+          if (this%cell_data%vars(j)%wrote_this_step) cycle
+          INSIST(this%ctx%global_all(this%cell_data%vars(j)%last_entity_count == this%ncell))
+        end if
+      end do
+    end if
+
+#:for i, axis in enumerate(axes, 1)
+    call h5_append_to_dataset(this%ctx, this%steps_id, '${axis.upper()}$CoordinatesOffsets', this%coord_offset(${i}$), root=0)
+#:endfor
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'TreeIdsOffsets', this%tree_offset, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'DepthPerTreeOffsets', this%tree_offset, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'NumberOfCellsPerTreeDepthOffsets', this%depth_offset, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'DescriptorsOffsets', this%desc_offset, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'MaskOffsets', this%mask_offset, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'NumberOfParts', this%npart, root=0)
+    call h5_append_to_dataset(this%ctx, this%steps_id, 'PartOffsets', this%part_offset, root=0)
+
+    !! Cell data offsets for each temporal dataset for this timestep
+    call append_data_offsets(this%ctx, this%cell_data%offsets_id, this%cell_data%vars)
+    call this%field_data%append_metadata(this%ctx)
+    this%step_open = .false.
+
+    call err_ctx%restore(0)
+
+  end subroutine finalize_time_step
+
+!!!! REGISTRY AND STORAGE HELPERS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  subroutine reserve_cell_data_name(this, name, external_name, internal_name, index, is_temporal)
+    use vtkhdf_data_support, only: resolve_record_name
+    class(vtkhdf_htg_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    character(:), allocatable, intent(out) :: external_name, internal_name
+    integer, intent(out) :: index
+    logical, intent(in), optional :: is_temporal
+    type(cell_dataset) :: var
+    call resolve_record_name(name, 'Unnamed_CellData', external_name, internal_name, this%cell_data%vars)
+    var%internal_name = internal_name
+    if (present(is_temporal)) var%is_temporal = is_temporal
+    if (allocated(this%cell_data%vars)) then
+      this%cell_data%vars = [this%cell_data%vars,var]
+    else
+      allocate(this%cell_data%vars(1),source=var)
+    end if
+    index = size(this%cell_data%vars)
+  end subroutine
+
+  subroutine append_data_offsets(ctx, grp_id, vars)
+    type(vtkhdf_context), intent(in) :: ctx
+    integer(hid_t), intent(in) :: grp_id
+    type(cell_dataset), allocatable, intent(in) :: vars(:)
+    integer :: j
+    if (grp_id < 0) return
+    if (.not.allocated(vars)) return
+    do j = 1, size(vars)
+      if (.not.vars(j)%is_temporal) cycle
+      call h5_append_to_dataset(ctx, grp_id, vars(j)%internal_name, vars(j)%offset, root=0)
+    end do
+  end subroutine
+
+  !! Derive the per-tree VTKHDF topology description from breadth-first
+  !! refinement flags. Tree T owns cells XTREE(T):XTREE(T+1)-1, ordered level
+  !! by level starting with its root cell; within a level, the NCHILD children
+  !! of each refined cell of the preceding level are contiguous and follow
+  !! their parents' order. DEPTH_PER_TREE holds the number of levels of each
+  !! tree, CELLS_PER_DEPTH the concatenated cell counts of those levels, and
+  !! DESCRIPTOR_BITS the flags of all but the deepest level of each tree, whose
+  !! cells are necessarily leaves. VALID is false if the flags do not account
+  !! for exactly the cells of each tree.
+
+  pure subroutine analyze_trees(xtree, refined, nchild, depth_per_tree, cells_per_depth, descriptor_bits, valid)
+
+    integer(int64), intent(in) :: xtree(:)
+    logical, intent(in) :: refined(:)
+    integer, intent(in) :: nchild
+    integer(int64), allocatable, intent(out) :: depth_per_tree(:), cells_per_depth(:)
+    logical, allocatable, intent(out) :: descriptor_bits(:)
+    logical, intent(out) :: valid
+
+    integer(int64) :: t, ntree, pos, last, n, nrefined, ndepth, nbits
+    integer(int64), allocatable :: level_cells(:)
+    logical, allocatable :: bits(:)
+
+    ntree = size(xtree, kind=int64) - 1
+    allocate(depth_per_tree(ntree), source=0_int64)
+    allocate(level_cells(size(refined, kind=int64)), bits(size(refined, kind=int64)))
+    ndepth = 0
+    nbits = 0
+    valid = .false.
+
+    do t = 1, ntree
+      pos = xtree(t)
+      last = xtree(t+1) - 1
+      n = 1 ! the root cell
+      do
+        if (n > last - pos + 1) return ! level extends beyond the tree
+        ndepth = ndepth + 1
+        level_cells(ndepth) = n
+        depth_per_tree(t) = depth_per_tree(t) + 1
+        nrefined = count(refined(pos:pos+n-1), kind=int64)
+        if (nrefined == 0) then ! deepest level
+          pos = pos + n
+          exit
+        end if
+        bits(nbits+1:nbits+n) = refined(pos:pos+n-1)
+        nbits = nbits + n
+        pos = pos + n
+        n = nrefined * nchild
+      end do
+      if (pos /= last + 1) return ! unaccounted cells
+    end do
+
+    cells_per_depth = level_cells(:ndepth)
+    descriptor_bits = bits(:nbits)
+    valid = .true.
+
+  end subroutine analyze_trees
+
+  !! Pack logical values into bytes, most significant bit first, zero-padding
+  !! the final byte. This is the storage order of VTK bit arrays.
+
+  pure subroutine pack_bits(bits, bytes)
+    logical, intent(in) :: bits(:)
+    integer(int8), allocatable, intent(out) :: bytes(:)
+    integer(int64) :: j, n
+    n = size(bits, kind=int64)
+    allocate(bytes((n+7)/8), source=0_int8)
+    do j = 1, n
+      if (bits(j)) bytes((j+7)/8) = ibset(bytes((j+7)/8), 7 - int(mod(j-1,8_int64)))
+    end do
+  end subroutine
+
+end module vtkhdf_htg_file_type

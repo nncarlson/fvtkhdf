@@ -31,6 +31,10 @@ Currently supported VTK dataset types:
 * **UnstructuredGrid (UG)**: meshes with arbitrary cell connectivity,
   supporting moving geometry and changing topology.
 
+* **HyperTreeGrid (HTG)**: tree-based adaptive mesh refinement on a
+  rectilinear grid of root cells, supporting moving geometry and changing
+  refinement.
+
 * **MultiBlockDataSet (MB)**: a composite type containing a flat collection
   of UnstructuredGrid blocks.
 
@@ -58,6 +62,9 @@ of simple VTK datasets.
    * - UnstructuredGrid
      - ``vtkhdf_ug_file``
      - ``vtkhdf_ug_file_type``
+   * - HyperTreeGrid
+     - ``vtkhdf_htg_file``
+     - ``vtkhdf_htg_file_type``
    * - MultiBlockDataSet
      - ``vtkhdf_mb_file``
      - ``vtkhdf_mb_file_type``
@@ -107,7 +114,8 @@ Data Placement
 --------------
 
 UnstructuredGrid stores each MPI rank's mesh contribution as a separate
-partition, with its own points and cell connectivity. Each structured writer
+partition, with its own points and cell connectivity. HyperTreeGrid likewise
+stores each rank's trees as a separate partition. Each structured writer
 assembles caller-owned rectangular regions into one global structured VTK
 dataset without recording rank partitions. The library performs no
 repartitioning or data redistribution.

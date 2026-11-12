@@ -9,7 +9,9 @@ The public file writers implement the API documented in the
 [reference manual](sphinx/index.rst). The UnstructuredGrid writer contains its
 mesh and data implementation directly. The three structured writers share
 `vtkhdf_structured_base`; each concrete writer supplies its geometry methods,
-VTK dataset type name, and supported modes.
+VTK dataset type name, and supported modes. The HyperTreeGrid writer follows
+the UnstructuredGrid organization, with trees in place of cell connectivity
+and no point data.
 
 `vtkhdf_simple_dataset` defines the common lifecycle contract used by composite
 writers: cleanup, time stepping, and dataset-state queries. It does not define
@@ -20,6 +22,7 @@ Its public block interface currently supports UnstructuredGrid only.
 | Module or type | Responsibility |
 | --- | --- |
 | `vtkhdf_ug_file_type` | Unstructured mesh, data registration and writes, and lifecycle policy |
+| `vtkhdf_htg_file_type` | Root grid, breadth-first tree descriptors and mask, per-part coordinate copies, cell data, and lifecycle policy |
 | `vtkhdf_structured_base_class` | Logical grids, rectangular region writes, shared registration, and structured lifecycle policy |
 | `vtkhdf_image_file_type`, `vtkhdf_rectilinear_file_type`, `vtkhdf_structured_file_type` | Geometry definitions and format-specific geometry storage |
 | `vtkhdf_mb_file_type` | Composite assembly, block handles, and a shared timeline |
@@ -72,6 +75,14 @@ offsets. Structured writers use whole-grid snapshots, with several region writes
 able to contribute to one snapshot. Repeated offsets provide reuse without
 allocating another snapshot. Geometry snapshots and data snapshots are
 independent of one another and of the number of time steps.
+
+HyperTreeGrid appends each topology as one part per rank. Its descriptor and
+mask bit streams are packed per part, so every part starts on a byte boundary
+and their temporal offsets count bytes. The reader expects a copy of the root
+grid coordinates for every part; rank zero writes all of them. Unlike
+UnstructuredGrid, ranks without trees still contribute a part, so the number
+of parts never changes. The VTK 9.7.2 reader fails on a temporal file whose
+part count drops from several to one.
 
 Field data uses the same implementation in all simple writers. In temporal
 files, complete values are stored as tuple rows with a component dimension;
