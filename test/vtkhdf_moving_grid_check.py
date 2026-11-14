@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Independent checks for moving structured geometry and snapshot reuse."""
+import argparse
 import sys
 import warnings
 from pathlib import Path
@@ -11,8 +12,14 @@ except ImportError as exc:
     print(exc)
     sys.exit(77)
 
-mode, directory, *args = sys.argv[1:]
-directory = Path(directory)
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("mode", choices=("layout", "reader"))
+parser.add_argument("directory", type=Path)
+parser.add_argument("mask", nargs="?", type=int, default=7)
+parser.add_argument("--debug-fill", type=int, choices=(0, 1), default=1)
+args = parser.parse_args()
+mode, directory = args.mode, args.directory
+debug_fill = bool(args.debug_fill)
 if mode == "reader":
     try:
         from vtkmodules.vtkCommonCore import vtkVersion
@@ -25,7 +32,7 @@ if mode == "reader":
     if version < (9, 7, 0):
         print("Moving structured grids require VTK 9.7 or later")
         sys.exit(77)
-    mask = int(args[0])
+    mask = args.mask
     if mask in (2, 4, 5, 6) and version < (9, 7, 2):
         print("VTK before 9.7.2 has a structured-data singleton-axis reader defect")
         sys.exit(77)
@@ -98,6 +105,8 @@ for mask in masks:
                         np.testing.assert_array_equal(root["Steps/Values"], np.arange(7))
                         if grid == "structured":
                             a = root["Points"]
+                            expected_fill = h5py.h5d.FILL_TIME_IFSET if debug_fill else h5py.h5d.FILL_TIME_NEVER
+                            assert a.id.get_create_plist().get_fill_time() == expected_fill
                             assert a.shape == (3, *dims[::-1], 3)
                             assert a.maxshape == (None, *dims[::-1], 3)
                             assert a.chunks[0] == 1
@@ -180,10 +189,14 @@ if mode == "layout" or masks == [7]:
                 assert g["Points"].shape == (2, 2, 2, 2, 3)
                 np.testing.assert_array_equal(g["Steps/PointOffsets"], [0, 0, 1, 1])
                 np.testing.assert_array_equal(g["Points"][0], np.ones((2, 2, 2, 3)))
-                assert np.isnan(g["Points"][1]).all()
+                if debug_fill:
+                    assert np.isnan(g["Points"][1]).all()
         else:
             reader, errors = reader_for(path)
             for step in (3, 0, 2, 1):
+                if not debug_fill and step >= 2:
+                    # This deliberately empty replacement has undefined coordinates.
+                    continue
                 reader.SetStep(step)
                 reader.Update()
                 assert not errors, (path, errors)

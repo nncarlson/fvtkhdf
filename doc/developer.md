@@ -147,6 +147,13 @@ is defined, including evaluation of its argument. The CMake build defines
 `NDEBUG` for configurations other than Debug. Other build systems must select
 their assertion configuration consistently across all ranks.
 
+The same `NDEBUG` setting controls initialization of structured real datasets,
+including point/cell fields and explicit coordinates. With `NDEBUG` absent,
+NaN fill values diagnose incomplete writes. With `NDEBUG` defined, creation
+sets `H5D_FILL_TIME_NEVER` to avoid physical initialization; unwritten real
+values are unspecified. Integer datasets keep their default zero filling in
+both configurations, including visibility masks.
+
 For example:
 
 ```fortran

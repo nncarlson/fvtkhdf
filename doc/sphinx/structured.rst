@@ -91,9 +91,12 @@ and ``real64`` from ``iso_fortran_env``. All writes to one dataset must have
 the same type, kind, scalar/multicomponent interpretation, and component
 count. The component count must be positive.
 
-Unwritten point and cell data values default to quiet NaN for real kinds
-and zero for integer kinds. NaN makes missing real data
-distinguishable from a valid zero; it does not mark a location hidden
+In Debug builds, unwritten point and cell data values default to quiet NaN
+for real kinds, making missing data distinguishable from a valid zero.
+In other builds, including Release, real datasets are not initialized;
+unwritten real values are unspecified. This avoids the cost of filling storage
+that the caller will overwrite. Integer values default to zero in every build.
+NaN does not mark a location hidden
 (:ref:`see below <structured-hidden-locations>`).
 
 .. warning::
@@ -228,8 +231,9 @@ could be written as follows:
 
 Write the mask for every location whose visibility must be specified.
 Unwritten mask entries default to zero (visible). Other datasets may be left
-unwritten at hidden locations, where their default values are used. NaN values
-alone do not mark locations hidden.
+unwritten at hidden locations. Unwritten real values are unspecified outside
+Debug builds; the mask determines visibility independently of those values.
+NaN values alone do not mark locations hidden.
 
 Temporal Point and Cell Data
 ----------------------------
@@ -282,8 +286,9 @@ the first time step starts. Placement is supplied on each write.
 Every registered point or cell dataset must be written in the first time step.
 In each subsequent step, the caller must either omit all writes to the dataset,
 reusing its previous complete value, or supply a complete replacement. An
-unwritten region in a replacement does not inherit values from the previous
-step. All-empty collective writes still begin a replacement; reuse requires
+unwritten region in a replacement follows the build-dependent fill policy
+above rather than reusing the previous snapshot. All-empty collective writes
+still begin a replacement; reuse requires
 omitting the calls on all ranks.
 
 Region shapes and rank ownership may change between replacements. Every

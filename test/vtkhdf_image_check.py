@@ -110,7 +110,7 @@ def equal(np, actual, expected):
     np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-6)
 
 
-def check_layout(directory):
+def check_layout(directory, debug_fill):
     np, h5py = dependencies()
     with h5py.File(directory / "image_fill.vtkhdf") as f:
         nproc = f["VTKHDF/PointData/static_real32"].shape[1] - 2
@@ -120,11 +120,19 @@ def check_layout(directory):
                     d = f[f"VTKHDF/{association}/{mode}_{kind}"]
                     floating = kind.startswith("real")
                     if floating:
-                        assert np.isnan(d.fillvalue)
+                        expected_fill = h5py.h5d.FILL_TIME_IFSET if debug_fill else h5py.h5d.FILL_TIME_NEVER
+                        assert d.id.get_create_plist().get_fill_time() == expected_fill
+                        if debug_fill:
+                            assert np.isnan(d.fillvalue)
                     else:
                         assert d.fillvalue == 0
+                        assert d.id.get_create_plist().get_fill_time() != h5py.h5d.FILL_TIME_NEVER
                     for step in range(2 if mode == "temporal" else 1):
                         actual = d[step]
+                        if floating and not debug_fill:
+                            # Unwritten real values have no defined contents.
+                            np.testing.assert_array_equal(actual[step:step + nproc], 7 + step)
+                            continue
                         expected = np.full_like(actual, np.nan if floating else 0)
                         expected[step:step + nproc] = 7 + step
                         np.testing.assert_array_equal(actual, expected)
@@ -723,9 +731,10 @@ def main():
     parser.add_argument("check", choices=["layout", "reader"])
     parser.add_argument("directory", type=Path)
     parser.add_argument("case", nargs="?", default="static")
+    parser.add_argument("--debug-fill", type=int, choices=(0, 1), default=1)
     args = parser.parse_args()
     if args.check == "layout":
-        check_layout(args.directory)
+        check_layout(args.directory, bool(args.debug_fill))
     else:
         check_reader(args.directory, args.case)
 
