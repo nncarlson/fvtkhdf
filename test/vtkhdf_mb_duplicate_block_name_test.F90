@@ -16,7 +16,7 @@ program vtkhdf_mb_duplicate_block_name_test
   integer :: rank, nproc, stat
 
   type(vtkhdf_mb_file) :: vizfile
-  type(vtkhdf_block_handle) :: hblk
+  type(vtkhdf_ug_block), pointer :: hblk => null()
 
   call test_env_init(rank, nproc)
 
@@ -30,16 +30,16 @@ program vtkhdf_mb_duplicate_block_name_test
   call get_tet_cube_mesh_data(points, cnode, xcnode, types)
   call shift_points(points, dx=real(rank, r8))
 
-  hblk = vizfile%add_block('Repeated Block', mode=UG_STATIC)
-  call vizfile%write_mesh(hblk, points, cnode, xcnode, types)
+  call vizfile%add_block('Repeated Block', hblk, mode=UG_STATIC)
+  call hblk%write_mesh(points, cnode, xcnode, types)
 
-  hblk = vizfile%add_block('Other Block', mode=UG_STATIC)
+  call vizfile%add_block('Other Block', hblk, mode=UG_STATIC)
   call shift_points(points, dy=1.0_r8)
-  call vizfile%write_mesh(hblk, points, cnode, xcnode, types)
+  call hblk%write_mesh(points, cnode, xcnode, types)
 
-  hblk = vizfile%add_block('Repeated Block', mode=UG_STATIC)
+  call vizfile%add_block('Repeated Block', hblk, mode=UG_STATIC)
   call shift_points(points, dy=1.0_r8)
-  call vizfile%write_mesh(hblk, points, cnode, xcnode, types)
+  call hblk%write_mesh(points, cnode, xcnode, types)
 
   call vizfile%close()
   call test_env_finalize()

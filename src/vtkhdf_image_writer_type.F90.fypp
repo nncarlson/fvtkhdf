@@ -35,6 +35,10 @@ module vtkhdf_image_writer_type
   end type
 
   ! Concrete leaf owned by a composite. It borrows the file and communicator.
+  ! This intentionally empty extension distinguishes the block's role from
+  ! its standalone file sibling; their shared implementation stays in the
+  ! abstract writer. If block-specific behavior is needed, move this type
+  ! and that behavior into a separate block module and file.
   type, extends(vtkhdf_image_writer), public :: vtkhdf_image_block
   end type
 

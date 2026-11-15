@@ -28,6 +28,7 @@ endfunction()
 
 vtkhdf_add_test_target(vtkhdf_mb_test vtkhdf_mb_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_basic_blocks_test vtkhdf_mb_basic_blocks_test.F90)
+vtkhdf_add_test_target(vtkhdf_mb_typed_blocks_test vtkhdf_mb_typed_blocks_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_duplicate_block_name_test vtkhdf_mb_duplicate_block_name_test.F90)
 vtkhdf_add_test_target(vtkhdf_ug_test vtkhdf_ug_test.F90)
 vtkhdf_add_test_target(vtkhdf_ug_static_test vtkhdf_ug_static_test.F90)
@@ -44,6 +45,15 @@ vtkhdf_add_test_target(vtkhdf_fail_foreign_data_handle_test vtkhdf_fail_foreign_
 
 vtkhdf_add_runtime_test(vtkhdf_mb_fixture_file vtkhdf_mb_test)
 vtkhdf_add_runtime_test(vtkhdf_mb_basic_blocks_file_type vtkhdf_mb_basic_blocks_test)
+vtkhdf_add_runtime_test(vtkhdf_mb_typed_blocks vtkhdf_mb_typed_blocks_test)
+set_tests_properties(vtkhdf_mb_typed_blocks PROPERTIES FIXTURES_SETUP vtkhdf_mb_typed_files)
+foreach(check layout reader)
+  add_test(NAME vtkhdf_mb_typed_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_typed_blocks_check.py
+            ${check} ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties(vtkhdf_mb_typed_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_mb_typed_files SKIP_RETURN_CODE 77)
+endforeach()
 vtkhdf_add_runtime_test(vtkhdf_mb_duplicate_block_name_file_type vtkhdf_mb_duplicate_block_name_test)
 vtkhdf_add_runtime_test(vtkhdf_ug_fixture_file vtkhdf_ug_test)
 vtkhdf_add_runtime_test(vtkhdf_ug_static_file_type vtkhdf_ug_static_test)

@@ -15,7 +15,7 @@ program vtkhdf_mb_zero_part_test
   integer :: rank, nproc, stat
 
   type(vtkhdf_mb_file) :: vizfile
-  type(vtkhdf_block_handle) :: hblk_full, hblk_sparse
+  type(vtkhdf_ug_block), pointer :: hblk_full => null(), hblk_sparse => null()
   type(vtkhdf_point_data_handle) :: hpoint_radius
 
   call test_env_init(rank, nproc)
@@ -26,36 +26,36 @@ program vtkhdf_mb_zero_part_test
   call get_tet_cube_mesh_data(points_full, cnode, xcnode, types)
   call shift_points(points_full, dx=real(rank, r8))
 
-  hblk_full = vizfile%add_block('Block-Full', mode=UG_FIXED_MESH)
-  call vizfile%write_mesh(hblk_full, points_full, cnode, xcnode, types)
+  call vizfile%add_block('Block-Full', hblk_full, mode=UG_FIXED_MESH)
+  call hblk_full%write_mesh(points_full, cnode, xcnode, types)
 
-  hblk_sparse = vizfile%add_block('Block-Sparse', mode=UG_FIXED_MESH)
+  call vizfile%add_block('Block-Sparse', hblk_sparse, mode=UG_FIXED_MESH)
   if (rank == 0) then
     call get_zero_mesh_data(points_zero, cnode_zero, xcnode_zero, types_zero)
-    call vizfile%write_mesh(hblk_sparse, points_zero, cnode_zero, xcnode_zero, types_zero)
+    call hblk_sparse%write_mesh(points_zero, cnode_zero, xcnode_zero, types_zero)
   else
     points_sparse = points_full
     call shift_points(points_sparse, dy=1.0_r8)
-    call vizfile%write_mesh(hblk_sparse, points_sparse, cnode, xcnode, types)
+    call hblk_sparse%write_mesh(points_sparse, cnode, xcnode, types)
   end if
 
-  hpoint_radius = vizfile%register_temporal_point_data(hblk_sparse, 'point-radius', 0.0_r8)
+  hpoint_radius = hblk_sparse%register_temporal_point_data('point-radius', 0.0_r8)
 
   call vizfile%start_time_step(0.0_r8)
   if (rank == 0) then
     allocate(zero_scalar_data(0))
-    call vizfile%write_point_data(hblk_sparse, hpoint_radius, zero_scalar_data)
+    call hblk_sparse%write_point_data(hpoint_radius, zero_scalar_data)
   else
     call get_scalar_point_data(points_sparse, scalar_data)
-    call vizfile%write_point_data(hblk_sparse, hpoint_radius, scalar_data)
+    call hblk_sparse%write_point_data(hpoint_radius, scalar_data)
   end if
   call vizfile%finalize_time_step()
 
   call vizfile%start_time_step(1.0_r8)
   if (rank == 0) then
-    call vizfile%write_point_data(hblk_sparse, hpoint_radius, zero_scalar_data)
+    call hblk_sparse%write_point_data(hpoint_radius, zero_scalar_data)
   else
-    call vizfile%write_point_data(hblk_sparse, hpoint_radius, scalar_data + 1.0_r8)
+    call hblk_sparse%write_point_data(hpoint_radius, scalar_data + 1.0_r8)
   end if
   call vizfile%finalize_time_step()
 

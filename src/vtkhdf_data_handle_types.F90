@@ -2,8 +2,8 @@
 !! VTKHDF_DATA_HANDLE_TYPES
 !!
 !! This module defines the cell, point, and field data handle types shared by
-!! simple writers and composite interfaces. Handles identify datasets; block placement is supplied
-!! separately at each write.
+!! simple writers and composite blocks. Handles identify data arrays within
+!! their owning VTK dataset.
 !!
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
@@ -17,14 +17,12 @@ module vtkhdf_data_handle_types
   type, abstract :: vtkhdf_data_handle
     private
     integer :: index_ = -1
-    ! BLOCK_INDEX_ is interpreted only by the MultiBlock front end.
-    integer :: block_index_ = -1
     ! Root HDF5 group ID of the owning VTK dataset (an individual leaf block
     ! within a MultiBlock file). Writers use this only to check
     ! handle ownership during the open writer's lifetime.
     integer(int64) :: owner = -1
   contains
-    procedure :: set, index, set_block_index, block_index
+    procedure :: set, index
   end type
 
   type, extends(vtkhdf_data_handle), public :: vtkhdf_cell_data_handle
@@ -37,18 +35,6 @@ module vtkhdf_data_handle_types
   end type
 
 contains
-
-  subroutine set_block_index(this, block_index)
-    class(vtkhdf_data_handle), intent(inout) :: this
-    integer, intent(in) :: block_index
-    this%block_index_ = block_index
-  end subroutine
-
-  pure function block_index(this) result(value)
-    class(vtkhdf_data_handle), intent(in) :: this
-    integer :: value
-    value = this%block_index_
-  end function
 
   subroutine set(this, index, owner)
     class(vtkhdf_data_handle), intent(out) :: this

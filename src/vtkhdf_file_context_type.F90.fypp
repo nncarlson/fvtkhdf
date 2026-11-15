@@ -1,8 +1,8 @@
 !!
 !! VTKHDF_FILE_CONTEXT
 !!
-!! Internal helper for owned standalone file and communicator resources.
-!! File wrappers access ID and CTX directly; dataset writers borrow CTX.
+!! Internal helper for owned HDF5 file and communicator resources.
+!! File owners access ID and CTX directly; dataset writers borrow CTX.
 !! Cleanup is explicit and collective; implicit finalization performs no I/O.
 !! Callers initialize the HDF5 bindings and establish the HDF5 error context.
 !!

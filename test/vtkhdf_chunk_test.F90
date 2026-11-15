@@ -18,7 +18,7 @@ program vtkhdf_chunk_test
 
   type(vtkhdf_ug_file) :: ug_file
   type(vtkhdf_mb_file) :: mb_file
-  type(vtkhdf_block_handle) :: block
+  type(vtkhdf_ug_block), pointer :: block => null()
 
 #ifdef USE_MPI
   call MPI_Init(stat)
@@ -44,8 +44,8 @@ program vtkhdf_chunk_test
   call mb_file%create('chunk_custom.vtkhdf', stat, errmsg, data_chunk_bytes=1024_int64*1024)
 #endif
   if (stat /= 0) error stop errmsg
-  block = mb_file%add_block('Block', mode=UG_FIXED_MESH)
-  call mb_file%write_mesh(block, points, cnode, xcnode, types)
+  call mb_file%add_block('Block', block, mode=UG_FIXED_MESH)
+  call block%write_mesh(points, cnode, xcnode, types)
   call mb_file%close()
 
 #ifdef USE_MPI

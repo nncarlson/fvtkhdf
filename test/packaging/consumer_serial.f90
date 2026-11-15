@@ -1,5 +1,7 @@
 program consumer_serial
+  use,intrinsic :: iso_fortran_env, only: int8
   use vtkhdf_ug_file_type
+  use vtkhdf_mb_file_type, only: vtkhdf_mb_file, vtkhdf_ug_block
   use vtkhdf_rectilinear_file_type
   use vtkhdf_structured_file_type
   use vtkhdf_image_file_type
@@ -11,6 +13,8 @@ program consumer_serial
   type(vtkhdf_image_file) :: image
   type(vtkhdf_rectilinear_file) :: rect
   type(vtkhdf_structured_file) :: grid
+  type(vtkhdf_mb_file) :: mb
+  type(vtkhdf_ug_block), pointer :: block
   real :: points(3,2,2,1)
   type(vtkhdf_cell_data_handle) :: variable
   integer :: selected(3,2), rank
@@ -40,6 +44,13 @@ program consumer_serial
   if (rank /= 0) selected(1,2) = -1
   call grid%write_mesh_geometry(points,[0,0,0],selected)
   call grid%close()
+
+  call mb%create('consumer_mb.vtkhdf',ierr,errmsg)
+  if (ierr /= 0) error stop errmsg
+  call mb%add_block('mesh',block)
+  call block%write_mesh(reshape(points,[3,4]),[1,2,4,3],[1,5],[9_int8])
+  call block%write_cell_data('value',[2.])
+  call mb%close()
 
   print *, 'consumer_serial: link OK'
 end program
