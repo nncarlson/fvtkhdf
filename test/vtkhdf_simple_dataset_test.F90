@@ -1,5 +1,5 @@
 ! Exercise the shared lifecycle with heterogeneous borrowed leaves. This is
-! deliberately below MB's public API, which still creates only UG blocks.
+! deliberately below MB's public API, testing the dataset lifecycle directly.
 program vtkhdf_simple_dataset_test
   use,intrinsic :: iso_fortran_env
   use,intrinsic :: iso_c_binding, only: c_funptr, c_ptr, c_associated

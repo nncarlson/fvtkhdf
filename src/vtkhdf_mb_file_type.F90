@@ -4,10 +4,10 @@
 !! This module defines a derived type for exporting mesh-based solution data
 !! to a VTKHDF file readable by the ParaView visualization tool. The type
 !! produces a MultiBlockDataSet (MB) dataset, and supports static and
-!! time-dependent cell, point, and field data. Composite-owned UG blocks
+!! time-dependent cell, point, and field data. Composite-owned typed blocks
 !! expose their mesh and data operations directly through borrowed pointers.
 !!
-!! The output is limited to a flat collection of UnstructuredGrid blocks;
+!! The output is limited to a flat collection of simple dataset blocks;
 !! hierarchical nesting of MultiBlockDataSets is not supported.
 !!
 !! SPDX-License-Identifier: BSD-2-Clause
@@ -31,7 +31,11 @@ module vtkhdf_mb_file_type
   use vtkhdf_data_handle_types
   use vtkhdf_simple_dataset_class
   use vtkhdf_ug_file_type, only: UG_STATIC, UG_FIXED_MESH, UG_MOVING_MESH, UG_DYNAMIC_MESH
-  use vtkhdf_ug_writer_type
+  use vtkhdf_ug_writer_type, only: vtkhdf_ug_block
+  use vtkhdf_image_writer_type, only: vtkhdf_image_block
+  use vtkhdf_rectilinear_writer_type, only: vtkhdf_rectilinear_block
+  use vtkhdf_structured_writer_type, only: vtkhdf_structured_block
+  use vtkhdf_file_modes, only: VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
   use vtkhdf_file_context_type
   use vtkhdf_h5e_context_type
   use vtkhdf_version_param
@@ -39,6 +43,7 @@ module vtkhdf_mb_file_type
   private
 
   public :: vtkhdf_version, vtkhdf_ug_block
+  public :: vtkhdf_image_block, vtkhdf_rectilinear_block, vtkhdf_structured_block
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
   public :: UG_STATIC, UG_FIXED_MESH, UG_MOVING_MESH, UG_DYNAMIC_MESH
   public :: VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
@@ -64,8 +69,9 @@ module vtkhdf_mb_file_type
     procedure, private :: create_impl
     procedure :: close
     procedure :: flush
-    generic :: add_block => add_ug_block
-    procedure, private :: add_ug_block
+    generic :: add_block => add_ug_block, add_image_block, add_rectilinear_block, add_structured_block
+    procedure, private :: add_ug_block, add_image_block, add_rectilinear_block, add_structured_block
+    procedure, private :: add_block_impl
     generic :: start_time_step => start_time_step_real32, start_time_step_real64
     procedure, private :: start_time_step_real32, start_time_step_real64
     procedure :: finalize_time_step
@@ -236,10 +242,47 @@ contains
   ! The returned pointer borrows an individually allocated target owned by MB.
   ! Growing BLOCKS preserves that target; CLOSE invalidates borrowed pointers.
   subroutine add_ug_block(this, name, dataset, mode)
-
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: name
     type(vtkhdf_ug_block), pointer, intent(out) :: dataset
+    integer, intent(in), optional :: mode
+    allocate(dataset)
+    call this%add_block_impl(name, dataset, mode)
+  end subroutine add_ug_block
+
+  subroutine add_image_block(this, name, dataset, mode)
+    class(vtkhdf_mb_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    type(vtkhdf_image_block), pointer, intent(out) :: dataset
+    integer, intent(in), optional :: mode
+    allocate(dataset)
+    call this%add_block_impl(name, dataset, mode)
+  end subroutine add_image_block
+
+  subroutine add_rectilinear_block(this, name, dataset, mode)
+    class(vtkhdf_mb_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    type(vtkhdf_rectilinear_block), pointer, intent(out) :: dataset
+    integer, intent(in), optional :: mode
+    allocate(dataset)
+    call this%add_block_impl(name, dataset, mode)
+  end subroutine add_rectilinear_block
+
+  subroutine add_structured_block(this, name, dataset, mode)
+    class(vtkhdf_mb_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    type(vtkhdf_structured_block), pointer, intent(out) :: dataset
+    integer, intent(in), optional :: mode
+    allocate(dataset)
+    call this%add_block_impl(name, dataset, mode)
+  end subroutine add_structured_block
+
+  ! DATASET is an individually allocated pointer target supplied by an overload.
+  ! MB retains that target after this procedure returns.
+  subroutine add_block_impl(this, name, dataset, mode)
+    class(vtkhdf_mb_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    class(vtkhdf_simple_dataset), target, intent(inout) :: dataset
     integer, intent(in), optional :: mode
 
     integer :: ierr, mode_
@@ -274,14 +317,27 @@ contains
       end block
     end if
 
-    allocate(dataset)
     this%blocks(this%next_block_index+1)%b => dataset
     this%blocks(this%next_block_index+1)%internal_name = internal_name
 
     call err_ctx%capture
     write(group_name,'(a,i0)') 'Group_', this%next_block_index
-    call dataset%init(this%vtk_id, trim(group_name), this%file%ctx, mode_, this%data_chunk_bytes)
-    call dataset%set_block_metadata(this%next_block_index, external_name)
+    select type (dataset)
+    type is (vtkhdf_ug_block)
+      call dataset%init(this%vtk_id, trim(group_name), this%file%ctx, mode_, this%data_chunk_bytes)
+      call dataset%set_block_metadata(this%next_block_index, external_name)
+    type is (vtkhdf_image_block)
+      call dataset%init(this%vtk_id, trim(group_name), this%file%ctx, mode_, this%data_chunk_bytes)
+      call dataset%set_block_metadata(this%next_block_index, external_name)
+    type is (vtkhdf_rectilinear_block)
+      call dataset%init(this%vtk_id, trim(group_name), this%file%ctx, mode_, this%data_chunk_bytes)
+      call dataset%set_block_metadata(this%next_block_index, external_name)
+    type is (vtkhdf_structured_block)
+      call dataset%init(this%vtk_id, trim(group_name), this%file%ctx, mode_, this%data_chunk_bytes)
+      call dataset%set_block_metadata(this%next_block_index, external_name)
+    class default
+      INSIST(.false.)
+    end select
     this%is_temporal = this%is_temporal .or. dataset%temporal_enabled()
     this%next_block_index = this%next_block_index + 1
 
@@ -289,7 +345,7 @@ contains
     INSIST(this%file%ctx%global_all(ierr >= 0))
     call err_ctx%restore(0)
 
-  end subroutine add_ug_block
+  end subroutine add_block_impl
 
   !! Mark the start of a new time step with time value TIME. Subsequent output
   !! of time-dependent datasets will be associated with this time step.
