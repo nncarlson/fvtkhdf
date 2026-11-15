@@ -63,15 +63,17 @@ Mesh Data
    Geometry uses the same region selection, halo exclusion, and empty
    contribution conventions as :doc:`structured`. Visible points must have
    coordinates supplied exactly once. Unwritten coordinates default to quiet
-   NaN. A zero spatial extent with ``write_bounds`` omitted supplies an empty
+   NaN in Debug builds and are unspecified in other builds, including Release.
+   A zero spatial extent with ``write_bounds`` omitted supplies an empty
    contribution; the component extent must still be three. ``array_origin``
    remains required, and ``[0,0,0]`` suffices for an empty contribution.
 
 In moving-mesh mode, the first geometry call in a step begins a replacement;
 subsequent calls in that step supply further regions of the same replacement.
-An all-empty collective call also begins a replacement. Unwritten regions use
-fill values, rather than inheriting preceding coordinates. Complete all regions
-before writing point/cell data or finalizing the step.
+An all-empty collective call also begins a replacement. Unwritten regions follow
+the build-dependent fill policy above rather than reusing the preceding
+geometry snapshot. Complete all visible regions before writing point/cell data
+or finalizing the step.
 
 Omitting all geometry calls during a step reuses the most recently written
 geometry. A stored geometry snapshot is therefore distinct from a time step:

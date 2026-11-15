@@ -413,9 +413,10 @@ if(ENABLE_MPI)
   endforeach()
 endif()
 
+set(VTKHDF_DEBUG_FILL "$<IF:$<CONFIG:Debug>,1,0>")
 add_test(NAME vtkhdf_image_layout
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_image_check.py
-          layout ${CMAKE_CURRENT_BINARY_DIR})
+          layout ${CMAKE_CURRENT_BINARY_DIR} --debug-fill ${VTKHDF_DEBUG_FILL})
 set_tests_properties(vtkhdf_image_layout PROPERTIES
   FIXTURES_REQUIRED vtkhdf_image_files SKIP_RETURN_CODE 77)
 foreach(case static temporal temporal_fielddata registration_names numeric dim_1 dim_2 dim_3 dim_4 dim_5 dim_6 dim_7)
@@ -438,7 +439,7 @@ if(ENABLE_MPI)
     WORKING_DIRECTORY ${IMAGE_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_image_two_rank_files)
   add_test(NAME vtkhdf_image_two_rank_layout
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_image_check.py
-            layout ${IMAGE_TWO_RANK_DIR})
+            layout ${IMAGE_TWO_RANK_DIR} --debug-fill ${VTKHDF_DEBUG_FILL})
   set_tests_properties(vtkhdf_image_two_rank_layout PROPERTIES
     FIXTURES_REQUIRED vtkhdf_image_two_rank_files SKIP_RETURN_CODE 77)
 endif()
@@ -489,13 +490,13 @@ vtkhdf_add_runtime_test(vtkhdf_moving_grid_file_types vtkhdf_moving_grid_test)
 set_tests_properties(vtkhdf_moving_grid_file_types PROPERTIES FIXTURES_SETUP vtkhdf_moving_grid_files)
 add_test(NAME vtkhdf_moving_grid_layout
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_moving_grid_check.py
-          layout ${CMAKE_CURRENT_BINARY_DIR})
+          layout ${CMAKE_CURRENT_BINARY_DIR} --debug-fill ${VTKHDF_DEBUG_FILL})
 set_tests_properties(vtkhdf_moving_grid_layout PROPERTIES
   FIXTURES_REQUIRED vtkhdf_moving_grid_files SKIP_RETURN_CODE 77)
 foreach(mask RANGE 1 7)
   add_test(NAME vtkhdf_moving_grid_reader_dim_${mask}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_moving_grid_check.py
-            reader ${CMAKE_CURRENT_BINARY_DIR} ${mask})
+            reader ${CMAKE_CURRENT_BINARY_DIR} ${mask} --debug-fill ${VTKHDF_DEBUG_FILL})
   set_tests_properties(vtkhdf_moving_grid_reader_dim_${mask} PROPERTIES
     FIXTURES_REQUIRED vtkhdf_moving_grid_files SKIP_RETURN_CODE 77)
 endforeach()
@@ -509,7 +510,7 @@ if(ENABLE_MPI)
     WORKING_DIRECTORY ${MOVING_GRID_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_moving_grid_two_rank_files)
   add_test(NAME vtkhdf_moving_grid_two_rank_layout
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_moving_grid_check.py
-            layout ${MOVING_GRID_TWO_RANK_DIR})
+            layout ${MOVING_GRID_TWO_RANK_DIR} --debug-fill ${VTKHDF_DEBUG_FILL})
   set_tests_properties(vtkhdf_moving_grid_two_rank_layout PROPERTIES
     FIXTURES_REQUIRED vtkhdf_moving_grid_two_rank_files SKIP_RETURN_CODE 77)
 endif()
