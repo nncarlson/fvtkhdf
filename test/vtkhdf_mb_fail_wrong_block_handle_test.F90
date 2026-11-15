@@ -30,10 +30,10 @@ program vtkhdf_mb_fail_wrong_block_handle_test
   call get_tet_cube_mesh_data(points, cnode, xcnode, types)
   call shift_points(points, dx=real(rank, r8))
 
-  call vizfile%add_block('Block-A', hblk_a, mode=UG_FIXED_MESH)
+  call vizfile%add_block('Block-A', hblk_a, mode=VTKHDF_FIXED_MESH)
   call hblk_a%write_mesh(points, cnode, xcnode, types)
 
-  call vizfile%add_block('Block-B', hblk_b, mode=UG_FIXED_MESH)
+  call vizfile%add_block('Block-B', hblk_b, mode=VTKHDF_FIXED_MESH)
   call hblk_b%write_mesh(points, cnode, xcnode, types)
 
   hpoint_radius = hblk_a%register_temporal_point_data('point-radius', 0.0_r8)

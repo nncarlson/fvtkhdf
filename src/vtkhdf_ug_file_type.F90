@@ -26,13 +26,6 @@ module vtkhdf_ug_file_type
   public :: vtkhdf_version, VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
 
-  !! Compatibility aliases for the original UnstructuredGrid mode names.
-  integer, parameter, public :: UG_STATIC       = VTKHDF_STATIC
-  integer, parameter, public :: UG_FIXED_MESH   = VTKHDF_FIXED_MESH
-  integer, parameter, public :: UG_MOVING_MESH  = VTKHDF_MOVING_MESH
-  integer, parameter, public :: UG_DYNAMIC_MESH = VTKHDF_DYNAMIC_MESH
-
-
   type, extends(vtkhdf_ug_writer), public :: vtkhdf_ug_file
     private
     type(vtkhdf_file_context) :: file

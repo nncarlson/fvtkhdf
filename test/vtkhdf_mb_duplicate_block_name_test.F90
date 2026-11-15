@@ -30,14 +30,14 @@ program vtkhdf_mb_duplicate_block_name_test
   call get_tet_cube_mesh_data(points, cnode, xcnode, types)
   call shift_points(points, dx=real(rank, r8))
 
-  call vizfile%add_block('Repeated Block', hblk, mode=UG_STATIC)
+  call vizfile%add_block('Repeated Block', hblk, mode=VTKHDF_STATIC)
   call hblk%write_mesh(points, cnode, xcnode, types)
 
-  call vizfile%add_block('Other Block', hblk, mode=UG_STATIC)
+  call vizfile%add_block('Other Block', hblk, mode=VTKHDF_STATIC)
   call shift_points(points, dy=1.0_r8)
   call hblk%write_mesh(points, cnode, xcnode, types)
 
-  call vizfile%add_block('Repeated Block', hblk, mode=UG_STATIC)
+  call vizfile%add_block('Repeated Block', hblk, mode=VTKHDF_STATIC)
   call shift_points(points, dy=1.0_r8)
   call hblk%write_mesh(points, cnode, xcnode, types)
 

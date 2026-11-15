@@ -15,9 +15,9 @@ program vtkhdf_ug_fail_data_before_mesh_test
   call test_env_init(rank, nproc)
 
 #ifdef USE_MPI
-  call vizfile%create('ug_fail_data_before_mesh_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_STATIC)
+  call vizfile%create('ug_fail_data_before_mesh_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_STATIC)
 #else
-  call vizfile%create('ug_fail_data_before_mesh_test.vtkhdf', stat, errmsg, mode=UG_STATIC)
+  call vizfile%create('ug_fail_data_before_mesh_test.vtkhdf', stat, errmsg, mode=VTKHDF_STATIC)
 #endif
   if (stat /= 0) error stop errmsg
 

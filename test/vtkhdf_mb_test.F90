@@ -34,10 +34,10 @@ program vtkhdf_mb_test
   points_b = points_a
   call shift_points(points_b, dy=1.0_r8)
 
-  call vizfile%add_block('Block-A', hblk_a, mode=UG_FIXED_MESH)
+  call vizfile%add_block('Block-A', hblk_a, mode=VTKHDF_FIXED_MESH)
   call hblk_a%write_mesh(points_a, cnode, xcnode, types)
 
-  call vizfile%add_block('Block-B', hblk_b, mode=UG_FIXED_MESH)
+  call vizfile%add_block('Block-B', hblk_b, mode=VTKHDF_FIXED_MESH)
   call hblk_b%write_mesh(points_b, cnode, xcnode, types)
 
   hpoint_velocity = hblk_b%register_temporal_point_data('point-velocity', [real(r8) :: 0, 0, 0], &

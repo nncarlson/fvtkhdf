@@ -20,9 +20,9 @@ program vtkhdf_ug_fail_late_register_test
   call test_env_init(rank, nproc)
 
 #ifdef USE_MPI
-  call vizfile%create('ug_fail_late_register_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_FIXED_MESH)
+  call vizfile%create('ug_fail_late_register_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_FIXED_MESH)
 #else
-  call vizfile%create('ug_fail_late_register_test.vtkhdf', stat, errmsg, mode=UG_FIXED_MESH)
+  call vizfile%create('ug_fail_late_register_test.vtkhdf', stat, errmsg, mode=VTKHDF_FIXED_MESH)
 #endif
   if (stat /= 0) error stop errmsg
 

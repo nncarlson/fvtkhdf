@@ -30,7 +30,6 @@ module vtkhdf_mb_file_type
   use vtkhdf_data_support, only: named_record, resolve_record_name
   use vtkhdf_data_handle_types
   use vtkhdf_simple_dataset_class
-  use vtkhdf_ug_file_type, only: UG_STATIC, UG_FIXED_MESH, UG_MOVING_MESH, UG_DYNAMIC_MESH
   use vtkhdf_ug_writer_type, only: vtkhdf_ug_block
   use vtkhdf_image_writer_type, only: vtkhdf_image_block
   use vtkhdf_rectilinear_writer_type, only: vtkhdf_rectilinear_block
@@ -45,7 +44,6 @@ module vtkhdf_mb_file_type
   public :: vtkhdf_version, vtkhdf_ug_block
   public :: vtkhdf_image_block, vtkhdf_rectilinear_block, vtkhdf_structured_block
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
-  public :: UG_STATIC, UG_FIXED_MESH, UG_MOVING_MESH, UG_DYNAMIC_MESH
   public :: VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
 
   type, public :: vtkhdf_mb_file

@@ -21,9 +21,9 @@ program vtkhdf_ug_static_test
   call test_env_init(rank, nproc)
 
 #ifdef USE_MPI
-  call vizfile%create('ug_static_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_STATIC)
+  call vizfile%create('ug_static_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_STATIC)
 #else
-  call vizfile%create('ug_static_test.vtkhdf', stat, errmsg, mode=UG_STATIC)
+  call vizfile%create('ug_static_test.vtkhdf', stat, errmsg, mode=VTKHDF_STATIC)
 #endif
   if (stat /= 0) error stop errmsg
 

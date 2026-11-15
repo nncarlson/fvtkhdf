@@ -30,9 +30,9 @@ program vtkhdf_chunk_test
   call get_mesh_data(points, cnode, xcnode, types)
 
 #ifdef USE_MPI
-  call ug_file%create('chunk_default.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=UG_FIXED_MESH)
+  call ug_file%create('chunk_default.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_FIXED_MESH)
 #else
-  call ug_file%create('chunk_default.vtkhdf', stat, errmsg, mode=UG_FIXED_MESH)
+  call ug_file%create('chunk_default.vtkhdf', stat, errmsg, mode=VTKHDF_FIXED_MESH)
 #endif
   if (stat /= 0) error stop errmsg
   call ug_file%write_mesh(points, cnode, xcnode, types)
@@ -44,7 +44,7 @@ program vtkhdf_chunk_test
   call mb_file%create('chunk_custom.vtkhdf', stat, errmsg, data_chunk_bytes=1024_int64*1024)
 #endif
   if (stat /= 0) error stop errmsg
-  call mb_file%add_block('Block', block, mode=UG_FIXED_MESH)
+  call mb_file%add_block('Block', block, mode=VTKHDF_FIXED_MESH)
   call block%write_mesh(points, cnode, xcnode, types)
   call mb_file%close()
 

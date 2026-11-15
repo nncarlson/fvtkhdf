@@ -23,12 +23,12 @@ program vtkhdf_mb_fail_late_block_test
 #endif
   if (stat /= 0) error stop errmsg
 
-  call vizfile%add_block('Block-A', hblk, mode=UG_FIXED_MESH)
+  call vizfile%add_block('Block-A', hblk, mode=VTKHDF_FIXED_MESH)
 
   call vizfile%start_time_step(0.0_r8)
 
   ! Temporal blocks must be defined before time stepping starts.
-  call vizfile%add_block('Late-Block', hblk, mode=UG_FIXED_MESH)
+  call vizfile%add_block('Late-Block', hblk, mode=VTKHDF_FIXED_MESH)
 
   ! Return successfully if the expected assertion did not fire. Closing the
   ! file could trigger an unrelated missing-mesh assertion and mask the failure.

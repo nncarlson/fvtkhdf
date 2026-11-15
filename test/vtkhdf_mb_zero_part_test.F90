@@ -26,10 +26,10 @@ program vtkhdf_mb_zero_part_test
   call get_tet_cube_mesh_data(points_full, cnode, xcnode, types)
   call shift_points(points_full, dx=real(rank, r8))
 
-  call vizfile%add_block('Block-Full', hblk_full, mode=UG_FIXED_MESH)
+  call vizfile%add_block('Block-Full', hblk_full, mode=VTKHDF_FIXED_MESH)
   call hblk_full%write_mesh(points_full, cnode, xcnode, types)
 
-  call vizfile%add_block('Block-Sparse', hblk_sparse, mode=UG_FIXED_MESH)
+  call vizfile%add_block('Block-Sparse', hblk_sparse, mode=VTKHDF_FIXED_MESH)
   if (rank == 0) then
     call get_zero_mesh_data(points_zero, cnode_zero, xcnode_zero, types_zero)
     call hblk_sparse%write_mesh(points_zero, cnode_zero, xcnode_zero, types_zero)

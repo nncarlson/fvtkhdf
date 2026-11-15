@@ -74,10 +74,8 @@ The writer supports all four modes:
 
 Field data may be static or temporal in all temporal modes.
 
-The mode constants are exported by ``vtkhdf_ug_file_type``. The original
-names ``UG_STATIC``, ``UG_FIXED_MESH``, ``UG_MOVING_MESH``, and
-``UG_DYNAMIC_MESH`` remain available as compatibility aliases with the same
-values.
+The mode constants are exported by ``vtkhdf_ug_file_type`` and
+``vtkhdf_file_modes``.
 
 Temporal datasets are registered before time stepping; writes through their
 handles supply values for the current step. Static data remains independent
