@@ -48,6 +48,7 @@ def layout(directory):
         assert len(root["Assembly"]) == 24
         for i in range(24):
             block = root[f"Group_{i}"]
+            assert int(np.asarray(block.attrs["Index"]).flat[0]) == i
             assert "Steps" not in block
             link = root["Assembly"].get(f"Block_{i + 1}", getlink=True)
             assert isinstance(link, h5py.SoftLink)
@@ -62,6 +63,7 @@ def layout(directory):
         initial_cells = int(counts(nproc).sum())
         for mode in range(1, 4):
             block = root[f"Group_{mode - 1}"]
+            assert int(np.asarray(block.attrs["Index"]).flat[0]) == mode - 1
             steps = block["Steps"]
             assert int(np.asarray(steps.attrs["NSteps"]).flat[0]) == 3
             np.testing.assert_array_equal(steps["Values"], [0, 1, 2])

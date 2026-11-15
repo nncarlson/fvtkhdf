@@ -48,8 +48,8 @@ module vtkhdf_mb_file_type
     type(vtkhdf_file_context) :: file
     integer(hid_t) :: vtk_id=H5I_INVALID_HID, ass_id=H5I_INVALID_HID
     integer(int64) :: data_chunk_bytes = 128_int64*1024
-    integer :: next_block_index = 0
-    type(block_item), allocatable :: blocks(:) ! a 0-indexed array
+    integer :: next_block_index = 0 ! zero-based index in the file
+    type(block_item), allocatable :: blocks(:) ! a 1-indexed array
     logical :: is_temporal = .false., start_time_step_called = .false.
   contains
 #ifdef USE_MPI_F08
@@ -89,7 +89,7 @@ contains
     type(vtkhdf_mb_file), intent(inout) :: this
     integer :: j
     if (allocated(this%blocks)) then
-      do j = 0, ubound(this%blocks,dim=1)
+      do j = 1, size(this%blocks)
         if (associated(this%blocks(j)%b)) deallocate(this%blocks(j)%b)
       end do
     end if
@@ -106,7 +106,7 @@ contains
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
     if (allocated(this%blocks)) then
-      do j = 0, ubound(this%blocks,dim=1)
+      do j = 1, size(this%blocks)
         if (associated(this%blocks(j)%b)) then
           call this%blocks(j)%b%close
           deallocate(this%blocks(j)%b)
@@ -256,35 +256,17 @@ contains
       INSIST(.not.this%start_time_step_called)
     end if
 
-#ifdef GNU_PR128230
-    ! Copy only the names into a contiguous, one-based array (GNU PR128230).
-    ! An array constructor of the parent components leaks their strings in GCC.
-    if (allocated(this%blocks)) then
-      block
-        type(named_record), allocatable :: names(:)
-        integer :: j
-        allocate(names(size(this%blocks)))
-        do j = 0, ubound(this%blocks,dim=1)
-          names(j+1)%internal_name = this%blocks(j)%internal_name
-        end do
-        call resolve_record_name(name, 'Unamed_Block', external_name, internal_name, names)
-      end block
-    else
-      call resolve_record_name(name, 'Unamed_Block', external_name, internal_name)
-    end if
-#else
     call resolve_record_name(name, 'Unamed_Block', external_name, internal_name, this%blocks)
-#endif
 
     if (.not.allocated(this%blocks)) then
-      allocate(this%blocks(0:0))
+      allocate(this%blocks(1))
     else
       block
         integer :: j, n
         type(block_item), allocatable :: tmp(:)
         n = size(this%blocks)
-        allocate(tmp(0:n))
-        do j = 0, n-1
+        allocate(tmp(n+1))
+        do j = 1, n
           tmp(j)%b => this%blocks(j)%b
           call move_alloc(this%blocks(j)%internal_name, tmp(j)%internal_name)
         end do
@@ -293,8 +275,8 @@ contains
     end if
 
     allocate(dataset)
-    this%blocks(this%next_block_index)%b => dataset
-    this%blocks(this%next_block_index)%internal_name = internal_name
+    this%blocks(this%next_block_index+1)%b => dataset
+    this%blocks(this%next_block_index+1)%internal_name = internal_name
 
     call err_ctx%capture
     write(group_name,'(a,i0)') 'Group_', this%next_block_index
@@ -327,7 +309,7 @@ contains
     INSIST(this%is_temporal)
     this%start_time_step_called = .true.
     if (allocated(this%blocks)) then
-      do j = 0, ubound(this%blocks,dim=1)
+      do j = 1, size(this%blocks)
         associate (b => this%blocks(j)%b)
           if (b%temporal_enabled()) call b%start_time_step(time)
         end associate
@@ -343,7 +325,7 @@ contains
     call err_ctx%capture
     INSIST(this%is_temporal)
     if (allocated(this%blocks)) then
-      do j = 0, ubound(this%blocks,dim=1)
+      do j = 1, size(this%blocks)
         associate (b => this%blocks(j)%b)
           if (b%temporal_enabled() .and. b%step_is_open()) call b%finalize_time_step()
         end associate
