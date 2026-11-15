@@ -557,7 +557,8 @@ endif()
 vtkhdf_add_test_target(vtkhdf_htg_fail_test vtkhdf_htg_fail_test.F90)
 foreach(case no_grid bad_dims bad_branch_factor grid_twice axis_length tree_id_range missing_cells extra_cells
              masked_refined topology_twice data_before_topology data_before_geometry wrong_cell_count
-             geometry_change late_register mesh_after_data static_data missing_data)
+             geometry_change late_register mesh_after_data static_data missing_data
+             interface_one_name interface_bad_name)
   vtkhdf_add_runtime_test(vtkhdf_htg_fail_${case} vtkhdf_htg_fail_test ${case})
   set_tests_properties(vtkhdf_htg_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
 endforeach()

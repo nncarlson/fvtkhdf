@@ -66,6 +66,15 @@ module vtkhdf_htg_file_type
   public :: VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
   public :: vtkhdf_version
   public :: vtkhdf_cell_data_handle, vtkhdf_field_data_handle
+  public :: vtkhdf_htg_valid_topology
+
+  !! Check, without writing, that breadth-first refinement flags describe
+  !! complete trees, as WRITE_MESH_TOPOLOGY requires (see the definition).
+  interface vtkhdf_htg_valid_topology
+#:for ikind, idecl, ih5type in ints_no_int8
+    module procedure valid_topology_${ikind}$
+#:endfor
+  end interface
 
   ! Adds information for validating data reuse with dynamic meshes.
   type, extends(dataset_record) :: cell_dataset
@@ -393,13 +402,21 @@ contains
 
   !! Define the grid of root cells. DIMS holds the number of grid points along
   !! each axis, as for a RectilinearGrid; a singleton axis has one point.
+  !! INTERFACE_NORMALS_NAME and INTERFACE_INTERCEPTS_NAME, given together,
+  !! name the 3-component cell arrays that describe material interfaces. They
+  !! are stored as root attributes, which the VTK reader uses to enable the
+  !! grid's interface. The reader resolves them against cell array names as
+  !! stored, so they may not contain characters that cell data names have
+  !! replaced ('/', '.', or space).
 
-  subroutine write_mesh(this, dims, branch_factor, transposed_root_indexing)
+  subroutine write_mesh(this, dims, branch_factor, transposed_root_indexing, &
+      interface_normals_name, interface_intercepts_name)
 
     class(vtkhdf_htg_file), intent(inout) :: this
     integer, intent(in) :: dims(:)
     integer, intent(in), optional :: branch_factor
     logical, intent(in), optional :: transposed_root_indexing
+    character(*), intent(in), optional :: interface_normals_name, interface_intercepts_name
 
     integer :: branch_factor_, j
     logical :: transposed
@@ -420,6 +437,14 @@ contains
 
     ASSERT(this%ctx%identical([dims, branch_factor_, merge(1,0,transposed)]))
 
+    INSIST(present(interface_normals_name) .eqv. present(interface_intercepts_name))
+    if (present(interface_normals_name)) then
+      INSIST(valid_interface_name(interface_normals_name))
+      INSIST(valid_interface_name(interface_intercepts_name))
+      ASSERT(this%ctx%identical(trim(interface_normals_name)))
+      ASSERT(this%ctx%identical(trim(interface_intercepts_name)))
+    end if
+
     call err_ctx%capture
 
     this%dims = int(dims, int32)
@@ -435,12 +460,22 @@ contains
     call h5_write_attr(this%ctx, this%root_id, 'Dimensions', this%dims)
     call h5_write_attr(this%ctx, this%root_id, 'BranchFactor', int(branch_factor_,int32))
     call h5_write_attr(this%ctx, this%root_id, 'TransposedRootIndexing', merge(1_int32, 0_int32, transposed))
+    if (present(interface_normals_name)) then
+      call h5_write_attr(this%ctx, this%root_id, 'InterfaceNormalsName', trim(interface_normals_name))
+      call h5_write_attr(this%ctx, this%root_id, 'InterfaceInterceptsName', trim(interface_intercepts_name))
+    end if
 
     this%grid_defined = .true.
 
     call err_ctx%restore(0)
 
   end subroutine write_mesh
+
+  !! An interface array name must be stored unchanged as a cell data name.
+  pure logical function valid_interface_name(name)
+    character(*), intent(in) :: name
+    valid_interface_name = (len_trim(name) > 0) .and. (scan(trim(name), '/. ') == 0)
+  end function
 
   !! Rank zero supplies the coordinate vectors and writes one copy per part.
 
@@ -968,6 +1003,30 @@ contains
     valid = .true.
 
   end subroutine analyze_trees
+
+  !! VTKHDF_HTG_VALID_TOPOLOGY: true if REFINED, the breadth-first refinement
+  !! flags of the trees XTREE delimits (as for WRITE_MESH_TOPOLOGY), describe
+  !! complete trees whose refined cells have NCHILD children each. This is the
+  !! completeness check WRITE_MESH_TOPOLOGY applies, for producers that want
+  !! to test their output without writing; the other preconditions on XTREE
+  !! and the mask are checked by WRITE_MESH_TOPOLOGY itself.
+
+#:for ikind, idecl, ih5type in ints_no_int8
+  pure logical function valid_topology_${ikind}$(xtree, refined, nchild) result(valid)
+    ${idecl}$, intent(in) :: xtree(:)
+    logical, intent(in) :: refined(:)
+    integer, intent(in) :: nchild
+    integer(int64), allocatable :: depth_per_tree(:), cells_per_depth(:)
+    logical, allocatable :: descriptor_bits(:)
+    valid = .false.
+    if (nchild < 2 .or. size(xtree) < 1) return
+    if (xtree(1) /= 1) return
+    if (any(xtree(2:) < xtree(:size(xtree)-1))) return
+    if (int(xtree(size(xtree)), int64) - 1 /= size(refined, kind=int64)) return
+    call analyze_trees(int(xtree, int64), refined, nchild, depth_per_tree, cells_per_depth, &
+        descriptor_bits, valid)
+  end function
+#:endfor
 
   !! Pack logical values into bytes, most significant bit first, zero-padding
   !! the final byte. This is the storage order of VTK bit arrays.

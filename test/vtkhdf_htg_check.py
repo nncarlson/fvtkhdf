@@ -287,6 +287,33 @@ def check_coarse_layout():
         require(np.array_equal(root["CellData/value"][:], 1000.*root["TreeIds"][:]), "htg_coarse: value")
 
 
+def check_interface_layout():
+    with h5py.File(directory/"htg_interface.vtkhdf") as f:
+        root = f["VTKHDF"]
+        require(root.attrs["InterfaceNormalsName"] == b"normals", "htg_interface: InterfaceNormalsName")
+        require(root.attrs["InterfaceInterceptsName"] == b"intercepts", "htg_interface: InterfaceInterceptsName")
+        for key in ("normals", "intercepts"):
+            require(root[f"CellData/{key}"].shape[1:] == (3,), f"htg_interface: CellData/{key} components")
+    for name in FIXTURES:
+        with h5py.File(directory/f"{name}.vtkhdf") as f:
+            for key in ("InterfaceNormalsName", "InterfaceInterceptsName"):
+                require(key not in f["VTKHDF"].attrs, f"{name}: unexpected {key}")
+
+
+def check_interface_reader():
+    reader = vtkHDFReader()
+    reader.SetFileName(str(directory/"htg_interface.vtkhdf"))
+    reader.Update()
+    for htg in pieces(reader.GetOutputDataObject(0)):
+        require(htg.GetHasInterface(), "htg_interface: reader did not enable the interface")
+        require(htg.GetInterfaceNormalsName() == "normals", "htg_interface: normals name")
+        require(htg.GetInterfaceInterceptsName() == "intercepts", "htg_interface: intercepts name")
+        cell_data = htg.GetCellData()
+        for key in ("normals", "intercepts"):
+            array = cell_data.GetArray(key)
+            require(array is not None and array.GetNumberOfComponents() == 3, f"htg_interface: {key} array")
+
+
 def pieces(output):
     if isinstance(output, vtkHyperTreeGrid):
         return [output]
@@ -448,5 +475,7 @@ for fixture_name, fixture in FIXTURES.items():
         check_reader(fixture_name, fixture)
 if mode == "layout":
     check_coarse_layout()
+    check_interface_layout()
 else:
     check_coarse_reader()
+    check_interface_reader()

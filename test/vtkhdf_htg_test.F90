@@ -25,12 +25,14 @@ program vtkhdf_htg_test
 
   call test_env_init(rank, nproc)
 
+  call check_valid_topology
   call write_static('htg_static.vtkhdf', [4,3,2], 2, with_mask=.false.)
   call write_static('htg_static_mask.vtkhdf', [3,1,3], 3, with_mask=.true.)
   call write_coarse
   call write_fixed
   call write_moving
   call write_dynamic
+  call write_interface
 
   call test_env_finalize()
 
@@ -257,6 +259,49 @@ contains
         call file%write_cell_data(vec_var, vec)
       end if
     end do
+    call file%close
+  end subroutine
+
+  !! VTKHDF_HTG_VALID_TOPOLOGY accepts exactly what WRITE_MESH_TOPOLOGY does.
+  subroutine check_valid_topology
+    integer, allocatable :: tree_ids(:), xtree(:), gid(:), lid(:)
+    logical, allocatable :: refined(:), mask(:)
+    logical, parameter :: quad(6) = [.false., .true., .false., .false., .false., .false.]
+    call local_trees([4,3,2], 2, 0, tree_ids, xtree, refined, mask, gid, lid)
+    if (.not.vtkhdf_htg_valid_topology(xtree, refined, 8)) error stop 'valid topology rejected'
+    if (.not.vtkhdf_htg_valid_topology(int(xtree,int64), refined, 8)) error stop 'valid int64 topology rejected'
+    if (.not.vtkhdf_htg_valid_topology([1,2,7], quad, 4)) error stop 'two quadtrees rejected'
+    if (.not.vtkhdf_htg_valid_topology([1], [logical::], 4)) error stop 'empty part rejected'
+    if (vtkhdf_htg_valid_topology([1,2,6], quad(:5), 4)) error stop 'missing child accepted'
+    if (vtkhdf_htg_valid_topology([1,3,8], [.false., quad], 4)) error stop 'extra cell accepted'
+    if (vtkhdf_htg_valid_topology([1,2,7], quad, 8)) error stop 'wrong child count accepted'
+    if (vtkhdf_htg_valid_topology([0,2,7], quad, 4)) error stop 'xtree(1) /= 1 accepted'
+    if (vtkhdf_htg_valid_topology([1,2,8], quad, 4)) error stop 'xtree(last) /= ncell+1 accepted'
+    if (vtkhdf_htg_valid_topology([1,7,2], quad, 4)) error stop 'decreasing xtree accepted'
+  end subroutine
+
+  !! Material interface: the names of the normals and intercepts arrays are
+  !! stored as root attributes; the arrays are ordinary 3-component cell data.
+  subroutine write_interface
+    type(vtkhdf_htg_file) :: file
+    integer, parameter :: dims(3) = [3,3,1]
+    integer, allocatable :: tree_ids(:), xtree(:), gid(:), lid(:)
+    logical, allocatable :: refined(:), mask(:)
+    real(real64), allocatable :: normals(:,:), intercepts(:,:)
+    integer :: j
+    call open_file(file, 'htg_interface.vtkhdf', VTKHDF_STATIC)
+    call file%write_mesh(dims, interface_normals_name='normals', interface_intercepts_name='intercepts')
+    call file%write_mesh_geometry(axis_coordinates(1,dims(1),0), &
+        axis_coordinates(2,dims(2),0), axis_coordinates(3,dims(3),0))
+    call local_trees(dims, 2, 0, tree_ids, xtree, refined, mask, gid, lid)
+    call file%write_mesh_topology(tree_ids, xtree, refined)
+    allocate(normals(3,size(gid)), intercepts(3,size(gid)))
+    do j = 1, size(gid)
+      normals(:,j) = [1.0_real64, 0.0_real64, 0.0_real64]
+      intercepts(:,j) = [0.25_real64, 0.0_real64, real(merge(2, 1, refined(j)), real64)]
+    end do
+    call file%write_cell_data('normals', normals)
+    call file%write_cell_data('intercepts', intercepts)
     call file%close
   end subroutine
 

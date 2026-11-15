@@ -82,7 +82,8 @@ its topology, the trees.
 
 .. method-doc::
 
-   call file%write_mesh(dims [, branch_factor] [, transposed_root_indexing])
+   call file%write_mesh(dims [, branch_factor] [, transposed_root_indexing] &
+                        [, interface_normals_name, interface_intercepts_name])
 
    Define the grid of root cells. Call exactly once, before writing geometry
    or topology. All ranks supply identical values.
@@ -95,6 +96,14 @@ its topology, the trees.
      refined cell is divided along each nonsingleton axis.
    * ``transposed_root_indexing``: root cells are numbered with x varying
      fastest by default, and with z varying fastest when this is ``.true.``.
+   * ``interface_normals_name``, ``interface_intercepts_name``: the names of
+     the 3-component cell arrays that describe material interfaces, given
+     together or not at all. They are stored as the ``InterfaceNormalsName``
+     and ``InterfaceInterceptsName`` attributes, which make the VTK reader
+     enable the grid's interface. Write the two arrays as ordinary cell data
+     under exactly these names. Because the reader matches the names against
+     cell arrays as stored, they may not contain the characters that cell
+     data names replace (``/``, ``.``, and space).
 
 .. method-doc::
 
@@ -149,6 +158,26 @@ its topology, the trees.
    The same order applies to cell data: the rank's cell data arrays hold one
    value per cell, tree by tree, in the order of ``tree_ids`` and ``refined``.
    The writer checks that ``refined`` describes complete trees.
+
+Checking a Topology
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: fortran
+
+   use vtkhdf_htg_file_type
+
+.. method-doc::
+
+   valid = vtkhdf_htg_valid_topology(xtree, refined, nchild)
+
+   Return ``.true.`` if ``refined`` describes complete trees, delimited by
+   ``xtree``, whose refined cells each have ``nchild`` children
+   (``branch_factor**d``). This is the check ``write_mesh_topology`` applies
+   before writing, made available so that code producing the arrays can test
+   them without a file. ``xtree`` is ``int32`` or ``int64``; ``xtree(1)`` must
+   be 1 and its final element the number of cells plus 1. The remaining
+   preconditions of ``write_mesh_topology``, on ``tree_ids`` and the mask, are
+   not checked here.
 
 Temporal Mesh Data
 ~~~~~~~~~~~~~~~~~~
