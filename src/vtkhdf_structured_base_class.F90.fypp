@@ -12,11 +12,11 @@
 !!
 !! NOTES
 !!
-!! vtkhdf_image_file, vtkhdf_rectilinear_file, and vtkhdf_structured_file
-!! extend this base with their geometry-writing interfaces. CREATE owns a
-!! standalone file and communicator through FILE. The internal INIT entry
-!! point instead borrows the containing composite's resources. CLOSE releases
-!! dataset resources and any owned file resources before resetting the object.
+!! The image, rectilinear, and structured writer classes extend this base
+!! with their geometry-writing interfaces. INIT borrows the containing file's
+!! context. CLOSE releases dataset resources and resets the dynamic object;
+!! CLOSE_DATASET only releases resources, allowing standalone file descendants
+!! to close their owned file and communicator before resetting themselves.
 !! Each concrete extension supplies its format name through DATASET_TYPE and
 !! specifies its permitted modes through SUPPORTS_MODE;
 !! shared initialization checks that policy and, in debug builds, agreement
@@ -52,7 +52,6 @@ module vtkhdf_structured_base_class
   use vtkhdf_version_param
   use vtkhdf_file_modes, only: VTKHDF_STATIC, VTKHDF_MOVING_MESH
   use vtkhdf_simple_dataset_class
-  use vtkhdf_file_context_type
   use vtkhdf_data_handle_types
   use vtkhdf_h5e_context_type
   implicit none
@@ -72,7 +71,6 @@ module vtkhdf_structured_base_class
     private
     ! These components are shared with the geometry implementations. The
     ! communicator is an unowned copy; the file wrapper owns its lifetime.
-    type(vtkhdf_file_context) :: file
     type(vtkhdf_context), public :: ctx
     integer(int64), public :: data_chunk_bytes = 128_int64*1024
     logical, public :: geometry_written = .false.
@@ -89,16 +87,7 @@ module vtkhdf_structured_base_class
   contains
     ! User-facing interface and its specific bindings.
     ! START_TIME_STEP is inherited from vtkhdf_simple_dataset.
-    procedure :: close, flush
-#ifdef USE_MPI_F08
-    generic :: create => create_f08, create_int
-    procedure, private :: create_f08, create_int
-#elif defined(USE_MPI)
-    generic :: create => create_int
-    procedure, private :: create_int
-#else
-    procedure :: create
-#endif
+    procedure :: close
 #:for loc, assoc in mesh_locations
 #:for kind, decl, h5type in nums
 #:for rank in [3,4]
@@ -137,7 +126,7 @@ module vtkhdf_structured_base_class
 
     ! Internal interface for composite writers and geometry implementations;
     ! public for cross-module calls.
-    procedure :: init
+    procedure :: init, close_dataset
     procedure(dataset_type_interface), deferred :: dataset_type
     procedure(supports_mode_interface), deferred :: supports_mode
     procedure :: root, temporal_enabled, step_is_open, set_block_metadata
@@ -170,65 +159,17 @@ module vtkhdf_structured_base_class
 
 contains
 
-#ifdef USE_MPI_F08
-  subroutine create_f08(this, filename, comm, stat, errmsg, mode, data_chunk_bytes)
-    use mpi_f08, only: MPI_Comm
-    class(vtkhdf_structured_base), intent(out) :: this
-    character(*), intent(in) :: filename
-    type(MPI_Comm), intent(in) :: comm
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    integer, intent(in), optional :: mode
-    integer(int64), intent(in), optional :: data_chunk_bytes
-    type(vtkhdf_h5e_context) :: err_ctx
-    call init_hdf5
-    call err_ctx%capture
-    call this%create(filename, comm%mpi_val, stat, errmsg, mode, data_chunk_bytes)
-    call err_ctx%restore(stat)
-  end subroutine
-#endif
-#ifdef USE_MPI
-  subroutine create_int(this, filename, comm, stat, errmsg, mode, data_chunk_bytes)
-    class(vtkhdf_structured_base), intent(out) :: this
-    character(*), intent(in) :: filename
-    integer, intent(in) :: comm
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    integer, intent(in), optional :: mode
-    integer(int64), intent(in), optional :: data_chunk_bytes
-    type(vtkhdf_h5e_context) :: err_ctx
-    call init_hdf5
-    call err_ctx%capture
-    call this%file%open(filename, comm, stat, errmsg)
-    if (stat == 0) call this%init(this%file%id(), 'VTKHDF', this%file%context(), mode, data_chunk_bytes)
-    call err_ctx%restore(stat)
-  end subroutine
-#else
-  subroutine create(this, filename, stat, errmsg, mode, data_chunk_bytes)
-    class(vtkhdf_structured_base), intent(out) :: this
-    character(*), intent(in) :: filename
-    integer, intent(out) :: stat
-    character(:), allocatable, intent(out) :: errmsg
-    integer, intent(in), optional :: mode
-    integer(int64), intent(in), optional :: data_chunk_bytes
-    type(vtkhdf_h5e_context) :: err_ctx
-    call init_hdf5
-    call err_ctx%capture
-    call this%file%open(filename, stat, errmsg)
-    if (stat == 0) call this%init(this%file%id(), 'VTKHDF', this%file%context(), mode, data_chunk_bytes)
-    call err_ctx%restore(stat)
-  end subroutine
-#endif
-
-  subroutine flush(this)
-    class(vtkhdf_structured_base), intent(in) :: this
-    type(vtkhdf_h5e_context) :: err_ctx
-    call err_ctx%capture
-    call this%file%flush
-    call err_ctx%restore(0)
-  end subroutine
-
   subroutine close(this)
+    class(vtkhdf_structured_base), intent(inout) :: this
+    call this%close_dataset
+    call reset(this)
+  contains
+    subroutine reset(this)
+      class(vtkhdf_structured_base), intent(out) :: this
+    end subroutine
+  end subroutine close
+
+  subroutine close_dataset(this)
     class(vtkhdf_structured_base), intent(inout) :: this
     integer :: j, ierr
     type(vtkhdf_h5e_context) :: err_ctx
@@ -247,14 +188,8 @@ contains
       if (H5Iis_valid(this%steps_id) > 0) ierr = H5Gclose(this%steps_id)
       if (H5Iis_valid(this%root_id) > 0) ierr = H5Gclose(this%root_id)
     end if
-    call this%file%close
-    call finalize(this) ! finalize via intent(out) this
     call err_ctx%restore(0)
-  contains
-    subroutine finalize(this)
-      class(vtkhdf_structured_base), intent(out) :: this
-    end subroutine
-  end subroutine close
+  end subroutine close_dataset
 
 !!!! INTERNAL INTERFACES FOR COMPOSITE VTKHDF DATASET WRITERS !!!!!!!!!!!!!!!!!!
 

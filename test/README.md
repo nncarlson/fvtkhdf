@@ -14,6 +14,12 @@ specific API contract.
 - `vtkhdf_mb_basic_blocks_file_type`: MB ordinary two-block static and temporal writes.
 - `vtkhdf_chunk_settings`: chunk-layout configuration checks.
 - `test_leak`: repeated HDF5 init sanity check.
+- `vtkhdf_simple_dataset_lifecycle`: all four concrete block types borrow one
+  parent file and communicator, write static and temporal field data, and
+  close/reinitialize through the abstract lifecycle interface. It checks close
+  with an open step, repeated close, reset of geometry state, and preservation
+  of the parent resources. Separate standalone siblings exercise failed
+  creation, reuse, flushing, and owned-resource cleanup.
 
 ## Interop Fixtures
 

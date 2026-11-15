@@ -39,7 +39,8 @@ module vtkhdf_mb_file_type
   use vtkhdf_data_support, only: named_record, resolve_record_name
   use vtkhdf_data_handle_types
   use vtkhdf_simple_dataset_class
-  use vtkhdf_ug_file_type
+  use vtkhdf_ug_file_type, only: UG_STATIC, UG_FIXED_MESH, UG_MOVING_MESH, UG_DYNAMIC_MESH
+  use vtkhdf_ug_writer_type
   use vtkhdf_context_type
   use vtkhdf_h5e_context_type
   use vtkhdf_version_param
@@ -311,7 +312,7 @@ contains
     !! Resize this%blocks to hold the new block
     if (.not.allocated(this%blocks)) then
       allocate(this%blocks(0:0))
-      allocate(vtkhdf_ug_file :: this%blocks(0)%b)
+      allocate(vtkhdf_ug_block :: this%blocks(0)%b)
       this%blocks(0)%internal_name = internal_name
     else
       block
@@ -323,7 +324,7 @@ contains
           call move_alloc(this%blocks(j)%b, tmp(j)%b)
           call move_alloc(this%blocks(j)%internal_name, tmp(j)%internal_name)
         end do
-        allocate(vtkhdf_ug_file :: tmp(n)%b)
+        allocate(vtkhdf_ug_block :: tmp(n)%b)
         tmp(n)%internal_name = internal_name
         call move_alloc(tmp, this%blocks)
       end block
@@ -333,7 +334,7 @@ contains
 
     !! Initialize the UG block group and its HDF5 hierarchy.
     select type (new_block => this%blocks(this%next_block_index)%b)
-    type is (vtkhdf_ug_file)
+    class is (vtkhdf_ug_writer)
         write(group_name,'(a,i0)') 'Group_', this%next_block_index
         call new_block%init(this%vtk_id, trim(group_name), this%ctx, mode, this%data_chunk_bytes)
         call new_block%set_block_metadata(this%next_block_index, external_name)
@@ -373,7 +374,7 @@ contains
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
     select type (dataset => this%blocks(blk%index)%b)
-    type is (vtkhdf_ug_file)
+    class is (vtkhdf_ug_writer)
       call dataset%write_mesh(points, cnode, xcnode, types)
     class default
       INSIST(.false.)
@@ -398,7 +399,7 @@ contains
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
     select type (dataset => this%blocks(blk%index)%b)
-    type is (vtkhdf_ug_file)
+    class is (vtkhdf_ug_writer)
       call dataset%write_mesh_topology(cnode, xcnode, types)
     class default
       INSIST(.false.)
@@ -422,7 +423,7 @@ contains
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
     select type (dataset => this%blocks(blk%index)%b)
-    type is (vtkhdf_ug_file)
+    class is (vtkhdf_ug_writer)
       call dataset%write_mesh_geometry(points)
     class default
       INSIST(.false.)
@@ -450,7 +451,7 @@ contains
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
     select type (dataset => this%blocks(blk%index)%b)
-    type is (vtkhdf_ug_file)
+    class is (vtkhdf_ug_writer)
       call dataset%write_${loc}$_data(name, array, attribute)
     class default
       INSIST(.false.)
@@ -473,7 +474,7 @@ contains
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
     select type (dataset => this%blocks(blk%index)%b)
-    type is (vtkhdf_ug_file)
+    class is (vtkhdf_ug_writer)
       call dataset%write_field_data(name, array, as_vector)
     class default
       INSIST(.false.)
@@ -515,7 +516,7 @@ contains
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
     select type (dataset => this%blocks(blk%index)%b)
-    type is (vtkhdf_ug_file)
+    class is (vtkhdf_ug_writer)
       handle = dataset%register_temporal_${loc}$_data(name, mold, attribute)
     class default
       INSIST(.false.)
@@ -538,7 +539,7 @@ contains
     INSIST(blk%index >= 0 .and. blk%index < this%next_block_index)
     call err_ctx%capture
     select type (dataset => this%blocks(blk%index)%b)
-    type is (vtkhdf_ug_file)
+    class is (vtkhdf_ug_writer)
       handle = dataset%register_temporal_field_data(name, mold)
     class default
       INSIST(.false.)
@@ -608,7 +609,7 @@ contains
     INSIST(var%block_index() == blk%index)
     call err_ctx%capture
     select type (dataset => this%blocks(blk%index)%b)
-    type is (vtkhdf_ug_file)
+    class is (vtkhdf_ug_writer)
       call dataset%write_${loc}$_data(var, array)
     class default
       INSIST(.false.)
@@ -632,7 +633,7 @@ contains
     INSIST(var%block_index() == blk%index)
     call err_ctx%capture
     select type (dataset => this%blocks(blk%index)%b)
-    type is (vtkhdf_ug_file)
+    class is (vtkhdf_ug_writer)
       call dataset%write_field_data(var, array, as_vector)
     class default
       INSIST(.false.)

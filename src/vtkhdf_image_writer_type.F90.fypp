@@ -1,7 +1,7 @@
 !!
-!! VTKHDF_IMAGE_FILE_TYPE
+!! VTKHDF_IMAGE_WRITER_TYPE
 !!
-!! Standalone ImageData writer, also usable internally as a composite leaf.
+!! Shared ImageData dataset writer and concrete composite leaf.
 !!
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
@@ -10,7 +10,7 @@
 
 #:set reals = [('real32','real(real32)','H5T_NATIVE_FLOAT'), ('real64','real(real64)','H5T_NATIVE_DOUBLE')]
 
-module vtkhdf_image_file_type
+module vtkhdf_image_writer_type
 
   use,intrinsic :: iso_fortran_env
   use vtkhdf_structured_base_class
@@ -26,7 +26,7 @@ module vtkhdf_image_file_type
   public :: vtkhdf_version, VTKHDF_STATIC, VTKHDF_FIXED_MESH
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
 
-  type, extends(vtkhdf_structured_base), public :: vtkhdf_image_file
+  type, abstract, extends(vtkhdf_structured_base), public :: vtkhdf_image_writer
     private
   contains
     procedure :: dataset_type, supports_mode
@@ -34,23 +34,27 @@ module vtkhdf_image_file_type
     procedure, private :: write_mesh_real32, write_mesh_real64
   end type
 
+  ! Concrete leaf owned by a composite. It borrows the file and communicator.
+  type, extends(vtkhdf_image_writer), public :: vtkhdf_image_block
+  end type
+
 contains
 
   pure logical function supports_mode(this, mode)
-    class(vtkhdf_image_file), intent(in) :: this
+    class(vtkhdf_image_writer), intent(in) :: this
     integer, intent(in) :: mode
     supports_mode = mode == VTKHDF_STATIC .or. mode == VTKHDF_FIXED_MESH
   end function
 
   pure function dataset_type(this) result(name)
-    class(vtkhdf_image_file), intent(in) :: this
+    class(vtkhdf_image_writer), intent(in) :: this
     character(:), allocatable :: name
     name = 'ImageData'
   end function
 
 #:for kind, decl, h5type in reals
   subroutine write_mesh_${kind}$(this, point_bounds, origin, spacing, direction)
-    class(vtkhdf_image_file), intent(inout) :: this
+    class(vtkhdf_image_writer), intent(inout) :: this
     integer(int32), intent(in) :: point_bounds(3,2)
     ${decl}$, intent(in) :: origin(3), spacing(3)
     ${decl}$, intent(in), optional :: direction(3,3)
@@ -74,4 +78,4 @@ contains
   end subroutine
 #:endfor
 
-end module vtkhdf_image_file_type
+end module vtkhdf_image_writer_type

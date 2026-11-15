@@ -36,7 +36,7 @@ program vtkhdf_constant_field_test
       end select
       write(filename,'(a,i0,a,i0,a)') 'constant_fields_',grid,'_',mode,'.vtkhdf'
       select type (writer => file)
-#:for guard in ['type is (vtkhdf_ug_file)', 'class is (vtkhdf_structured_base)']
+#:for guard in ['type is (vtkhdf_ug_file)', 'type is (vtkhdf_image_file)', 'type is (vtkhdf_rectilinear_file)', 'type is (vtkhdf_structured_file)']
       ${guard}$
 #ifdef USE_MPI
         call writer%create(trim(filename),MPI_COMM_WORLD,stat,errmsg,mode=mode,data_chunk_bytes=64_int64)

@@ -5,11 +5,11 @@ set(FYPP_SRC
   vtkhdf_file_context_type.F90.fypp
   vtkhdf_field_data_type.F90.fypp
   vtkhdf_structured_base_class.F90.fypp
-  vtkhdf_rectilinear_file_type.F90.fypp
-  vtkhdf_structured_file_type.F90.fypp
-  vtkhdf_image_file_type.F90.fypp
+  vtkhdf_rectilinear_writer_type.F90.fypp
+  vtkhdf_structured_writer_type.F90.fypp
+  vtkhdf_image_writer_type.F90.fypp
   vtkhdf_h5.F90.fypp
-  vtkhdf_ug_file_type.F90.fypp
+  vtkhdf_ug_writer_type.F90.fypp
   vtkhdf_htg_file_type.F90.fypp
   vtkhdf_mb_file_type.F90.fypp
   vtkhdf_context_type.F90.fypp
@@ -27,6 +27,10 @@ add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC}
 
 set(SRC
   vtkhdf_simple_dataset_class.F90
+  vtkhdf_ug_file_type.F90
+  vtkhdf_image_file_type.F90
+  vtkhdf_rectilinear_file_type.F90
+  vtkhdf_structured_file_type.F90
   vtkhdf_data_handle_types.F90
   vtkhdf_data_support.F90
   vtkhdf_assert.F90

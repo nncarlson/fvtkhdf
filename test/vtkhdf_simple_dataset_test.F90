@@ -4,10 +4,15 @@ program vtkhdf_simple_dataset_test
   use,intrinsic :: iso_fortran_env
   use,intrinsic :: iso_c_binding, only: c_funptr, c_ptr, c_associated
   use vtkhdf_simple_dataset_class
+  use vtkhdf_structured_base_class, only: vtkhdf_structured_base
   use vtkhdf_ug_file_type
+  use vtkhdf_ug_writer_type
   use vtkhdf_image_file_type
+  use vtkhdf_image_writer_type
   use vtkhdf_rectilinear_file_type
+  use vtkhdf_rectilinear_writer_type
   use vtkhdf_structured_file_type
+  use vtkhdf_structured_writer_type
   use vtkhdf_context_type
   use vtkhdf_h5_c_binding
   use vtkhdf_test_env
@@ -19,6 +24,7 @@ program vtkhdf_simple_dataset_test
     class(vtkhdf_simple_dataset), allocatable :: writer
   end type
   type(leaf) :: blocks(4)
+  type(vtkhdf_field_data_handle) :: field_var
   type(vtkhdf_context) :: ctx
   type(c_funptr) :: saved_error_handler
   type(c_ptr) :: saved_error_data
@@ -48,40 +54,44 @@ program vtkhdf_simple_dataset_test
   if (rank /= 0) selected(1,2) = selected(1,1)-1
   points = reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,1.,1.,0.],[3,2,2,1])
 
-  allocate(vtkhdf_ug_file :: blocks(1)%writer)
-  allocate(vtkhdf_image_file :: blocks(2)%writer)
-  allocate(vtkhdf_rectilinear_file :: blocks(3)%writer)
-  allocate(vtkhdf_structured_file :: blocks(4)%writer)
+  allocate(vtkhdf_ug_block :: blocks(1)%writer)
+  allocate(vtkhdf_image_block :: blocks(2)%writer)
+  allocate(vtkhdf_rectilinear_block :: blocks(3)%writer)
+  allocate(vtkhdf_structured_block :: blocks(4)%writer)
   do cycle = 1,2
     ! The second cycle reuses closed polymorphic objects and the same parent.
     do j = 1,4
       write(name,'(a,i0,a,i0)') 'leaf_',j,'_',cycle
       select type (writer => blocks(j)%writer)
-      type is (vtkhdf_ug_file)
+      type is (vtkhdf_ug_block)
         call writer%init(parent_id,trim(name),ctx,mode=VTKHDF_FIXED_MESH)
+        call register_fields(writer)
         if (cycle == 2) call writer%start_time_step(0.0_real32)
         if (rank == 0) then
           call writer%write_mesh(reshape(points,[3,4]),[1,2,4,3],[1,5],[9_int8])
         else
           call writer%write_mesh(reshape([real(real64)::],[3,0]),[integer::],[1],[integer(int8)::])
         end if
-      type is (vtkhdf_image_file)
+      type is (vtkhdf_image_block)
         call writer%init(parent_id,trim(name),ctx,mode=VTKHDF_FIXED_MESH)
+        call register_fields(writer)
         if (cycle == 2) call writer%start_time_step(0.0_real32)
         call writer%write_mesh(bounds,[0.,0.,0.],[1.,1.,1.])
-      type is (vtkhdf_rectilinear_file)
+      type is (vtkhdf_rectilinear_block)
         call writer%init(parent_id,trim(name),ctx,mode=merge(VTKHDF_MOVING_MESH,VTKHDF_FIXED_MESH,cycle==2))
+        call register_fields(writer)
         if (cycle == 2) call writer%start_time_step(0.0_real32)
         call writer%write_mesh(bounds,[0.,1.],[0.,1.],[0.])
-      type is (vtkhdf_structured_file)
+      type is (vtkhdf_structured_block)
         call writer%init(parent_id,trim(name),ctx,mode=merge(VTKHDF_MOVING_MESH,VTKHDF_FIXED_MESH,cycle==2))
+        call register_fields(writer)
         if (cycle == 2) call writer%start_time_step(0.0_real32)
         call writer%write_mesh(bounds)
         call writer%write_mesh_geometry(points,bounds(:,1),selected)
       class default
         error stop 'unexpected leaf type'
       end select
-      ! All subsequent operations dispatch through the abstract ancestor.
+      ! Lifecycle operations dispatch through the abstract ancestor.
       root_ids(j) = blocks(j)%writer%root()
       if (root_ids(j) < 0) error stop 'missing root'
       if (.not.blocks(j)%writer%temporal_enabled()) error stop 'missing temporal mode'
@@ -91,8 +101,16 @@ program vtkhdf_simple_dataset_test
       end if
       if (.not.blocks(j)%writer%step_is_open()) error stop 'step did not open'
       call blocks(j)%writer%start_time_step(1.0_real64)
-      call blocks(j)%writer%finalize_time_step()
-      if (blocks(j)%writer%step_is_open()) error stop 'step did not close'
+      select type (writer => blocks(j)%writer)
+      class is (vtkhdf_ug_writer)
+        call writer%write_field_data(field_var,real(cycle,real64))
+      class is (vtkhdf_structured_base)
+        call writer%write_field_data(field_var,real(cycle,real64))
+      end select
+      if (cycle == 1) then
+        call blocks(j)%writer%finalize_time_step()
+        if (blocks(j)%writer%step_is_open()) error stop 'step did not close'
+      end if
     end do
     do j = 1,4
       call blocks(j)%writer%close()
@@ -105,6 +123,15 @@ program vtkhdf_simple_dataset_test
     if (H5Iis_valid(parent_id) <= 0) error stop 'borrowed group closed'
     if (.not.ctx%global_all(.true.)) error stop 'borrowed communicator invalid'
   end do
+  ! File and block writers are siblings; replace the borrowed block objects
+  ! with standalone file objects for the owned-resource checks below.
+  do j = 1,4
+    deallocate(blocks(j)%writer)
+  end do
+  allocate(vtkhdf_ug_file :: blocks(1)%writer)
+  allocate(vtkhdf_image_file :: blocks(2)%writer)
+  allocate(vtkhdf_rectilinear_file :: blocks(3)%writer)
+  allocate(vtkhdf_structured_file :: blocks(4)%writer)
   ! Failed standalone creation must release its duplicated communicator.
   ! The same polymorphic object can then be closed and reopened normally.
   stat = H5Eget_auto2(H5E_DEFAULT,saved_error_handler,saved_error_data)
@@ -174,6 +201,18 @@ program vtkhdf_simple_dataset_test
   call test_env_finalize()
 
 contains
+
+  subroutine register_fields(dataset)
+    class(vtkhdf_simple_dataset), intent(inout) :: dataset
+    select type (dataset)
+    class is (vtkhdf_ug_writer)
+      call dataset%write_field_data('cycle',cycle)
+      field_var = dataset%register_temporal_field_data('time_value',0.0_real64)
+    class is (vtkhdf_structured_base)
+      call dataset%write_field_data('cycle',cycle)
+      field_var = dataset%register_temporal_field_data('time_value',0.0_real64)
+    end select
+  end subroutine
 
   subroutine check_error_handler()
     type(c_funptr) :: handler

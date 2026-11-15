@@ -203,7 +203,7 @@ contains
     call init_hdf5
     call err_ctx%capture
     call this%file%open(filename, comm, stat, errmsg)
-    if (stat == 0) call this%init(this%file%id(), 'VTKHDF', this%file%context(), mode, data_chunk_bytes)
+    if (stat == 0) call this%init(this%file%id, 'VTKHDF', this%file%ctx, mode, data_chunk_bytes)
     call err_ctx%restore(stat)
   end subroutine
 #else
@@ -218,7 +218,7 @@ contains
     call init_hdf5
     call err_ctx%capture
     call this%file%open(filename, stat, errmsg)
-    if (stat == 0) call this%init(this%file%id(), 'VTKHDF', this%file%context(), mode, data_chunk_bytes)
+    if (stat == 0) call this%init(this%file%id, 'VTKHDF', this%file%ctx, mode, data_chunk_bytes)
     call err_ctx%restore(stat)
   end subroutine
 #endif

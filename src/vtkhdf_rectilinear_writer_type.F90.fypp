@@ -1,7 +1,7 @@
 !!
-!! VTKHDF_RECTILINEAR_FILE_TYPE
+!! VTKHDF_RECTILINEAR_WRITER_TYPE
 !!
-!! Standalone RectilinearGrid writer with rank-zero axis coordinates.
+!! Shared RectilinearGrid dataset writer with rank-zero axis coordinates.
 !!
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
@@ -10,7 +10,7 @@
 
 #:set reals = [('real32','real(real32)','H5T_NATIVE_FLOAT'), ('real64','real(real64)','H5T_NATIVE_DOUBLE')]
 
-module vtkhdf_rectilinear_file_type
+module vtkhdf_rectilinear_writer_type
 
   use,intrinsic :: iso_fortran_env
   use vtkhdf_structured_base_class
@@ -26,7 +26,7 @@ module vtkhdf_rectilinear_file_type
   public :: vtkhdf_version, VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
 
-  type, extends(vtkhdf_structured_base), public :: vtkhdf_rectilinear_file
+  type, abstract, extends(vtkhdf_structured_base), public :: vtkhdf_rectilinear_writer
     private
     integer(int64) :: coordinate_offsets(3) = 0
     logical :: offsets_initialized = .false.
@@ -38,22 +38,26 @@ module vtkhdf_rectilinear_file_type
     procedure, private :: write_mesh_geometry_real32, write_mesh_geometry_real64
   end type
 
+  ! Concrete leaf owned by a composite. It borrows the file and communicator.
+  type, extends(vtkhdf_rectilinear_writer), public :: vtkhdf_rectilinear_block
+  end type
+
 contains
 
   pure logical function supports_mode(this, mode)
-    class(vtkhdf_rectilinear_file), intent(in) :: this
+    class(vtkhdf_rectilinear_writer), intent(in) :: this
     integer, intent(in) :: mode
     supports_mode = mode == VTKHDF_STATIC .or. mode == VTKHDF_FIXED_MESH .or. mode == VTKHDF_MOVING_MESH
   end function
 
   pure function dataset_type(this) result(name)
-    class(vtkhdf_rectilinear_file), intent(in) :: this
+    class(vtkhdf_rectilinear_writer), intent(in) :: this
     character(:), allocatable :: name
     name = 'RectilinearGrid'
   end function
 
   subroutine write_mesh_bounds(this, point_bounds)
-    class(vtkhdf_rectilinear_file), intent(inout) :: this
+    class(vtkhdf_rectilinear_writer), intent(inout) :: this
     integer(int32), intent(in) :: point_bounds(3,2)
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
@@ -64,7 +68,7 @@ contains
 
 #:for kind, decl, h5type in reals
   subroutine write_mesh_${kind}$(this, point_bounds, x, y, z)
-    class(vtkhdf_rectilinear_file), intent(inout) :: this
+    class(vtkhdf_rectilinear_writer), intent(inout) :: this
     integer(int32), intent(in) :: point_bounds(3,2)
     ${decl}$, intent(in) :: x(:), y(:), z(:)
     type(vtkhdf_h5e_context) :: err_ctx
@@ -76,7 +80,7 @@ contains
 
   subroutine write_mesh_geometry_${kind}$(this, x, y, z)
     use vtkhdf_data_support, only: data_chunk_size
-    class(vtkhdf_rectilinear_file), intent(inout) :: this
+    class(vtkhdf_rectilinear_writer), intent(inout) :: this
     ${decl}$, intent(in) :: x(:), y(:), z(:)
     integer(int64) :: dims(3), chunk_size
     integer(hid_t) :: dataset_id, type_id
@@ -126,7 +130,7 @@ contains
 
   subroutine append_geometry_offsets(this, steps_id)
     use vtkhdf_data_support, only: STEPS_CHUNK_SIZE
-    class(vtkhdf_rectilinear_file), intent(inout) :: this
+    class(vtkhdf_rectilinear_writer), intent(inout) :: this
     integer(hid_t), intent(in) :: steps_id
     if (.not.this%offsets_initialized) then
 #:for axis in ['X','Y','Z']
@@ -139,4 +143,4 @@ contains
 #:endfor
   end subroutine
 
-end module vtkhdf_rectilinear_file_type
+end module vtkhdf_rectilinear_writer_type
