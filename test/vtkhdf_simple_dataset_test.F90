@@ -5,8 +5,8 @@ program vtkhdf_simple_dataset_test
   use,intrinsic :: iso_c_binding, only: c_funptr, c_ptr, c_associated
   use vtkhdf_simple_dataset_class
   use vtkhdf_structured_base_class, only: vtkhdf_structured_base
-  use vtkhdf_ug_file_type
-  use vtkhdf_ug_writer_type
+  use vtkhdf_unstructured_file_type
+  use vtkhdf_unstructured_writer_type
   use vtkhdf_image_file_type
   use vtkhdf_image_writer_type
   use vtkhdf_rectilinear_file_type
@@ -54,7 +54,7 @@ program vtkhdf_simple_dataset_test
   if (rank /= 0) selected(1,2) = selected(1,1)-1
   points = reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,1.,1.,0.],[3,2,2,1])
 
-  allocate(vtkhdf_ug_block :: blocks(1)%writer)
+  allocate(vtkhdf_unstructured_block :: blocks(1)%writer)
   allocate(vtkhdf_image_block :: blocks(2)%writer)
   allocate(vtkhdf_rectilinear_block :: blocks(3)%writer)
   allocate(vtkhdf_structured_block :: blocks(4)%writer)
@@ -63,7 +63,7 @@ program vtkhdf_simple_dataset_test
     do j = 1,4
       write(name,'(a,i0,a,i0)') 'leaf_',j,'_',cycle
       select type (writer => blocks(j)%writer)
-      type is (vtkhdf_ug_block)
+      type is (vtkhdf_unstructured_block)
         call writer%init(parent_id,trim(name),ctx,mode=VTKHDF_FIXED_MESH)
         call register_fields(writer)
         if (cycle == 2) call writer%start_time_step(0.0_real32)
@@ -102,7 +102,7 @@ program vtkhdf_simple_dataset_test
       if (.not.blocks(j)%writer%step_is_open()) error stop 'step did not open'
       call blocks(j)%writer%start_time_step(1.0_real64)
       select type (writer => blocks(j)%writer)
-      class is (vtkhdf_ug_writer)
+      class is (vtkhdf_unstructured_writer)
         call writer%write_field_data(field_var,real(cycle,real64))
       class is (vtkhdf_structured_base)
         call writer%write_field_data(field_var,real(cycle,real64))
@@ -128,7 +128,7 @@ program vtkhdf_simple_dataset_test
   do j = 1,4
     deallocate(blocks(j)%writer)
   end do
-  allocate(vtkhdf_ug_file :: blocks(1)%writer)
+  allocate(vtkhdf_unstructured_file :: blocks(1)%writer)
   allocate(vtkhdf_image_file :: blocks(2)%writer)
   allocate(vtkhdf_rectilinear_file :: blocks(3)%writer)
   allocate(vtkhdf_structured_file :: blocks(4)%writer)
@@ -141,7 +141,7 @@ program vtkhdf_simple_dataset_test
       filename = 'simple_dataset_leaves.vtkhdf/not-a-directory.vtkhdf'
       if (cycle > 1) write(filename,'(a,i0,a)') 'simple_dataset_owned_',j,'.vtkhdf'
       select type (writer => blocks(j)%writer)
-      type is (vtkhdf_ug_file)
+      type is (vtkhdf_unstructured_file)
 #ifdef USE_MPI
         call writer%create(trim(filename),MPI_COMM_WORLD,stat,errmsg)
 #else
@@ -205,7 +205,7 @@ contains
   subroutine register_fields(dataset)
     class(vtkhdf_simple_dataset), intent(inout) :: dataset
     select type (dataset)
-    class is (vtkhdf_ug_writer)
+    class is (vtkhdf_unstructured_writer)
       call dataset%write_field_data('cycle',cycle)
       field_var = dataset%register_temporal_field_data('time_value',0.0_real64)
     class is (vtkhdf_structured_base)

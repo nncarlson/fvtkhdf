@@ -1,9 +1,9 @@
-program vtkhdf_moving_ug_test
+program vtkhdf_moving_unstructured_test
 
   use, intrinsic :: iso_fortran_env, only: r8 => real64, int8
   use vtkhdf_test_env
   use vtkhdf_test_data
-  use vtkhdf_ug_file_type
+  use vtkhdf_unstructured_file_type
 #ifdef USE_MPI
   use mpi
 #endif
@@ -16,16 +16,16 @@ program vtkhdf_moving_ug_test
   character(:), allocatable :: errmsg
   integer :: rank, nproc, stat
 
-  type(vtkhdf_ug_file) :: vizfile
+  type(vtkhdf_unstructured_file) :: vizfile
   type(vtkhdf_cell_data_handle) :: hcell_radius, hcell_velocity
   type(vtkhdf_point_data_handle) :: hpoint_radius, hpoint_velocity
 
   call test_env_init(rank, nproc)
 
 #ifdef USE_MPI
-  call vizfile%create('moving_ug_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_MOVING_MESH)
+  call vizfile%create('moving_unstructured_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_MOVING_MESH)
 #else
-  call vizfile%create('moving_ug_test.vtkhdf', stat, errmsg, mode=VTKHDF_MOVING_MESH)
+  call vizfile%create('moving_unstructured_test.vtkhdf', stat, errmsg, mode=VTKHDF_MOVING_MESH)
 #endif
   if (stat /= 0) error stop errmsg
 
@@ -64,4 +64,4 @@ program vtkhdf_moving_ug_test
   call vizfile%close()
   call test_env_finalize()
 
-end program vtkhdf_moving_ug_test
+end program vtkhdf_moving_unstructured_test

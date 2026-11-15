@@ -30,7 +30,7 @@ module vtkhdf_mb_file_type
   use vtkhdf_data_support, only: named_record, resolve_record_name
   use vtkhdf_data_handle_types
   use vtkhdf_simple_dataset_class
-  use vtkhdf_ug_writer_type, only: vtkhdf_ug_block
+  use vtkhdf_unstructured_writer_type, only: vtkhdf_unstructured_block
   use vtkhdf_image_writer_type, only: vtkhdf_image_block
   use vtkhdf_rectilinear_writer_type, only: vtkhdf_rectilinear_block
   use vtkhdf_structured_writer_type, only: vtkhdf_structured_block
@@ -41,7 +41,7 @@ module vtkhdf_mb_file_type
   implicit none
   private
 
-  public :: vtkhdf_version, vtkhdf_ug_block
+  public :: vtkhdf_version, vtkhdf_unstructured_block
   public :: vtkhdf_image_block, vtkhdf_rectilinear_block, vtkhdf_structured_block
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
   public :: VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
@@ -67,8 +67,8 @@ module vtkhdf_mb_file_type
     procedure, private :: create_impl
     procedure :: close
     procedure :: flush
-    generic :: add_block => add_ug_block, add_image_block, add_rectilinear_block, add_structured_block
-    procedure, private :: add_ug_block, add_image_block, add_rectilinear_block, add_structured_block
+    generic :: add_block => add_unstructured_block, add_image_block, add_rectilinear_block, add_structured_block
+    procedure, private :: add_unstructured_block, add_image_block, add_rectilinear_block, add_structured_block
     procedure, private :: add_block_impl
     generic :: start_time_step => start_time_step_real32, start_time_step_real64
     procedure, private :: start_time_step_real32, start_time_step_real64
@@ -239,14 +239,14 @@ contains
 
   ! The returned pointer borrows an individually allocated target owned by MB.
   ! Growing BLOCKS preserves that target; CLOSE invalidates borrowed pointers.
-  subroutine add_ug_block(this, name, dataset, mode)
+  subroutine add_unstructured_block(this, name, dataset, mode)
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: name
-    type(vtkhdf_ug_block), pointer, intent(out) :: dataset
+    type(vtkhdf_unstructured_block), pointer, intent(out) :: dataset
     integer, intent(in), optional :: mode
     allocate(dataset)
     call this%add_block_impl(name, dataset, mode)
-  end subroutine add_ug_block
+  end subroutine add_unstructured_block
 
   subroutine add_image_block(this, name, dataset, mode)
     class(vtkhdf_mb_file), intent(inout) :: this
@@ -321,7 +321,7 @@ contains
     call err_ctx%capture
     write(group_name,'(a,i0)') 'Group_', this%next_block_index
     select type (dataset)
-    type is (vtkhdf_ug_block)
+    type is (vtkhdf_unstructured_block)
       call dataset%init(this%vtk_id, trim(group_name), this%file%ctx, mode_, this%data_chunk_bytes)
       call dataset%set_block_metadata(this%next_block_index, external_name)
     type is (vtkhdf_image_block)

@@ -4,7 +4,7 @@ program vtkhdf_image_test
   use,intrinsic :: iso_fortran_env
   use vtkhdf_image_file_type
   use vtkhdf_test_env
-  use vtkhdf_ug_file_type, only: vtkhdf_ug_file
+  use vtkhdf_unstructured_file_type, only: vtkhdf_unstructured_file
   use vtkhdf_structured_file_type, only: vtkhdf_structured_file
   use vtkhdf_context_type, only: vtkhdf_context
   use vtkhdf_h5_c_binding
@@ -12,13 +12,13 @@ program vtkhdf_image_test
   use mpi
 #endif
   implicit none
-  type(vtkhdf_ug_file) :: ug
+  type(vtkhdf_unstructured_file) :: unstructured
   type(vtkhdf_image_file) :: file
   type(vtkhdf_cell_data_handle) :: cell_var, other_var, numeric_cells(2,5)
   type(vtkhdf_point_data_handle) :: numeric_points(2,5)
   type(vtkhdf_point_data_handle) :: point_var
-  type(vtkhdf_field_data_handle) :: field_var, history_var, ug_field_var, ug_history_var
-  type(vtkhdf_field_data_handle) :: variable_fields(4), ug_variable_fields(4), never_written, ug_never_written
+  type(vtkhdf_field_data_handle) :: field_var, history_var, unstructured_field_var, unstructured_history_var
+  type(vtkhdf_field_data_handle) :: variable_fields(4), unstructured_variable_fields(4), never_written, unstructured_never_written
   integer :: rank, nproc, stat, j, step
   integer(int32) :: bounds(3,2), dims(3), lower(3)
   character(:), allocatable :: errmsg
@@ -33,7 +33,7 @@ program vtkhdf_image_test
   bounds(:,2) = lower+dims-1
   matrix = reshape([1.0_real64,0.2_real64,0.0_real64, 0.4_real64,2.0_real64,0.3_real64, &
       0.1_real64,0.5_real64,1.5_real64],[3,3])
-  call create_ug_reference('image_fields_static_ug.vtkhdf',VTKHDF_STATIC)
+  call create_unstructured_reference('image_fields_static_unstructured.vtkhdf',VTKHDF_STATIC)
   call create_file('image_static.vtkhdf',chunk_bytes=64_int64)
   call file%write_mesh(bounds,[1.0_real64,2.0_real64,3.0_real64], &
       [0.5_real64,0.25_real64,2.0_real64],matrix)
@@ -42,7 +42,7 @@ program vtkhdf_image_test
 #:endfor
   call collision_fields()
   call file%close()
-  call ug%close()
+  call unstructured%close()
   ! Exercise singleton x/y/z and lines parallel to every axis.
   do j = 1, 7
     lower = 0
@@ -75,7 +75,7 @@ program vtkhdf_image_test
   dims = [7,5,4]
   bounds(:,1) = lower
   bounds(:,2) = dims-1
-  call create_ug_reference('image_fields_temporal_ug.vtkhdf',VTKHDF_FIXED_MESH)
+  call create_unstructured_reference('image_fields_temporal_unstructured.vtkhdf',VTKHDF_FIXED_MESH)
   call create_file('image_temporal.vtkhdf',VTKHDF_FIXED_MESH,64_int64)
   call file%write_mesh(bounds,[0.0_real64,0.0_real64,0.0_real64],[1.0_real64,1.0_real64,1.0_real64])
   cell_var = file%register_temporal_cell_data('temperature',0.0_real64,attribute='Scalars')
@@ -83,21 +83,21 @@ program vtkhdf_image_test
   point_var = file%register_temporal_point_data('velocity',[0.0_real32,0.0_real32,0.0_real32],attribute='Vectors')
   field_var = file%register_temporal_field_data('energy',0.0_real64)
   history_var = file%register_temporal_field_data('history',0_int32)
-  ug_field_var = ug%register_temporal_field_data('energy',0.0_real64)
-  ug_history_var = ug%register_temporal_field_data('history',0_int32)
+  unstructured_field_var = unstructured%register_temporal_field_data('energy',0.0_real64)
+  unstructured_history_var = unstructured%register_temporal_field_data('history',0_int32)
   call static_temporal('static_early')
   do step = 0, 4
     call file%start_time_step(real(step,real64))
-    call ug%start_time_step(real(step,real64))
+    call unstructured%start_time_step(real(step,real64))
     if (step == 0 .or. step == 2) call temporal_cell(step)
     if (step == 0 .or. step == 3) call temporal_point(step)
     if (step == 0 .or. step == 4) call temporal_other(step)
     if (step == 1 .or. step == 3) call file%write_field_data(field_var,real(step+rank*100,real64))
     if (step == 1) call file%write_field_data(history_var,[10+rank,20+rank],as_vector=.true.)
     if (step == 3) call file%write_field_data(history_var,reshape([1,2,3,4,5,6]+rank,[2,3]))
-    if (step == 1 .or. step == 3) call ug%write_field_data(ug_field_var,real(step+rank*100,real64))
-    if (step == 1) call ug%write_field_data(ug_history_var,[10+rank,20+rank],as_vector=.true.)
-    if (step == 3) call ug%write_field_data(ug_history_var,reshape([1,2,3,4,5,6]+rank,[2,3]))
+    if (step == 1 .or. step == 3) call unstructured%write_field_data(unstructured_field_var,real(step+rank*100,real64))
+    if (step == 1) call unstructured%write_field_data(unstructured_history_var,[10+rank,20+rank],as_vector=.true.)
+    if (step == 3) call unstructured%write_field_data(unstructured_history_var,reshape([1,2,3,4,5,6]+rank,[2,3]))
     if (step /= 4) call file%finalize_time_step()
     if (step == 2) call static_temporal('static_late')
   end do
@@ -105,7 +105,7 @@ program vtkhdf_image_test
   call file%flush()
   call file%close()
   call file%close()
-  call ug%close()
+  call unstructured%close()
   ! All-empty explicit calls still reserve a snapshot. Only its layout is
   ! tested, because the caller deliberately supplies no complete field.
   call create_file('image_empty.vtkhdf',VTKHDF_FIXED_MESH)
@@ -144,24 +144,25 @@ program vtkhdf_image_test
   ! omission and empty writes. Non-root values differ to check root ownership.
   call create_file('image_fields_variable.vtkhdf',VTKHDF_FIXED_MESH,64_int64)
   call file%write_mesh(bounds,[0.,0.,0.],[1.,1.,1.])
-  call create_ug_reference('image_fields_variable_ug.vtkhdf',VTKHDF_FIXED_MESH)
+  call create_unstructured_reference('image_fields_variable_unstructured.vtkhdf',VTKHDF_FIXED_MESH)
 #:for index in range(1,5)
 #:set kind, decl = nums[index]
   variable_fields(${index}$) = file%register_temporal_field_data('${kind}$',${'0.0' if kind.startswith('real') else '0'}$_${kind}$)
-  ug_variable_fields(${index}$) = ug%register_temporal_field_data('${kind}$',${'0.0' if kind.startswith('real') else '0'}$_${kind}$)
+  unstructured_variable_fields(${index}$) = &
+      unstructured%register_temporal_field_data('${kind}$',${'0.0' if kind.startswith('real') else '0'}$_${kind}$)
 #:endfor
   never_written = file%register_temporal_field_data('never_written',0_int32)
-  ug_never_written = ug%register_temporal_field_data('never_written',0_int32)
+  unstructured_never_written = unstructured%register_temporal_field_data('never_written',0_int32)
   do step = 0, 10
     call file%start_time_step(real(step))
-    call ug%start_time_step(real(step))
+    call unstructured%start_time_step(real(step))
 #:for index in range(1,5)
 #:set kind, decl = nums[index]
-    call variable_${kind}$(variable_fields(${index}$),ug_variable_fields(${index}$),step)
+    call variable_${kind}$(variable_fields(${index}$),unstructured_variable_fields(${index}$),step)
 #:endfor
   end do
   call file%close()
-  call ug%close()
+  call unstructured%close()
   call nested_groups()
   call registration_names()
   call naming_parity()
@@ -288,20 +289,20 @@ contains
   end subroutine
 
   ! The same labels must produce the same dataset names and Name attributes
-  ! in UG and ImageData, including collisions between static/temporal fields.
+  ! in UnstructuredGrid and ImageData, including collisions between static/temporal fields.
   subroutine naming_parity()
     character(12), parameter :: labels(12) = [character(12) :: &
         '', '', 'a/b', 'a.b', 'a_b_1', 'a b', 'a/b', 'a_b_1', 'trimmed   ', 'trimmed', 'same', 'same']
-    type(vtkhdf_cell_data_handle) :: image_cells(12), ug_cells(12)
-    type(vtkhdf_point_data_handle) :: image_points(12), ug_points(12)
-    type(vtkhdf_field_data_handle) :: image_fields(12), ug_fields(12)
+    type(vtkhdf_cell_data_handle) :: image_cells(12), unstructured_cells(12)
+    type(vtkhdf_point_data_handle) :: image_points(12), unstructured_points(12)
+    type(vtkhdf_field_data_handle) :: image_fields(12), unstructured_fields(12)
     integer :: mode, j, value, cells(3,2), points(3,2)
     integer :: cell_values(1,1,1), point_values(2,2,2)
     character(:), allocatable :: suffix
     do mode = VTKHDF_STATIC, VTKHDF_FIXED_MESH
       suffix = 'static'
       if (mode == VTKHDF_FIXED_MESH) suffix = 'temporal'
-      call create_ug_reference('image_names_'//suffix//'_ug.vtkhdf',mode)
+      call create_unstructured_reference('image_names_'//suffix//'_unstructured.vtkhdf',mode)
       call create_file('image_names_'//suffix//'.vtkhdf',mode)
       points = reshape([0,0,0,1,1,1],[3,2])
       call file%write_mesh(points,[0.,0.,0.],[1.,1.,1.])
@@ -314,46 +315,46 @@ contains
         value = 100+j+rank
         if (mode == VTKHDF_FIXED_MESH .and. modulo(j,2) == 0) then
           image_cells(j) = file%register_temporal_cell_data(labels(j),0)
-          ug_cells(j) = ug%register_temporal_cell_data(labels(j),0)
+          unstructured_cells(j) = unstructured%register_temporal_cell_data(labels(j),0)
           image_points(j) = file%register_temporal_point_data(labels(j),0)
-          ug_points(j) = ug%register_temporal_point_data(labels(j),0)
+          unstructured_points(j) = unstructured%register_temporal_point_data(labels(j),0)
         else
           cell_values = value
           point_values = value
           call file%write_cell_data(labels(j),cell_values,[0,0,0],cells)
-          call ug%write_cell_data(labels(j),[value])
+          call unstructured%write_cell_data(labels(j),[value])
           call file%write_point_data(labels(j),point_values,[0,0,0],points)
-          call ug%write_point_data(labels(j),[value,value,value,value])
+          call unstructured%write_point_data(labels(j),[value,value,value,value])
         end if
         if (mode == VTKHDF_FIXED_MESH) then
           image_fields(j) = file%register_temporal_field_data(labels(j),0)
-          ug_fields(j) = ug%register_temporal_field_data(labels(j),0)
+          unstructured_fields(j) = unstructured%register_temporal_field_data(labels(j),0)
         else
           call file%write_field_data(labels(j),value)
-          call ug%write_field_data(labels(j),value)
+          call unstructured%write_field_data(labels(j),value)
         end if
       end do
       if (mode == VTKHDF_FIXED_MESH) then
         call file%start_time_step(0.)
-        call ug%start_time_step(0.)
+        call unstructured%start_time_step(0.)
         do j = 1, size(labels)
           value = 100+j+rank
           if (modulo(j,2) == 0) then
             cell_values = value
             point_values = value
             call file%write_cell_data(image_cells(j),cell_values,[0,0,0],cells)
-            call ug%write_cell_data(ug_cells(j),[value])
+            call unstructured%write_cell_data(unstructured_cells(j),[value])
             call file%write_point_data(image_points(j),point_values,[0,0,0],points)
-            call ug%write_point_data(ug_points(j),[value,value,value,value])
+            call unstructured%write_point_data(unstructured_points(j),[value,value,value,value])
           end if
           call file%write_field_data(image_fields(j),value)
-          call ug%write_field_data(ug_fields(j),value)
+          call unstructured%write_field_data(unstructured_fields(j),value)
         end do
         call file%start_time_step(1.)
-        call ug%start_time_step(1.)
+        call unstructured%start_time_step(1.)
       end if
       call file%close()
-      call ug%close()
+      call unstructured%close()
     end do
   end subroutine
 
@@ -409,48 +410,50 @@ contains
   end subroutine
 
 #:for kind, decl in nums[1:]
-  subroutine variable_${kind}$(var,ug_var,step)
-    type(vtkhdf_field_data_handle), intent(in) :: var, ug_var
+  subroutine variable_${kind}$(var,unstructured_var,step)
+    type(vtkhdf_field_data_handle), intent(in) :: var, unstructured_var
     integer, intent(in) :: step
     integer :: j
     ${decl}$ :: matrix(3,4), empty(0)
     select case (step)
     case (1)
-      call file%write_field_data(var,${'real' if kind.startswith('real') else 'int'}$(42+rank,${kind}$))
-      call ug%write_field_data(ug_var,${'real' if kind.startswith('real') else 'int'}$(42+rank,${kind}$))
+      call file%write_field_data(var,data=${'real' if kind.startswith('real') else 'int'}$(42+rank,${kind}$))
+      call unstructured%write_field_data(unstructured_var,data=${'real' if kind.startswith('real') else 'int'}$(42+rank,${kind}$))
     case (2)
-      call file%write_field_data(var,${'real' if kind.startswith('real') else 'int'}$([21,22]+rank,${kind}$))
-      call ug%write_field_data(ug_var,${'real' if kind.startswith('real') else 'int'}$([21,22]+rank,${kind}$))
+      call file%write_field_data(var,data=${'real' if kind.startswith('real') else 'int'}$([21,22]+rank,${kind}$))
+      call unstructured%write_field_data(unstructured_var,data=${'real' if kind.startswith('real') else 'int'}$([21,22]+rank,${kind}$))
     case (3)
-      call file%write_field_data(var,${'real' if kind.startswith('real') else 'int'}$([16,32]+rank,${kind}$),as_vector=.true.)
-      call ug%write_field_data(ug_var,${'real' if kind.startswith('real') else 'int'}$([16,32]+rank,${kind}$),as_vector=.true.)
+      call file%write_field_data(var,data=${'real' if kind.startswith('real') else 'int'}$([16,32]+rank,${kind}$),as_vector=.true.)
+      call unstructured%write_field_data(unstructured_var, &
+          data=${'real' if kind.startswith('real') else 'int'}$([16,32]+rank,${kind}$),as_vector=.true.)
     case (4)
       matrix = reshape(${'real' if kind.startswith('real') else 'int'}$([(j+rank,j=1,12)],${kind}$),[3,4])
-      call file%write_field_data(var,matrix(:,1:4:2))
-      call ug%write_field_data(ug_var,matrix(:,1:4:2))
+      call file%write_field_data(var,data=matrix(:,1:4:2))
+      call unstructured%write_field_data(unstructured_var,data=matrix(:,1:4:2))
     case (6)
-      call file%write_field_data(var,${'real' if kind.startswith('real') else 'int'}$(7+rank,${kind}$))
-      call ug%write_field_data(ug_var,${'real' if kind.startswith('real') else 'int'}$(7+rank,${kind}$))
+      call file%write_field_data(var,data=${'real' if kind.startswith('real') else 'int'}$(7+rank,${kind}$))
+      call unstructured%write_field_data(unstructured_var,data=${'real' if kind.startswith('real') else 'int'}$(7+rank,${kind}$))
     case (7)
-      call file%write_field_data(var,empty)
-      call ug%write_field_data(ug_var,empty)
+      call file%write_field_data(var,data=empty)
+      call unstructured%write_field_data(unstructured_var,data=empty)
     case (9)
-      call file%write_field_data(var,${'real' if kind.startswith('real') else 'int'}$([8,9]+rank,${kind}$),as_vector=.true.)
-      call ug%write_field_data(ug_var,${'real' if kind.startswith('real') else 'int'}$([8,9]+rank,${kind}$),as_vector=.true.)
+      call file%write_field_data(var,data=${'real' if kind.startswith('real') else 'int'}$([8,9]+rank,${kind}$),as_vector=.true.)
+      call unstructured%write_field_data(unstructured_var, &
+          data=${'real' if kind.startswith('real') else 'int'}$([8,9]+rank,${kind}$),as_vector=.true.)
     end select
   end subroutine
 #:endfor
 
-  subroutine create_ug_reference(name,mode)
+  subroutine create_unstructured_reference(name,mode)
     character(*), intent(in) :: name
     integer, intent(in) :: mode
 #ifdef USE_MPI
-    call ug%create(name,MPI_COMM_WORLD,stat,errmsg,mode=mode)
+    call unstructured%create(name,MPI_COMM_WORLD,stat,errmsg,mode=mode)
 #else
-    call ug%create(name,stat,errmsg,mode=mode)
+    call unstructured%create(name,stat,errmsg,mode=mode)
 #endif
     if (stat /= 0) error stop errmsg
-    call ug%write_mesh(reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,0.,0.,1.],[3,4]), &
+    call unstructured%write_mesh(reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,0.,0.,1.],[3,4]), &
         [1,2,3,4],[1,5],[10_int8])
   end subroutine
 
@@ -537,13 +540,13 @@ contains
     end do
 #:if kind != 'int8'
     call file%write_field_data('${kind}$-value',${'real' if kind.startswith('real') else 'int'}$(7+rank,${kind}$))
-    call ug%write_field_data('${kind}$-value',${'real' if kind.startswith('real') else 'int'}$(7+rank,${kind}$))
+    call unstructured%write_field_data('${kind}$-value',${'real' if kind.startswith('real') else 'int'}$(7+rank,${kind}$))
     call file%write_field_data('${kind}$-tuples',${'real' if kind.startswith('real') else 'int'}$([1,2,3]+rank,${kind}$))
-    call ug%write_field_data('${kind}$-tuples',${'real' if kind.startswith('real') else 'int'}$([1,2,3]+rank,${kind}$))
+    call unstructured%write_field_data('${kind}$-tuples',${'real' if kind.startswith('real') else 'int'}$([1,2,3]+rank,${kind}$))
     call file%write_field_data('${kind}$-vector',${'real' if kind.startswith('real') else 'int'}$([4,5,6]+rank,${kind}$),as_vector=.true.)
-    call ug%write_field_data('${kind}$-vector',${'real' if kind.startswith('real') else 'int'}$([4,5,6]+rank,${kind}$),as_vector=.true.)
+    call unstructured%write_field_data('${kind}$-vector',${'real' if kind.startswith('real') else 'int'}$([4,5,6]+rank,${kind}$),as_vector=.true.)
     call file%write_field_data('${kind}$-tensor',reshape(${'real' if kind.startswith('real') else 'int'}$([1,2,3,4,5,6]+rank,${kind}$),[2,3]))
-    call ug%write_field_data('${kind}$-tensor',reshape(${'real' if kind.startswith('real') else 'int'}$([1,2,3,4,5,6]+rank,${kind}$),[2,3]))
+    call unstructured%write_field_data('${kind}$-tensor',reshape(${'real' if kind.startswith('real') else 'int'}$([1,2,3,4,5,6]+rank,${kind}$),[2,3]))
 #:endif
   end subroutine
 #:endfor

@@ -1,5 +1,5 @@
 !!
-!! VTKHDF_UG_WRITER_TYPE
+!! VTKHDF_UNSTRUCTURED_WRITER_TYPE
 !!
 !! This module defines the shared UnstructuredGrid dataset writer, with static, fixed,
 !! moving, and dynamic mesh workflows for point, cell, and field data. The
@@ -26,7 +26,7 @@
 #:set locations = ['cell', 'point']
 #:set mesh_locations = [('cell','ncell'), ('point','nnode')]
 
-module vtkhdf_ug_writer_type
+module vtkhdf_unstructured_writer_type
 
   use,intrinsic :: iso_fortran_env
   use,intrinsic :: iso_c_binding, only: c_sizeof
@@ -57,7 +57,7 @@ module vtkhdf_ug_writer_type
   public :: vtkhdf_version
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
 
-  type, abstract, extends(vtkhdf_simple_dataset), public :: vtkhdf_ug_writer
+  type, abstract, extends(vtkhdf_simple_dataset), public :: vtkhdf_unstructured_writer
     private
     type(vtkhdf_context) :: ctx ! unowned copy
     integer(hid_t) :: root_id=H5I_INVALID_HID
@@ -142,23 +142,23 @@ module vtkhdf_ug_writer_type
   ! its standalone file sibling; their shared implementation stays in the
   ! abstract writer. If block-specific behavior is needed, move this type
   ! and that behavior into a separate block module and file.
-  type, extends(vtkhdf_ug_writer), public :: vtkhdf_ug_block
+  type, extends(vtkhdf_unstructured_writer), public :: vtkhdf_unstructured_block
   end type
 
 contains
 
   subroutine close(this)
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     call this%close_dataset
     call reset(this)
   contains
     subroutine reset(this)
-      class(vtkhdf_ug_writer), intent(out) :: this
+      class(vtkhdf_unstructured_writer), intent(out) :: this
     end subroutine
   end subroutine close
 
   subroutine close_dataset(this)
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     integer :: ierr
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
@@ -179,7 +179,7 @@ contains
 
     use vtkhdf_data_support, only: STEPS_CHUNK_SIZE
 
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     type(vtkhdf_context), intent(in) :: ctx
@@ -268,25 +268,25 @@ contains
   end subroutine init
 
   function root(this) result(id)
-    class(vtkhdf_ug_writer), intent(in) :: this
+    class(vtkhdf_unstructured_writer), intent(in) :: this
     integer(hid_t) :: id
     id = this%root_id
   end function
 
   pure function temporal_enabled(this) result(enabled)
-    class(vtkhdf_ug_writer), intent(in) :: this
+    class(vtkhdf_unstructured_writer), intent(in) :: this
     logical :: enabled
     enabled = this%is_temporal
   end function
 
   pure function step_is_open(this) result(is_open)
-    class(vtkhdf_ug_writer), intent(in) :: this
+    class(vtkhdf_unstructured_writer), intent(in) :: this
     logical :: is_open
     is_open = this%step_open
   end function
 
   subroutine set_block_metadata(this, index, name)
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     integer, intent(in) :: index
     character(*), intent(in) :: name
     INSIST(this%root_id >= 0)
@@ -299,7 +299,7 @@ contains
 #:for rkind, rdecl, rh5type in reals
 #:for ikind, idecl, ih5type in ints_no_int8
   subroutine write_mesh_${rkind}$_${ikind}$(this, points, cnode, xcnode, types)
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     ${rdecl}$, intent(in) :: points(:,:)
     ${idecl}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
@@ -325,7 +325,7 @@ contains
 
     use vtkhdf_data_support, only: data_chunk_size, STEPS_CHUNK_SIZE
 
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     ${idecl}$, intent(in) :: cnode(:), xcnode(:)
     integer(int8), intent(in) :: types(:)
 
@@ -457,7 +457,7 @@ contains
 
     use vtkhdf_data_support, only: data_chunk_size, STEPS_CHUNK_SIZE
 
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     ${rdecl}$, intent(in) :: points(:,:)
 
     logical :: define_datasets
@@ -540,7 +540,7 @@ contains
 #:for loc, count in mesh_locations
 #:for kind, decl, h5type in nums
   subroutine write_${loc}$_data_${kind}$(this, name, array, attribute)
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: array(..)
     character(*), intent(in), optional :: attribute
@@ -563,15 +563,15 @@ contains
 #:endfor
 
 #:for kind, decl, h5type in nums_no_int8
-  subroutine write_field_data_${kind}$(this, name, array, as_vector)
-    class(vtkhdf_ug_writer), intent(inout) :: this
+  subroutine write_field_data_${kind}$(this, name, data, as_vector)
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     character(*), intent(in) :: name
-    ${decl}$, intent(in) :: array(..)
+    ${decl}$, intent(in) :: data(..)
     logical, intent(in), optional :: as_vector
     type(vtkhdf_h5e_context) :: err_ctx
     INSIST(this%root_id >= 0)
     call err_ctx%capture
-    call this%field_data%write(this%ctx, name, array, as_vector, this%data_chunk_bytes, &
+    call this%field_data%write(this%ctx, name, data, as_vector, this%data_chunk_bytes, &
         max(0,this%nsteps-merge(1,0,this%step_open)))
     call err_ctx%restore(0)
   end subroutine
@@ -585,7 +585,7 @@ contains
 
     use vtkhdf_data_support, only: data_chunk_size, STEPS_CHUNK_SIZE
 
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: mold(..)
     character(*), intent(in), optional :: attribute
@@ -622,7 +622,7 @@ contains
 
 #:for kind, decl, h5type in nums_no_int8
   function register_temporal_field_data_${kind}$(this, name, mold) result(handle)
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: mold
     integer :: index
@@ -643,7 +643,7 @@ contains
 #:for kind, decl, h5type in nums
   subroutine write_temporal_${loc}$_data_${kind}$(this, var, array)
 
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     type(vtkhdf_${loc}$_data_handle), intent(in) :: var
     ${decl}$, intent(in) :: array(..)
 
@@ -682,15 +682,15 @@ contains
 #:endfor
 
 #:for kind, decl, h5type in nums_no_int8
-  subroutine write_temporal_field_data_${kind}$(this, var, array, as_vector)
-    class(vtkhdf_ug_writer), intent(inout) :: this
+  subroutine write_temporal_field_data_${kind}$(this, var, data, as_vector)
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     type(vtkhdf_field_data_handle), intent(in) :: var
-    ${decl}$, intent(in) :: array(..)
+    ${decl}$, intent(in) :: data(..)
     logical, intent(in), optional :: as_vector
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
     INSIST(this%step_open)
-    call this%field_data%write_temporal(this%ctx, var%index(this%root_id), array, as_vector)
+    call this%field_data%write_temporal(this%ctx, var%index(this%root_id), data, as_vector)
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -699,7 +699,7 @@ contains
 
   subroutine start_time_step_real64(this, time)
 
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     real(real64), intent(in) :: time
 
     type(vtkhdf_h5e_context) :: err_ctx
@@ -732,7 +732,7 @@ contains
 
   subroutine finalize_time_step(this)
 
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
 
     integer :: j
     type(vtkhdf_h5e_context) :: err_ctx
@@ -796,7 +796,7 @@ contains
 #:for loc, group in [('cell','CellData'), ('point','PointData')]
   subroutine reserve_${loc}$_data_name(this, name, external_name, internal_name, index, is_temporal)
     use vtkhdf_data_support, only: resolve_record_name
-    class(vtkhdf_ug_writer), intent(inout) :: this
+    class(vtkhdf_unstructured_writer), intent(inout) :: this
     character(*), intent(in) :: name
     character(:), allocatable, intent(out) :: external_name, internal_name
     integer, intent(out) :: index
@@ -827,4 +827,4 @@ contains
     end do
   end subroutine
 
-end module vtkhdf_ug_writer_type
+end module vtkhdf_unstructured_writer_type

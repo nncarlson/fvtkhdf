@@ -17,7 +17,7 @@ program mb_example1
   real :: t
 
   type(vtkhdf_mb_file) :: file
-  type(vtkhdf_ug_block), pointer :: liq_blk => null(), sol_blk => null()
+  type(vtkhdf_unstructured_block), pointer :: liq_blk => null(), sol_blk => null()
   type(vtkhdf_cell_data_handle) :: prs_var
   type(vtkhdf_point_data_handle) :: vel_var
 

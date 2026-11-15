@@ -19,7 +19,7 @@ program vtkhdf_mb_basic_blocks_test
   integer :: rank, nproc, stat
 
   type(vtkhdf_mb_file) :: vizfile
-  type(vtkhdf_ug_block), pointer :: hblk_a => null(), hblk_b => null()
+  type(vtkhdf_unstructured_block), pointer :: hblk_a => null(), hblk_b => null()
   type(vtkhdf_cell_data_handle) :: hcell_radius
   type(vtkhdf_point_data_handle) :: hpoint_velocity
   type(vtkhdf_field_data_handle) :: hfield_scalar

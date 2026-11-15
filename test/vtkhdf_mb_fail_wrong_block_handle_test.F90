@@ -10,7 +10,7 @@ program vtkhdf_mb_fail_wrong_block_handle_test
   implicit none
 
   type(vtkhdf_mb_file) :: vizfile
-  type(vtkhdf_ug_block), pointer :: hblk_a => null(), hblk_b => null()
+  type(vtkhdf_unstructured_block), pointer :: hblk_a => null(), hblk_b => null()
   type(vtkhdf_point_data_handle) :: hpoint_radius
   integer :: rank, nproc, stat
   character(:), allocatable :: errmsg

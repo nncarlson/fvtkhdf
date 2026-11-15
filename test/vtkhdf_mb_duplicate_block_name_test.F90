@@ -16,7 +16,7 @@ program vtkhdf_mb_duplicate_block_name_test
   integer :: rank, nproc, stat
 
   type(vtkhdf_mb_file) :: vizfile
-  type(vtkhdf_ug_block), pointer :: hblk => null()
+  type(vtkhdf_unstructured_block), pointer :: hblk => null()
 
   call test_env_init(rank, nproc)
 

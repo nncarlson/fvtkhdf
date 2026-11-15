@@ -103,14 +103,14 @@ def read_output(reader, step):
     return output
 
 
-def validate_ug_output(summary):
+def validate_unstructured_output(summary):
     if summary["points"] <= 0:
-        raise RuntimeError("UG reader returned no points")
+        raise RuntimeError("UnstructuredGrid reader returned no points")
     if summary["cells"] <= 0:
-        raise RuntimeError("UG reader returned no cells")
+        raise RuntimeError("UnstructuredGrid reader returned no cells")
     if "vtkUnstructuredGrid" not in summary["leaf_classes"]:
         raise RuntimeError(
-            "UG reader did not yield an unstructured-grid leaf "
+            "UnstructuredGrid reader did not yield an unstructured-grid leaf "
             f"(root={summary['class_name']}, leaves={summary['leaf_classes']})"
         )
 
@@ -131,7 +131,7 @@ def validate_mb_output(output, summary):
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Smoke-test VTK HDF reader availability and file readback.")
-    parser.add_argument("kind", nargs="?", choices=("ug", "mb"))
+    parser.add_argument("kind", nargs="?", choices=("unstructured", "mb"))
     parser.add_argument("path", nargs="?")
     parser.add_argument("--check-import", action="store_true")
     args = parser.parse_args(argv)
@@ -169,8 +169,8 @@ def main(argv: list[str]) -> int:
         for step in steps_to_read:
             output = read_output(reader, step)
             summary = summarize_output(output)
-            if args.kind == "ug":
-                validate_ug_output(summary)
+            if args.kind == "unstructured":
+                validate_unstructured_output(summary)
             else:
                 validate_mb_output(output, summary)
     except Exception as exc:

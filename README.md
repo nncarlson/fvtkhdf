@@ -136,7 +136,7 @@ can find the package.
 
 This minimal example requires a serial build configured with `-DENABLE_MPI=OFF`.
 It writes a **VTKHDF** UnstructuredGrid dataset containing a single tetrahedral
-cell with scalar point data. For MPI usage, see [ug_static.F90](example/ug_static.F90).
+cell with scalar point data. For MPI usage, see [unstructured_static.F90](example/unstructured_static.F90).
 More complete examples for all supported dataset types are provided in the
 [example directory](example/README.md).
 
@@ -144,12 +144,12 @@ More complete examples for all supported dataset types are provided in the
 program quick_start
 
   use,intrinsic :: iso_fortran_env, only: int8
-  use vtkhdf_ug_file_type
+  use vtkhdf_unstructured_file_type
   use vtkhdf_vtk_cell_types, only: VTK_TETRA
   implicit none
 
   ! 1. Declare the file object (Unstructured Grid)
-  type(vtkhdf_ug_file) :: myfile
+  type(vtkhdf_unstructured_file) :: myfile
 
   ! Data arrays
   real, allocatable :: points(:,:)

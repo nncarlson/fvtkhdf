@@ -5,20 +5,20 @@ program consumer_mpi
 #else
   use mpi
 #endif
-  use vtkhdf_ug_file_type
-  use vtkhdf_mb_file_type, only: vtkhdf_mb_file, vtkhdf_ug_block, vtkhdf_image_block, &
+  use vtkhdf_unstructured_file_type
+  use vtkhdf_mb_file_type, only: vtkhdf_mb_file, vtkhdf_unstructured_block, vtkhdf_image_block, &
       vtkhdf_rectilinear_block, vtkhdf_structured_block
   use vtkhdf_rectilinear_file_type
   use vtkhdf_structured_file_type
   use vtkhdf_image_file_type
   use vtkhdf_file_modes, only: VTKHDF_FIXED_MESH
   implicit none
-  type(vtkhdf_ug_file) :: file
+  type(vtkhdf_unstructured_file) :: file
   type(vtkhdf_image_file) :: image
   type(vtkhdf_rectilinear_file) :: rect
   type(vtkhdf_structured_file) :: grid
   type(vtkhdf_mb_file) :: mb
-  type(vtkhdf_ug_block), pointer :: block
+  type(vtkhdf_unstructured_block), pointer :: block
   type(vtkhdf_image_block), pointer :: image_block
   type(vtkhdf_rectilinear_block), pointer :: rect_block
   type(vtkhdf_structured_block), pointer :: struct_block

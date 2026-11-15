@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent layout and VTK readback checks for the typed UG block API."""
+"""Independent layout and VTK readback checks for the typed UnstructuredGrid block API."""
 
 import argparse
 from pathlib import Path

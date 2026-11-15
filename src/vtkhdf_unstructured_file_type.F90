@@ -1,7 +1,7 @@
 !!
-!! VTKHDF_UG_FILE_TYPE
+!! VTKHDF_UNSTRUCTURED_FILE_TYPE
 !!
-!! Standalone file ownership for the shared ug dataset writer.
+!! Standalone file ownership for the shared unstructured dataset writer.
 !! Dataset writing and temporal state are inherited from the writer; only
 !! CREATE, FLUSH, and file cleanup belong here. Explicit CLOSE is collective.
 !! Implicit finalization frees local allocations without performing I/O.
@@ -10,10 +10,10 @@
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
 
-module vtkhdf_ug_file_type
+module vtkhdf_unstructured_file_type
 
   use,intrinsic :: iso_fortran_env, only: int64
-  use vtkhdf_ug_writer_type, only: vtkhdf_ug_writer
+  use vtkhdf_unstructured_writer_type, only: vtkhdf_unstructured_writer
   use vtkhdf_file_context_type
   use vtkhdf_h5_c_binding, only: init_hdf5
   use vtkhdf_h5e_context_type
@@ -26,7 +26,7 @@ module vtkhdf_ug_file_type
   public :: vtkhdf_version, VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
 
-  type, extends(vtkhdf_ug_writer), public :: vtkhdf_ug_file
+  type, extends(vtkhdf_unstructured_writer), public :: vtkhdf_unstructured_file
     private
     type(vtkhdf_file_context) :: file
   contains
@@ -47,7 +47,7 @@ contains
 #ifdef USE_MPI_F08
   subroutine create_f08(this, filename, comm, stat, errmsg, mode, data_chunk_bytes)
     use mpi_f08, only: MPI_Comm
-    class(vtkhdf_ug_file), intent(out) :: this
+    class(vtkhdf_unstructured_file), intent(out) :: this
     character(*), intent(in) :: filename
     type(MPI_Comm), intent(in) :: comm
     integer, intent(out) :: stat
@@ -63,7 +63,7 @@ contains
 #endif
 #ifdef USE_MPI
   subroutine create_int(this, filename, comm, stat, errmsg, mode, data_chunk_bytes)
-    class(vtkhdf_ug_file), intent(out) :: this
+    class(vtkhdf_unstructured_file), intent(out) :: this
     character(*), intent(in) :: filename
     integer, intent(in) :: comm
     integer, intent(out) :: stat
@@ -79,7 +79,7 @@ contains
   end subroutine
 #else
   subroutine create(this, filename, stat, errmsg, mode, data_chunk_bytes)
-    class(vtkhdf_ug_file), intent(out) :: this
+    class(vtkhdf_unstructured_file), intent(out) :: this
     character(*), intent(in) :: filename
     integer, intent(out) :: stat
     character(:), allocatable, intent(out) :: errmsg
@@ -95,7 +95,7 @@ contains
 #endif
 
   subroutine flush(this)
-    class(vtkhdf_ug_file), intent(in) :: this
+    class(vtkhdf_unstructured_file), intent(in) :: this
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
     call this%file%flush
@@ -103,7 +103,7 @@ contains
   end subroutine
 
   subroutine close(this)
-    class(vtkhdf_ug_file), intent(inout) :: this
+    class(vtkhdf_unstructured_file), intent(inout) :: this
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
     call this%close_dataset
@@ -112,8 +112,8 @@ contains
     call err_ctx%restore(0)
   contains
     subroutine reset(this)
-      class(vtkhdf_ug_file), intent(out) :: this
+      class(vtkhdf_unstructured_file), intent(out) :: this
     end subroutine
   end subroutine close
 
-end module vtkhdf_ug_file_type
+end module vtkhdf_unstructured_file_type

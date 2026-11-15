@@ -10,7 +10,7 @@ blocks; hierarchical nesting and other simple VTK dataset types are not
 currently supported.
 
 Each block has the same semantics as a VTK dataset written by
-``vtkhdf_ug_file``, with its own selected mode, mesh, and associated cell,
+``vtkhdf_unstructured_file``, with its own selected mode, mesh, and associated cell,
 point, and field datasets. Each block has its own mode and data; however, all
 temporal blocks share a common timeline.
 
@@ -19,7 +19,7 @@ communicator passed to ``create`` and must be called in the same order
 on all ranks.
 
 Most methods of ``vtkhdf_mb_file`` correspond directly to those of
-``vtkhdf_ug_file``, but operate on the block identified by an opaque
+``vtkhdf_unstructured_file``, but operate on the block identified by an opaque
 handle returned by ``add_block``.
 
 File Creation and Management
@@ -36,7 +36,7 @@ File Creation and Management
 
    Create a new VTKHDF MultiBlockDataSet file.
 
-   Arguments are identical to those of ``vtkhdf_ug_file%create``,
+   Arguments are identical to those of ``vtkhdf_unstructured_file%create``,
    except that there is no file-level ``mode`` argument.
 
 .. method-doc::
@@ -80,7 +80,7 @@ Block Definition
    The returned ``vtkhdf_block_handle`` is opaque. Store it and reuse it for
    later calls for that block.
 
-The file is temporal if at least one block uses a temporal UG mode
+The file is temporal if at least one block uses a temporal UnstructuredGrid mode
 (``VTKHDF_FIXED_MESH``, ``VTKHDF_MOVING_MESH``, or ``VTKHDF_DYNAMIC_MESH``). All
 temporal blocks share calls to ``start_time_step`` and ``finalize_time_step``.
 
@@ -122,7 +122,7 @@ Mesh Data
 
    Write only mesh geometry for the block identified by ``block``.
 
-Mesh arguments and semantics are identical to those of ``vtkhdf_ug_file``.
+Mesh arguments and semantics are identical to those of ``vtkhdf_unstructured_file``.
 The mesh for each block must be written before writing its point or cell data.
 
 
@@ -130,7 +130,7 @@ Point, Cell, and Field Data
 ---------------------------
 
 Except for the added block handle, all arguments and semantics are the
-same as for ``vtkhdf_ug_file``; see its description for details omitted
+same as for ``vtkhdf_unstructured_file``; see its description for details omitted
 here. Field data values, array interpretation, and reuse rules are described
 in :doc:`field_data`.
 
@@ -165,10 +165,10 @@ closing the file.
 
    call file%write_cell_data(block, name, array [, attribute])
    call file%write_point_data(block, name, array [, attribute])
-   call file%write_field_data(block, name, array [, as_vector])
+   call file%write_field_data(block, name, data [, as_vector])
 
-   Write ``array`` to a new cell, point, or field dataset ``name``
-   for the block identified by ``block``.
+   Write the payload (``array`` for point/cell data, ``data`` for field data)
+   to a new dataset ``name`` for the block identified by ``block``.
 
    For point and cell data, the optional ``attribute`` argument designates
    a VTK role; see :doc:`common` for attribute conventions.
@@ -208,11 +208,11 @@ All temporal blocks share a common timeline created by ``start_time_step``.
 
    call file%write_cell_data(block, cell_var, array)
    call file%write_point_data(block, point_var, array)
-   call file%write_field_data(block, field_var, array [, as_vector])
+   call file%write_field_data(block, field_var, data [, as_vector])
 
-   Write ``array`` to the temporal dataset identified by the variable
-   handle for the block identified by ``block``, associating it with
-   the current time step.
+   Write the payload (``array`` for point/cell data, ``data`` for field data)
+   to the temporal dataset identified by the variable handle for the block
+   identified by ``block``, associating it with the current time step.
 
 .. method-doc::
 

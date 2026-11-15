@@ -250,7 +250,7 @@ def check_layout(directory, debug_fill):
         image = directory / f"image_{mode}.vtkhdf"
         with (
             h5py.File(image) as f,
-            h5py.File(directory / f"image_fields_{mode}_ug.vtkhdf") as reference,
+            h5py.File(directory / f"image_fields_{mode}_unstructured.vtkhdf") as reference,
         ):
             for location in ["FieldData"] + (
                 ["Steps/FieldDataOffsets", "Steps/FieldDataSizes"]
@@ -281,7 +281,7 @@ def check_layout(directory, debug_fill):
                     assert a.shape[0] == 1
                     equal(np, a[0], expected)
                     equal(np, f[f"VTKHDF/Steps/{loc}Offsets/{kind}-{name}"][:], [0, 0])
-    for filename in ["image_fields_variable.vtkhdf", "image_fields_variable_ug.vtkhdf"]:
+    for filename in ["image_fields_variable.vtkhdf", "image_fields_variable_unstructured.vtkhdf"]:
         with h5py.File(directory / filename) as f:
             g = f["VTKHDF"]
             for kind in list(KINDS)[1:]:
@@ -368,11 +368,11 @@ def check_layout(directory, debug_fill):
     for mode in ["static", "temporal"]:
         with (
             h5py.File(directory / f"image_names_{mode}.vtkhdf") as image,
-            h5py.File(directory / f"image_names_{mode}_ug.vtkhdf") as ug,
+            h5py.File(directory / f"image_names_{mode}_unstructured.vtkhdf") as unstructured,
         ):
             for group in ["CellData", "PointData", "FieldData"]:
                 expected_names = {name for name, _ in naming_cases(group)}
-                for f in [image, ug]:
+                for f in [image, unstructured]:
                     g = f["VTKHDF"]
                     assert set(g[group]) == expected_names
                     for j, (name, external) in enumerate(naming_cases(group), start=1):
@@ -381,9 +381,9 @@ def check_layout(directory, debug_fill):
                         equal(np, a[:].ravel()[0], 100 + j)
                         if mode == "temporal":
                             path = f"Steps/{group}Offsets/{name}"
-                            # UG omits offsets for static mesh data; ImageData
+                            # UnstructuredGrid omits offsets for static mesh data; ImageData
                             # stores an explicit zero offset for every step.
-                            if f is ug and group != "FieldData" and j % 2 == 1:
+                            if f is unstructured and group != "FieldData" and j % 2 == 1:
                                 assert path not in g
                             else:
                                 equal(np, g[path][:], [0, 0])
@@ -393,9 +393,9 @@ def check_layout(directory, debug_fill):
                         equal(
                             np,
                             image[f"VTKHDF/{group}/{name}"][:],
-                            ug[f"VTKHDF/{group}/{name}"][:],
+                            unstructured[f"VTKHDF/{group}/{name}"][:],
                         )
-    print("ImageData layout, values, UG FieldData parity, and snapshot reuse verified")
+    print("ImageData layout, values, UnstructuredGrid FieldData parity, and snapshot reuse verified")
 
 
 def check_static_fields(np, group):
@@ -482,7 +482,7 @@ def check_reader(directory, case):
                 equal(np, to_numpy(a), np.full(to_numpy(a).shape, value))
         _, _, Reader, _, _ = dependencies(True)
         for mode, steps in [("static", [None]), ("temporal", [0, 1])]:
-            for suffix in ["", "_ug"]:
+            for suffix in ["", "_unstructured"]:
                 r = Reader()
                 r.SetFileName(str(directory / f"image_names_{mode}{suffix}.vtkhdf"))
                 errors = []
@@ -525,10 +525,10 @@ def check_reader(directory, case):
             reader.Update()
             output = reader.GetOutputDataObject(0)
             # FieldData belongs to the whole output, including a partitioned
-            # UG's root rather than its individual partition datasets.
+            # UnstructuredGrid's root rather than its individual partition datasets.
             return output.GetFieldData()
 
-        for filename in ["image_temporal.vtkhdf", "image_fields_temporal_ug.vtkhdf"]:
+        for filename in ["image_temporal.vtkhdf", "image_fields_temporal_unstructured.vtkhdf"]:
             r = Reader()
             errors = []
             r.AddObserver("ErrorEvent", lambda *_: errors.append(True))
@@ -543,7 +543,7 @@ def check_reader(directory, case):
             assert not errors, filename
         for filename in [
             "image_fields_variable.vtkhdf",
-            "image_fields_variable_ug.vtkhdf",
+            "image_fields_variable_unstructured.vtkhdf",
         ]:
             r = Reader()
             errors = []

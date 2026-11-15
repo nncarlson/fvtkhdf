@@ -1,7 +1,7 @@
-program vtkhdf_ug_test
+program vtkhdf_unstructured_test
 
   use,intrinsic :: iso_fortran_env, only: int8
-  use vtkhdf_ug_file_type
+  use vtkhdf_unstructured_file_type
   use vtkhdf_vtk_cell_types
 #ifdef USE_MPI
   use mpi
@@ -15,16 +15,16 @@ program vtkhdf_ug_test
   integer(int8), allocatable :: types(:)
   real :: time
 
-  type(vtkhdf_ug_file) :: vizfile
+  type(vtkhdf_unstructured_file) :: vizfile
   type(vtkhdf_point_data_handle) :: pvar
 
 #ifdef USE_MPI
   call MPI_Init(stat)
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, stat)
-  call vizfile%create('dyn_ug_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_DYNAMIC_MESH)
+  call vizfile%create('dyn_unstructured_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_DYNAMIC_MESH)
 #else
   rank = 0
-  call vizfile%create('dyn_ug_test.vtkhdf', stat, errmsg, mode=VTKHDF_DYNAMIC_MESH)
+  call vizfile%create('dyn_unstructured_test.vtkhdf', stat, errmsg, mode=VTKHDF_DYNAMIC_MESH)
 #endif
   if (stat /= 0) error stop errmsg
 

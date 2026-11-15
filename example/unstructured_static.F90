@@ -1,7 +1,7 @@
-program ug_static_example
+program unstructured_static_example
 
   use,intrinsic :: iso_fortran_env, only: int8
-  use vtkhdf_ug_file_type
+  use vtkhdf_unstructured_file_type
   use vtkhdf_vtk_cell_types, only: VTK_TRIANGLE
 #ifdef USE_MPI
   use mpi
@@ -15,7 +15,7 @@ program ug_static_example
   character(:), allocatable :: errmsg
   integer :: stat, nproc, rank, npoints, ncells, j
 
-  type(vtkhdf_ug_file) :: file
+  type(vtkhdf_unstructured_file) :: file
 
 #ifdef USE_MPI
   call MPI_Init(stat)

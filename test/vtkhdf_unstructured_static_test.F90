@@ -1,15 +1,15 @@
-program vtkhdf_ug_static_test
+program vtkhdf_unstructured_static_test
 
   use, intrinsic :: iso_fortran_env, only: r8 => real64, int8
   use vtkhdf_test_env
   use vtkhdf_test_data
-  use vtkhdf_ug_file_type
+  use vtkhdf_unstructured_file_type
 #ifdef USE_MPI
   use mpi
 #endif
   implicit none
 
-  type(vtkhdf_ug_file) :: vizfile
+  type(vtkhdf_unstructured_file) :: vizfile
   integer :: rank, nproc, stat
   character(:), allocatable :: errmsg
   real(r8), allocatable :: points(:,:), scalar_cell_data(:), vector_cell_data(:,:)
@@ -21,9 +21,9 @@ program vtkhdf_ug_static_test
   call test_env_init(rank, nproc)
 
 #ifdef USE_MPI
-  call vizfile%create('ug_static_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_STATIC)
+  call vizfile%create('unstructured_static_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_STATIC)
 #else
-  call vizfile%create('ug_static_test.vtkhdf', stat, errmsg, mode=VTKHDF_STATIC)
+  call vizfile%create('unstructured_static_test.vtkhdf', stat, errmsg, mode=VTKHDF_STATIC)
 #endif
   if (stat /= 0) error stop errmsg
 
@@ -49,4 +49,4 @@ program vtkhdf_ug_static_test
   call vizfile%close()
   call test_env_finalize()
 
-end program vtkhdf_ug_static_test
+end program vtkhdf_unstructured_static_test

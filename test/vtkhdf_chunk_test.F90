@@ -1,7 +1,7 @@
 program vtkhdf_chunk_test
 
   use,intrinsic :: iso_fortran_env, only: r8 => real64, int8, int64
-  use vtkhdf_ug_file_type
+  use vtkhdf_unstructured_file_type
   use vtkhdf_mb_file_type
   use vtkhdf_vtk_cell_types
 #ifdef USE_MPI
@@ -16,9 +16,9 @@ program vtkhdf_chunk_test
   integer :: stat
   integer :: rank
 
-  type(vtkhdf_ug_file) :: ug_file
+  type(vtkhdf_unstructured_file) :: unstructured_file
   type(vtkhdf_mb_file) :: mb_file
-  type(vtkhdf_ug_block), pointer :: block => null()
+  type(vtkhdf_unstructured_block), pointer :: block => null()
 
 #ifdef USE_MPI
   call MPI_Init(stat)
@@ -30,13 +30,13 @@ program vtkhdf_chunk_test
   call get_mesh_data(points, cnode, xcnode, types)
 
 #ifdef USE_MPI
-  call ug_file%create('chunk_default.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_FIXED_MESH)
+  call unstructured_file%create('chunk_default.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_FIXED_MESH)
 #else
-  call ug_file%create('chunk_default.vtkhdf', stat, errmsg, mode=VTKHDF_FIXED_MESH)
+  call unstructured_file%create('chunk_default.vtkhdf', stat, errmsg, mode=VTKHDF_FIXED_MESH)
 #endif
   if (stat /= 0) error stop errmsg
-  call ug_file%write_mesh(points, cnode, xcnode, types)
-  call ug_file%close()
+  call unstructured_file%write_mesh(points, cnode, xcnode, types)
+  call unstructured_file%close()
 
 #ifdef USE_MPI
   call mb_file%create('chunk_custom.vtkhdf', MPI_COMM_WORLD, stat, errmsg, data_chunk_bytes=1024_int64*1024)

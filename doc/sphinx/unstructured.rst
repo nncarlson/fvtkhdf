@@ -1,7 +1,7 @@
 UnstructuredGrid
 ================
 
-The ``vtkhdf_ug_file_type`` module defines the ``vtkhdf_ug_file``
+The ``vtkhdf_unstructured_file_type`` module defines the ``vtkhdf_unstructured_file``
 derived type for writing VTKHDF UnstructuredGrid files.
 
 Optional VTK attribute roles, specified with the ``attribute`` argument, are
@@ -13,13 +13,22 @@ communicator passed to ``create``. Every rank must call the same method
 in the same order and supply identical values for all non-distributed
 arguments.
 
+Migration from 0.7
+------------------
+
+In 0.8, ``vtkhdf_ug_file_type`` is renamed to
+``vtkhdf_unstructured_file_type``, and ``vtkhdf_ug_file`` to
+``vtkhdf_unstructured_file``. Update ``use`` statements and type declarations;
+the old module and type names are no longer provided. The MultiBlock names
+``vtkhdf_mb_file_type`` and ``vtkhdf_mb_file`` are retained.
+
 File Creation and Management
 ----------------------------
 
 .. code-block:: fortran
 
-   use vtkhdf_ug_file_type
-   type(vtkhdf_ug_file) :: file
+   use vtkhdf_unstructured_file_type
+   type(vtkhdf_unstructured_file) :: file
 
 .. method-doc::
 
@@ -74,7 +83,7 @@ The writer supports all four modes:
 
 Field data may be static or temporal in all temporal modes.
 
-The mode constants are exported by ``vtkhdf_ug_file_type`` and
+The mode constants are exported by ``vtkhdf_unstructured_file_type`` and
 ``vtkhdf_file_modes``.
 
 Temporal datasets are registered before time stepping; writes through their
@@ -89,8 +98,8 @@ calling MPI rank.
 
 .. code-block:: fortran
 
-   use vtkhdf_ug_file_type
-   type(vtkhdf_ug_file) :: file
+   use vtkhdf_unstructured_file_type
+   type(vtkhdf_unstructured_file) :: file
 
 .. method-doc::
 
@@ -166,8 +175,8 @@ before writing the data. See :doc:`common` for naming and handle conventions.
 
 .. code-block:: fortran
 
-   use vtkhdf_ug_file_type
-   type(vtkhdf_ug_file) :: file
+   use vtkhdf_unstructured_file_type
+   type(vtkhdf_unstructured_file) :: file
    type(vtkhdf_cell_data_handle) :: cell_var
    type(vtkhdf_point_data_handle) :: point_var
 
@@ -311,7 +320,7 @@ Time stepping and temporal registration are not allowed.
 
     - ``call file%write_cell_data(cell_var, array)``
     - ``call file%write_point_data(point_var, array)``
-    - ``call file%write_field_data(field_var, array [, as_vector])``
+    - ``call file%write_field_data(field_var, data [, as_vector])``
 
   * ``call file%finalize_time_step``
 
@@ -333,7 +342,7 @@ Time stepping and temporal registration are not allowed.
 
     - ``call file%write_cell_data(cell_var, array)``
     - ``call file%write_point_data(point_var, array)``
-    - ``call file%write_field_data(field_var, array [, as_vector])``
+    - ``call file%write_field_data(field_var, data [, as_vector])``
 
   * ``call file%finalize_time_step``
 
@@ -365,7 +374,7 @@ Static point and cell datasets are not allowed in this mode.
 
     - ``call file%write_cell_data(cell_var, array)``
     - ``call file%write_point_data(point_var, array)``
-    - ``call file%write_field_data(field_var, array [, as_vector])``
+    - ``call file%write_field_data(field_var, data [, as_vector])``
 
   * ``call file%finalize_time_step``
 

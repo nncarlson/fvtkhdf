@@ -3,14 +3,14 @@ program vtkhdf_image_fail_test
   use,intrinsic :: iso_fortran_env
   use vtkhdf_image_file_type
   use vtkhdf_test_env
-  use vtkhdf_ug_file_type, only: vtkhdf_ug_file
+  use vtkhdf_unstructured_file_type, only: vtkhdf_unstructured_file
   use vtkhdf_file_modes, only: VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
 #ifdef USE_MPI
   use mpi
 #endif
   implicit none
   type(vtkhdf_image_file) :: file, other
-  type(vtkhdf_ug_file) :: ug
+  type(vtkhdf_unstructured_file) :: unstructured
   type(vtkhdf_cell_data_handle) :: var
   type(vtkhdf_field_data_handle) :: field_var
   integer :: rank,nproc,stat,mode
@@ -20,19 +20,19 @@ program vtkhdf_image_fail_test
   character(:), allocatable :: errmsg
   call test_env_init(rank,nproc)
   call get_command_argument(1,scenario)
-  if (scenario == 'ug_duplicate') then
+  if (scenario == 'unstructured_duplicate') then
 #ifdef USE_MPI
-    call ug%create('image_fail_ug_duplicate.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=VTKHDF_FIXED_MESH)
+    call unstructured%create('image_fail_unstructured_duplicate.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=VTKHDF_FIXED_MESH)
 #else
-    call ug%create('image_fail_ug_duplicate.vtkhdf',stat,errmsg,mode=VTKHDF_FIXED_MESH)
+    call unstructured%create('image_fail_unstructured_duplicate.vtkhdf',stat,errmsg,mode=VTKHDF_FIXED_MESH)
 #endif
     if (stat /= 0) error stop errmsg
-    call ug%write_mesh(reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,0.,0.,1.],[3,4]), &
+    call unstructured%write_mesh(reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,0.,0.,1.],[3,4]), &
         [1,2,3,4],[1,5],[10_int8])
-    var = ug%register_temporal_cell_data('data',0.0_real64)
-    call ug%start_time_step(0.0)
-    call ug%write_cell_data(var,[1.0_real64])
-    call ug%write_cell_data(var,[2.0_real64])
+    var = unstructured%register_temporal_cell_data('data',0.0_real64)
+    call unstructured%start_time_step(0.0)
+    call unstructured%write_cell_data(var,[1.0_real64])
+    call unstructured%write_cell_data(var,[2.0_real64])
     ! Return success if the duplicate-write guard did not terminate execution.
     call test_env_finalize()
     stop

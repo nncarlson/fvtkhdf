@@ -28,7 +28,7 @@ Currently supported VTK dataset types:
   explicit physical coordinates. RectilinearGrid and StructuredGrid also
   support moving geometry with fixed logical grids.
 
-* **UnstructuredGrid (UG)**: meshes with arbitrary cell connectivity,
+* **UnstructuredGrid**: meshes with arbitrary cell connectivity,
   supporting moving geometry and changing topology.
 
 * **HyperTreeGrid (HTG)**: tree-based adaptive mesh refinement on a
@@ -60,8 +60,8 @@ of simple VTK datasets.
      - ``vtkhdf_structured_file``
      - ``vtkhdf_structured_file_type``
    * - UnstructuredGrid
-     - ``vtkhdf_ug_file``
-     - ``vtkhdf_ug_file_type``
+     - ``vtkhdf_unstructured_file``
+     - ``vtkhdf_unstructured_file_type``
    * - HyperTreeGrid
      - ``vtkhdf_htg_file``
      - ``vtkhdf_htg_file_type``

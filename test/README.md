@@ -7,10 +7,10 @@ The test suite is organized into a few categories with different goals.
 These are the small Fortran executables that exercise one writer mode or one
 specific API contract.
 
-- `vtkhdf_ug_static_file_type`: UG static mesh and static data writes.
-- `vtkhdf_ug_fixed_file_type`: UG fixed-mesh temporal writes.
-- `vtkhdf_moving_ug_file_type`: UG moving-mesh geometry updates.
-- `vtkhdf_dynamic_ug_file_type`: UG dynamic-mesh topology and geometry updates.
+- `vtkhdf_unstructured_static_file_type`: UnstructuredGrid static mesh and static data writes.
+- `vtkhdf_unstructured_fixed_file_type`: UnstructuredGrid fixed-mesh temporal writes.
+- `vtkhdf_moving_unstructured_file_type`: UnstructuredGrid moving-mesh geometry updates.
+- `vtkhdf_dynamic_unstructured_file_type`: UnstructuredGrid dynamic-mesh topology and geometry updates.
 - `vtkhdf_mb_basic_blocks_file_type`: MB ordinary two-block static and temporal writes.
 - `vtkhdf_chunk_settings`: chunk-layout configuration checks.
 - `test_leak`: repeated HDF5 init sanity check.
@@ -23,12 +23,12 @@ specific API contract.
 
 ## Interop Fixtures
 
-The broad UG and MB programs are no longer the primary writer coverage. They now
+The broad UnstructuredGrid and MB programs are no longer the primary writer coverage. They now
 mainly produce representative files for outer checks.
 
-- `vtkhdf_ug_fixture_file`: broad UG fixture producer.
+- `vtkhdf_unstructured_fixture_file`: broad UnstructuredGrid fixture producer.
 - `vtkhdf_mb_fixture_file`: broad MB fixture producer.
-- `vtkhdf_ug_reader_smoke`: VTK readback of the UG fixture.
+- `vtkhdf_unstructured_reader_smoke`: VTK readback of the UnstructuredGrid fixture.
 - `vtkhdf_mb_reader_smoke`: VTK readback of the MB fixture.
 
 The broad fixtures are intentionally narrower than before. They should only
@@ -40,8 +40,8 @@ them.
 These are `h5dump`-based checks layered on top of fixture or regression files.
 They protect on-disk metadata that reader smoke alone would miss.
 
-- UG fixture attribute checks for static and temporal point/cell data.
-- Dynamic UG temporal mesh checks for `NumberOfPoints`, `NumberOfCells`,
+- UnstructuredGrid fixture attribute checks for static and temporal point/cell data.
+- Dynamic UnstructuredGrid temporal mesh checks for `NumberOfPoints`, `NumberOfCells`,
   `PointOffsets`, `CellOffsets`, and `ConnectivityIdOffsets`.
 - MB fixture checks for assembly links and block-name-to-`Group_i` mapping.
 - MB zero-part checks for sparse-block `NumberOfParts`,
@@ -59,9 +59,9 @@ test rather than just the execution mode.
 ## Negative Contract Tests
 
 These tests protect API ordering and handle-usage assertions that intentionally
-abort. Most use `WILL_FAIL`. `vtkhdf_image_fail_ug_duplicate` instead uses
+abort. Most use `WILL_FAIL`. `vtkhdf_image_fail_unstructured_duplicate` instead uses
 `vtkhdf_expect_assertion.py` to require both a nonzero exit and the specific
-duplicate-write assertion diagnostic. Its UG setup runs independently of the
+duplicate-write assertion diagnostic. Its UnstructuredGrid setup runs independently of the
 ImageData setup, and the expected source location is resolved from the template
 so unrelated setup errors cannot satisfy the test.
 
@@ -70,9 +70,9 @@ registered only for Debug configurations: they exercise debug-only `ASSERT`
 diagnostics. Local argument and lifecycle checks use unconditional `INSIST`
 and remain tested in Release. See the [runtime checking policy](../doc/developer.md).
 
-- `vtkhdf_ug_fail_late_register`
-- `vtkhdf_ug_fail_wrong_cell_count`
-- `vtkhdf_ug_fail_data_before_mesh`
+- `vtkhdf_unstructured_fail_late_register`
+- `vtkhdf_unstructured_fail_wrong_cell_count`
+- `vtkhdf_unstructured_fail_data_before_mesh`
 - `vtkhdf_mb_fail_wrong_block_handle`
 - `vtkhdf_mb_fail_late_block`
 
@@ -118,7 +118,7 @@ collisions, and static/temporal label collisions in both creation orders.
 Readback verifies that each returned handle writes its own dataset and that
 name-based static writes create distinct fields. Static cell/point handles
 assemble additional blocks, including empty first contributions, for every
-numeric kind and both scalar and multicomponent data. A UG/ImageData parity fixture
+numeric kind and both scalar and multicomponent data. A UnstructuredGrid/ImageData parity fixture
 checks the same labels in every association, with blank names, trimming,
 sanitization collisions, caller-supplied suffixes, and mixed static/temporal
 fields; HDF5 metadata and VTK readback must agree. Repeated static names
@@ -128,7 +128,7 @@ remain complete, independent values.
 `vtkhdf_image_layout` requires NumPy and h5py. It independently checks values,
 dataset rank/order, chunks, 32-bit WholeExtent, 64-bit offsets, and snapshot
 counts. It compares static and temporal FieldData datasets and metadata with
-UG reference files, including variable shape, initial omission, and reuse.
+UnstructuredGrid reference files, including variable shape, initial omission, and reuse.
 An internal structured-core fixture creates independently named static and
 temporal leaves under an existing HDF5 group, checks their data and temporal
 offsets, and verifies that closing the leaves leaves the parent handles open.
@@ -147,7 +147,7 @@ tests. Layout checks remain enabled for all versions. Complete mesh-associated
 validation was performed with a VTK source
 build reporting 9.7.20261022. The temporal FieldData reader test strictly checks
 component counts, tuple counts, types, and every value for both ImageData and
-UG files; it does not skip a malformed FieldData result.
+UnstructuredGrid files; it does not skip a malformed FieldData result.
 
 The expected-failure ImageData tests cover local selection validity, type and
 component consistency, ordering, missing initial snapshots, foreign handles,
@@ -158,7 +158,7 @@ disagreement between MPI ranks about otherwise supported modes.
 Tests intentionally do not diagnose global coverage or overlap.
 
 `vtkhdf_constant_field_test.F90.fypp` covers by-name constant field data for all
-simple writers and supported modes, including changing UG topology. It writes
+simple writers and supported modes, including changing UnstructuredGrid topology. It writes
 all four numeric kinds as scalars, scalar tuples, vectors, and noncontiguous
 multicomponent arrays. Temporal files also include empty constants. Fields are
 created before mesh definition, during an open step, between steps, and after
@@ -167,12 +167,12 @@ in both creation orders. Independent layout and VTK checks verify complete
 offset/size histories, values at every step, rank-zero payload selection, and
 unchanged registered-field omission, reuse, and shape changes. Non-temporal
 files retain their original layouts without a Steps group. VTK versions before
-9.7 read the UG and ImageData fixtures; the RectilinearGrid and StructuredGrid
+9.7 read the UnstructuredGrid and ImageData fixtures; the RectilinearGrid and StructuredGrid
 reader cases run only with VTK 9.7 or later. Layout checks cover all types.
 
 The simple writers own their registries and construct public data handles.
 MultiBlock adds and checks each handle's block index before forwarding it.
-Foreign-file handle checks cover cell, point, and field data in UG and
+Foreign-file handle checks cover cell, point, and field data in UnstructuredGrid and
 MultiBlock, including matching field and block indices, alongside the existing
 ImageData ownership check.
 

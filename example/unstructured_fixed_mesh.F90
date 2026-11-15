@@ -1,7 +1,7 @@
-program ug_fixed_mesh_example
+program unstructured_fixed_mesh_example
 
   use,intrinsic :: iso_fortran_env, only: int8
-  use vtkhdf_ug_file_type
+  use vtkhdf_unstructured_file_type
   use vtkhdf_vtk_cell_types, only: VTK_TRIANGLE
 #ifdef USE_MPI
   use mpi
@@ -16,7 +16,7 @@ program ug_fixed_mesh_example
   integer :: stat, nproc, rank, npoints, ncells, step, j
   real :: t
 
-  type(vtkhdf_ug_file) :: file
+  type(vtkhdf_unstructured_file) :: file
   type(vtkhdf_cell_data_handle)  :: prs_var
   type(vtkhdf_point_data_handle) :: vel_var
   type(vtkhdf_field_data_handle) :: cpu_var

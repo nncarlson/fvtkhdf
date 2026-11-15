@@ -3,7 +3,7 @@ program vtkhdf_mb_collections_test
   use,intrinsic :: iso_fortran_env, only: int8, real64
   use vtkhdf_mb_file_type
   use vtkhdf_simple_dataset_class, only: vtkhdf_simple_dataset
-  use vtkhdf_ug_writer_type, only: vtkhdf_ug_writer
+  use vtkhdf_unstructured_writer_type, only: vtkhdf_unstructured_writer
   use vtkhdf_structured_base_class, only: vtkhdf_structured_base
   use vtkhdf_h5_c_binding, only: hid_t, H5Iis_valid, H5Iget_file_id, H5Fclose
   use vtkhdf_test_env
@@ -18,7 +18,7 @@ program vtkhdf_mb_collections_test
     class(vtkhdf_simple_dataset), pointer :: p => null()
   end type
   type(vtkhdf_mb_file) :: mb
-  type(vtkhdf_ug_block), pointer :: ug
+  type(vtkhdf_unstructured_block), pointer :: unstructured
   type(vtkhdf_image_block), pointer :: image
   type(vtkhdf_rectilinear_block), pointer :: rect
   type(vtkhdf_structured_block), pointer :: struct
@@ -66,16 +66,16 @@ program vtkhdf_mb_collections_test
     call mb%add_block('Repeated Block',struct,mode=mode)
     blocks(3)%p => struct
     roots(3) = struct%root()
-    call mb%add_block('Repeated Block',ug,mode=mode)
-    blocks(4)%p => ug
-    roots(4) = ug%root()
+    call mb%add_block('Repeated Block',unstructured,mode=mode)
+    blocks(4)%p => unstructured
+    roots(4) = unstructured%root()
 
     ! Use all saved pointers after collection growth, both directly and through
     ! their common base. MB must own exactly the same targets.
     if (rank == 0) then
-      call ug%write_mesh(reshape(points,[3,4]),[1,2,4,3],[1,5],[9_int8])
+      call unstructured%write_mesh(reshape(points,[3,4]),[1,2,4,3],[1,5],[9_int8])
     else
-      call ug%write_mesh(reshape([real(real64)::],[3,0]),[integer::],[1],[integer(int8)::])
+      call unstructured%write_mesh(reshape([real(real64)::],[3,0]),[integer::],[1],[integer(int8)::])
     end if
     call image%write_mesh(bounds,[0.,0.,0.],[1.,1.,1.])
     call rect%write_mesh(bounds,[0.,1.],[0.,1.],[0.])
@@ -84,11 +84,11 @@ program vtkhdf_mb_collections_test
     do j = 1,4
       if (blocks(j)%p%root() /= roots(j)) error stop 'block target changed'
       select type (dataset => blocks(j)%p)
-      class is (vtkhdf_ug_writer)
-        call dataset%write_field_data('id',j)
+      class is (vtkhdf_unstructured_writer)
+        call dataset%write_field_data('id',data=j)
         if (dataset%temporal_enabled()) clock(j) = dataset%register_temporal_field_data('clock',0.0_real64)
       class is (vtkhdf_structured_base)
-        call dataset%write_field_data('id',j)
+        call dataset%write_field_data('id',data=j)
         if (dataset%temporal_enabled()) clock(j) = dataset%register_temporal_field_data('clock',0.0_real64)
       end select
     end do
@@ -102,10 +102,10 @@ program vtkhdf_mb_collections_test
               error stop 'incorrect block step state'
           if (.not.blocks(j)%p%temporal_enabled()) cycle
           select type (dataset => blocks(j)%p)
-          class is (vtkhdf_ug_writer)
-            call dataset%write_field_data(clock(j),real(10*j+step,real64))
+          class is (vtkhdf_unstructured_writer)
+            call dataset%write_field_data(clock(j),data=real(10*j+step,real64))
           class is (vtkhdf_structured_base)
-            call dataset%write_field_data(clock(j),real(10*j+step,real64))
+            call dataset%write_field_data(clock(j),data=real(10*j+step,real64))
           end select
         end do
         if (step == 0) then
@@ -128,7 +128,7 @@ program vtkhdf_mb_collections_test
       if (H5Iis_valid(roots(j)) > 0) error stop 'block root leaked'
       nullify(blocks(j)%p)
     end do
-    nullify(ug,image,rect,struct)
+    nullify(unstructured,image,rect,struct)
   end do
   call test_env_finalize()
 end program vtkhdf_mb_collections_test

@@ -15,7 +15,7 @@ program vtkhdf_mb_zero_part_test
   integer :: rank, nproc, stat
 
   type(vtkhdf_mb_file) :: vizfile
-  type(vtkhdf_ug_block), pointer :: hblk_full => null(), hblk_sparse => null()
+  type(vtkhdf_unstructured_block), pointer :: hblk_full => null(), hblk_sparse => null()
   type(vtkhdf_point_data_handle) :: hpoint_radius
 
   call test_env_init(rank, nproc)

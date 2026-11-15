@@ -9,14 +9,14 @@ From the `build/example` directory:
 **Parallel Build**
 
 ```bash
-mpiexec -np 3 ./ug_fixed_mesh
+mpiexec -np 3 ./unstructured_fixed_mesh
 paraview example.vtkhdf
 ```
 
 **Serial Build**
 
 ```bash
-./ug_fixed_mesh
+./unstructured_fixed_mesh
 paraview example.vtkhdf
 ```
 
@@ -64,8 +64,8 @@ MPI builds.
 
 ## UnstructuredGrid and MultiBlockDataSet
 
-`ug_static.F90`, `ug_fixed_mesh.F90`, `ug_moving_mesh.F90`, and
-`ug_dynamic_mesh.F90` demonstrate the four UnstructuredGrid writer modes.
+`unstructured_static.F90`, `unstructured_fixed_mesh.F90`, `unstructured_moving_mesh.F90`, and
+`unstructured_dynamic_mesh.F90` demonstrate the four UnstructuredGrid writer modes.
 `mb_example1.F90` writes a collection of named UnstructuredGrid blocks with a
 shared timeline. These examples write `example.vtkhdf`, replacing any file
 with that name in the working directory.

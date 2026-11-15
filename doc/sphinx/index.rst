@@ -28,7 +28,7 @@ A serial build is also available.
    :maxdepth: 1
    :caption: Unstructured VTK Dataset Types
 
-   UnstructuredGrid <ug>
+   UnstructuredGrid <unstructured>
    vtk_cell_types
    stitching
 

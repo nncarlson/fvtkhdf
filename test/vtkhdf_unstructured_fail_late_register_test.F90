@@ -1,15 +1,15 @@
-program vtkhdf_ug_fail_late_register_test
+program vtkhdf_unstructured_fail_late_register_test
 
   use, intrinsic :: iso_fortran_env, only: r8 => real64, int8
   use vtkhdf_test_env
   use vtkhdf_test_data
-  use vtkhdf_ug_file_type
+  use vtkhdf_unstructured_file_type
 #ifdef USE_MPI
   use mpi
 #endif
   implicit none
 
-  type(vtkhdf_ug_file) :: vizfile
+  type(vtkhdf_unstructured_file) :: vizfile
   integer :: rank, nproc, stat
   character(:), allocatable :: errmsg
   real(r8), allocatable :: points(:,:)
@@ -20,9 +20,9 @@ program vtkhdf_ug_fail_late_register_test
   call test_env_init(rank, nproc)
 
 #ifdef USE_MPI
-  call vizfile%create('ug_fail_late_register_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_FIXED_MESH)
+  call vizfile%create('unstructured_fail_late_register_test.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_FIXED_MESH)
 #else
-  call vizfile%create('ug_fail_late_register_test.vtkhdf', stat, errmsg, mode=VTKHDF_FIXED_MESH)
+  call vizfile%create('unstructured_fail_late_register_test.vtkhdf', stat, errmsg, mode=VTKHDF_FIXED_MESH)
 #endif
   if (stat /= 0) error stop errmsg
 
@@ -36,4 +36,4 @@ program vtkhdf_ug_fail_late_register_test
 
   ! Return successfully if the expected assertion did not fire.
   call test_env_finalize()
-end program vtkhdf_ug_fail_late_register_test
+end program vtkhdf_unstructured_fail_late_register_test

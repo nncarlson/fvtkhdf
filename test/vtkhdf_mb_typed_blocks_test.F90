@@ -1,4 +1,4 @@
-! Exercise borrowed block pointers, MB ownership, and the shared UG timeline.
+! Exercise borrowed block pointers, MB ownership, and the shared UnstructuredGrid timeline.
 program vtkhdf_mb_typed_blocks_test
   use,intrinsic :: iso_fortran_env, only: int8, real32, real64
   use vtkhdf_mb_file_type
@@ -12,14 +12,14 @@ program vtkhdf_mb_typed_blocks_test
   implicit none
 
   type :: block_pointer
-    type(vtkhdf_ug_block), pointer :: p => null()
+    type(vtkhdf_unstructured_block), pointer :: p => null()
   end type
   integer, parameter :: nblocks = 24
   type(vtkhdf_mb_file) :: mb
   type(block_pointer) :: blocks(nblocks)
   type(vtkhdf_cell_data_handle) :: cell_var(3)
   type(vtkhdf_field_data_handle) :: field_var(3)
-  type(vtkhdf_ug_block), pointer :: alias
+  type(vtkhdf_unstructured_block), pointer :: alias
   integer(hid_t) :: roots(nblocks), file_id
   integer :: rank, nproc, stat, i, step, ncell
   integer, allocatable :: cnode(:), xcnode(:)
