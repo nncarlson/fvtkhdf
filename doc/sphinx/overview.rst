@@ -36,13 +36,16 @@ Currently supported VTK dataset types:
   refinement.
 
 * **MultiBlockDataSet (MB)**: a composite type containing a flat collection
-  of UnstructuredGrid blocks.
+  of ImageData, RectilinearGrid, StructuredGrid, and UnstructuredGrid blocks.
+  Each block selects its own mode; temporal blocks share a common timeline.
 
 fVTKHDF provides a file writer for each supported VTK dataset type. Each
 writer is a Fortran derived type exported by its corresponding module.
 Writers for simple VTK datasets provide methods for defining the mesh and
 writing point, cell, and field data. Composite writers manage collections
-of simple VTK datasets.
+of simple VTK datasets. :doc:`MultiBlock <mb>` returns typed block pointers
+with the same mesh and data methods as the corresponding standalone writers;
+the owning file manages their lifecycle.
 
 .. list-table::
    :header-rows: 1

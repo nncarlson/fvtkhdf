@@ -1,26 +1,46 @@
 MultiBlockDataSet
 =================
 
-The ``vtkhdf_mb_file_type`` module defines the ``vtkhdf_mb_file``
-derived type for writing VTKHDF MultiBlockDataSet files.
+The ``vtkhdf_mb_file_type`` module defines ``vtkhdf_mb_file`` for writing a
+flat collection of named simple VTK datasets to one VTKHDF file. Blocks may
+have different dataset types and writer modes. Each has its own mesh and
+point, cell, and field data; all temporal blocks share one timeline.
+Hierarchical nesting and PartitionedDataSetCollection output are not supported.
 
-MultiBlockDataSet is a composite VTK dataset: a container for simple VTK
-datasets. This interface supports a flat collection of named UnstructuredGrid
-blocks; hierarchical nesting and other simple VTK dataset types are not
-currently supported.
+The file owns its blocks. ``add_block`` returns a typed pointer through which
+you write the block's mesh and data directly. File creation, time stepping,
+flushing, and closing are performed on the owning ``vtkhdf_mb_file``.
 
-Each block has the same semantics as a VTK dataset written by
-``vtkhdf_unstructured_file``, with its own selected mode, mesh, and associated cell,
-point, and field datasets. Each block has its own mode and data; however, all
-temporal blocks share a common timeline.
+Supported Blocks and Modes
+--------------------------
 
-In the MPI build, all type-bound procedures are collective over the
-communicator passed to ``create`` and must be called in the same order
-on all ranks.
+All four block types and the shared ``VTKHDF_*`` mode constants are exported
+by ``vtkhdf_mb_file_type``. The pointer type selects the VTK dataset type:
 
-Most methods of ``vtkhdf_mb_file`` correspond directly to those of
-``vtkhdf_unstructured_file``, but operate on the block identified by an opaque
-handle returned by ``add_block``.
+.. list-table::
+   :header-rows: 1
+
+   * - VTK dataset type
+     - Block pointer type
+     - Supported modes
+   * - :doc:`ImageData <image>`
+     - ``vtkhdf_image_block``
+     - Static, fixed mesh
+   * - :doc:`RectilinearGrid <rectilinear>`
+     - ``vtkhdf_rectilinear_block``
+     - Static, fixed mesh, moving mesh
+   * - :doc:`StructuredGrid <structured_grid>`
+     - ``vtkhdf_structured_block``
+     - Static, fixed mesh, moving mesh
+   * - :doc:`UnstructuredGrid <unstructured>`
+     - ``vtkhdf_unstructured_block``
+     - Static, fixed mesh, moving mesh, dynamic mesh
+
+The modes correspond to ``VTKHDF_STATIC``, ``VTKHDF_FIXED_MESH``,
+``VTKHDF_MOVING_MESH``, and ``VTKHDF_DYNAMIC_MESH``; see :doc:`common`.
+A block has the same geometry, data-writing interfaces, and reuse rules as
+the standalone writer for its dataset type. The corresponding chapters give
+its mesh arguments, array shapes, region placement, and mode restrictions.
 
 File Creation and Management
 ----------------------------
@@ -34,55 +54,194 @@ File Creation and Management
 
    call file%create(filename, [comm,] stat, errmsg [, data_chunk_bytes])
 
-   Create a new VTKHDF MultiBlockDataSet file.
+   Create a new VTKHDF MultiBlockDataSet file. Modes are selected per block;
+   there is no file-level ``mode`` argument.
 
-   Arguments are identical to those of ``vtkhdf_unstructured_file%create``,
-   except that there is no file-level ``mode`` argument.
+   * ``filename``: output file path, normally ending in ``.vtkhdf``.
+   * ``comm``: MPI communicator, omitted in serial builds. With
+     ``USE_MPI_F08=ON`` (default), either ``integer`` or ``type(MPI_Comm)`` is
+     accepted. With ``USE_MPI_F08=OFF``, only ``integer`` is accepted.
+   * ``stat``: output status code; zero indicates success.
+   * ``errmsg``: allocated error message when ``stat /= 0``.
+   * ``data_chunk_bytes``: optional positive ``int64`` target chunk size,
+     defaulting to ``128*1024`` (128 KiB), used by every block.
 
 .. method-doc::
 
    call file%flush()
 
-   Flush the file's HDF5 buffers.
+   Flush the shared file's HDF5 buffers.
 
 .. method-doc::
 
    call file%close()
 
-   Finalize any open time step, close the file, and release resources. Call
-   this explicitly; automatic Fortran finalization cannot perform collective
-   cleanup.
+   Finalize any open time step, close every block and the shared file, and
+   release their resources. All borrowed block pointers and their data handles
+   become invalid. Call this explicitly; automatic Fortran finalization cannot
+   perform collective cleanup.
 
-Block Definition
-----------------
+In MPI builds, file and block operations are collective over the communicator
+passed to ``create``. All ranks must create the same blocks, with the same
+types, names, and modes, and make calls in the same order. Distributed mesh
+and point/cell data follow the corresponding simple writer's rules. Field
+data is supplied on every rank, with matching type and shape; only rank zero's
+values are written. See :doc:`common`.
 
-.. code-block:: fortran
-
-   use vtkhdf_mb_file_type
-   type(vtkhdf_mb_file) :: file
-   type(vtkhdf_block_handle) :: block
+Block Creation and Ownership
+----------------------------
 
 .. method-doc::
 
-   block = file%add_block(name [, mode])
+   call file%add_block(name, dataset [, mode])
 
-   Define a new UnstructuredGrid block and return its handle.
+   Create a block and return a pointer to it in ``dataset``.
 
-   ``mode`` is one of ``VTKHDF_STATIC``, ``VTKHDF_FIXED_MESH``,
-   ``VTKHDF_MOVING_MESH``, or ``VTKHDF_DYNAMIC_MESH`` and defaults to
-   ``VTKHDF_STATIC``.
+   * ``name``: block name. Names are normalized and disambiguated within the
+     file according to :doc:`common`; the original name is preserved in the
+     block group's ``Name`` attribute.
+   * ``dataset``: pointer of one of the four concrete block types above.
+     The file allocates and initializes its target; the caller does not
+     allocate it.
+   * ``mode``: optional mode supported by that block type; defaults to
+     ``VTKHDF_STATIC``.
 
-   Block names form a separate namespace within the file and follow the
-   naming conventions in :doc:`common`.
-   The original name is preserved as the value of the block group
-   ``Name`` attribute for user reference.
+Pointers to existing blocks remain valid when more blocks are added. The file
+retains ownership of their targets: use the pointers for mesh and data writes,
+and let the file manage their lifecycle. After ``file%close()``, discard or
+nullify the pointers rather than accessing or deallocating their old targets.
 
-   The returned ``vtkhdf_block_handle`` is opaque. Store it and reuse it for
-   later calls for that block.
+Temporal blocks must be added before the first ``file%start_time_step`` call.
+Static blocks may also be added later. Static and temporal blocks may coexist
+in the writer, subject to the reader limitations below.
 
-The file is temporal if at least one block uses a temporal UnstructuredGrid mode
-(``VTKHDF_FIXED_MESH``, ``VTKHDF_MOVING_MESH``, or ``VTKHDF_DYNAMIC_MESH``). All
-temporal blocks share calls to ``start_time_step`` and ``finalize_time_step``.
+For example, create a RectilinearGrid block named ``fluid`` and an
+UnstructuredGrid block named ``solid``:
+
+.. code-block:: fortran
+
+   type(vtkhdf_rectilinear_block), pointer :: fluid
+   type(vtkhdf_unstructured_block), pointer :: solid
+
+   call file%add_block('fluid', fluid, mode=VTKHDF_MOVING_MESH)
+   call file%add_block('solid', solid, mode=VTKHDF_FIXED_MESH)
+
+Mesh and Data Writes
+--------------------
+
+Call mesh and data methods on the block pointer, with the same arguments as
+for its standalone writer. For example, the RectilinearGrid block uses
+``fluid%write_mesh(point_bounds, x, y, z)``; the UnstructuredGrid block
+uses ``solid%write_mesh(points, cnode, xcnode, types)``. RectilinearGrid and
+StructuredGrid also provide their usual ``write_mesh_geometry`` methods.
+
+The :doc:`structured` interface applies to point/cell data in ImageData,
+RectilinearGrid, and StructuredGrid blocks. The :doc:`unstructured` interface
+applies to UnstructuredGrid blocks. All blocks use :doc:`field_data`, including
+the ``data=`` payload keyword and ``as_vector`` interpretation.
+
+The ``vtkhdf_cell_data_handle``, ``vtkhdf_point_data_handle``, and
+``vtkhdf_field_data_handle`` types are exported by ``vtkhdf_mb_file_type``.
+Each handle belongs to the block that created it. Supply it directly to that
+block's write method.
+
+Each block has independent namespaces for point, cell, and field datasets.
+Within each namespace, creation by name reserves a new name; repeating a name
+does not select an existing dataset. Subsequent writes use a data handle where
+supported by the simple writer. Field data belongs to an individual block;
+the MB file has no composite-level field-data write interface.
+
+When several blocks use the same point or cell variable name, keep its
+quantity, numeric type, and component count consistent across those blocks so
+readers can treat it as one variable across the collection.
+
+Shared Time Stepping
+--------------------
+
+The file is temporal when at least one block uses a temporal mode. A collection
+with only static blocks has no time stepping.
+
+Register each block's temporal point, cell, and field datasets through that
+block before the first file-level time step. Perform time stepping on the file, so every
+temporal block receives the same steps and time values.
+
+.. method-doc::
+
+   call file%start_time_step(time)
+
+   Start a step in every temporal block. ``time`` is a scalar ``real32`` or
+   ``real64``; only rank zero's value is used in MPI builds. Starting another
+   step first finalizes an open step. Static blocks are unaffected.
+
+Within a step, update each block's geometry and data as required by its mode.
+Omitted writes follow that block type's reuse rules. For example, a moving
+RectilinearGrid block can reuse its coordinate vectors independently of its
+point/cell arrays. Static field data may be written at any point after block
+creation and before closing the file, including after time stepping.
+
+.. method-doc::
+
+   call file%finalize_time_step()
+
+   Complete the open step in every temporal block. Closing the file also
+   finalizes an open step.
+
+Example
+-------
+
+This serial example writes the rectilinear ``fluid`` and unstructured ``solid``
+blocks with a shared temperature time series. The fluid coordinates change
+between steps; the solid mesh remains fixed.
+
+.. code-block:: fortran
+
+   program multiblock_example
+     use,intrinsic :: iso_fortran_env, only: int8
+     use vtkhdf_mb_file_type
+     implicit none
+     type(vtkhdf_mb_file) :: file
+     type(vtkhdf_rectilinear_block), pointer :: fluid
+     type(vtkhdf_unstructured_block), pointer :: solid
+     type(vtkhdf_point_data_handle) :: fluid_temperature, solid_temperature
+     integer :: bounds(3,2), stat, step
+     real :: fluid_values(2,2,2), solid_values(4), solid_points(3,4)
+     character(:), allocatable :: errmsg
+
+     call file%create('multiblock.vtkhdf',stat,errmsg)
+     if (stat /= 0) error stop errmsg
+     call file%add_block('fluid',fluid,mode=VTKHDF_MOVING_MESH)
+     call file%add_block('solid',solid,mode=VTKHDF_FIXED_MESH)
+     bounds(:,1) = [0,0,0]
+     bounds(:,2) = [1,1,1]
+     call fluid%write_mesh(bounds,[0.,1.],[0.,1.],[0.,1.])
+     solid_points = reshape([2.,0.,0., 3.,0.,0., 2.,1.,0., 2.,0.,1.],[3,4])
+     call solid%write_mesh(solid_points,[1,2,3,4],[1,5],[10_int8])
+     call fluid%write_field_data('material',data=1)
+     call solid%write_field_data('material',data=2)
+     fluid_temperature = fluid%register_temporal_point_data('temperature',0.)
+     solid_temperature = solid%register_temporal_point_data('temperature',0.)
+
+     do step = 0,2
+       call file%start_time_step(real(step))
+       if (step > 0) call fluid%write_mesh_geometry([0.,1.+0.1*step],[0.,1.],[0.,1.])
+       fluid_values = real(step)
+       call fluid%write_point_data(fluid_temperature,fluid_values,[0,0,0])
+       solid_values = real(step)+10.
+       call solid%write_point_data(solid_temperature,solid_values)
+       call file%finalize_time_step()
+     end do
+     call file%close()
+     nullify(fluid,solid)
+   end program
+
+:repo:`example/mb_example1.F90` demonstrates UnstructuredGrid blocks, distributed
+mesh partitions, and temporal point/cell data in serial and MPI builds.
+
+Reader Compatibility
+--------------------
+
+Each block retains the reader version requirements of its simple dataset type;
+see :doc:`image`, :doc:`rectilinear`, and :doc:`structured_grid`.
 
 .. warning::
 
@@ -90,136 +249,31 @@ temporal blocks share calls to ``start_time_step`` and ``finalize_time_step``.
    both static and temporal blocks; see
    `VTK issue 19963 <https://gitlab.kitware.com/vtk/vtk/-/work_items/19963>`_.
    For compatibility, make all blocks temporal if any block is temporal.
-   Use ``VTKHDF_FIXED_MESH`` for otherwise static blocks; these blocks need
-   no registered temporal data or repeated mesh or data writes.
+   Use ``VTKHDF_FIXED_MESH`` for otherwise static blocks; these need no
+   registered temporal data or repeated mesh or data writes.
 
-Mesh Data
----------
+With VTK 9.7.2, a direct ``vtkHDFReader`` call sequence using
+``UpdateInformation()`` before reading the first frame can lose the composite's
+temporal state and fail to read point/cell arrays in ImageData, RectilinearGrid,
+and StructuredGrid blocks. The same dataset groups read correctly as standalone
+files. This is a reader limitation; the supported writer modes above are
+unchanged.
 
-.. code-block:: fortran
+Migration from 0.7
+------------------
 
-   use vtkhdf_mb_file_type
-   type(vtkhdf_mb_file) :: file
-   type(vtkhdf_block_handle) :: block
+``add_block`` is now a subroutine returning a typed pointer, replacing the
+opaque ``vtkhdf_block_handle``. Declare the pointer using the block's dataset
+type and replace ``solid = file%add_block(name, ...)`` with
+``call file%add_block(name, solid, ...)``.
 
-.. method-doc::
+Mesh writes, data registration, and data writes move from the file to the
+block. For example, replace ``file%write_mesh(solid, ...)`` with
+``solid%write_mesh(...)``, and
+``file%register_temporal_point_data(solid, ...)`` with
+``solid%register_temporal_point_data(...)``. The opaque data-handle types remain;
+their writes likewise use ``solid%write_point_data(handle, array)`` and related
+block methods. Field writes use ``data=`` rather than ``array=``.
 
-   call file%write_mesh(block, points, cnode, xcnode, types)
-
-   Write the mesh geometry and topology for the block identified by ``block``.
-
-.. method-doc::
-
-   call file%write_mesh_topology(block, cnode, xcnode, types)
-
-   Write only mesh topology for the block identified by ``block``. This is
-   mainly used with ``VTKHDF_MOVING_MESH`` or ``VTKHDF_DYNAMIC_MESH`` when geometry
-   is written separately.
-
-.. method-doc::
-
-   call file%write_mesh_geometry(block, points)
-
-   Write only mesh geometry for the block identified by ``block``.
-
-Mesh arguments and semantics are identical to those of ``vtkhdf_unstructured_file``.
-The mesh for each block must be written before writing its point or cell data.
-
-
-Point, Cell, and Field Data
----------------------------
-
-Except for the added block handle, all arguments and semantics are the
-same as for ``vtkhdf_unstructured_file``; see its description for details omitted
-here. Field data values, array interpretation, and reuse rules are described
-in :doc:`field_data`.
-
-Each block has independent namespaces for cell, point, and field data.
-Names are normalized and disambiguated within each namespace, following
-the rules in :doc:`common`.
-
-If multiple blocks contain datasets with the same name and
-association (cell or point), ParaView treats them as a single variable across
-the composite VTK dataset. Selecting that variable uses the dataset from each
-block that contains it. Datasets with the same name and association should
-therefore represent the same quantity and have compatible structure (e.g.,
-same type and number of components).
-
-.. code-block:: fortran
-
-   use vtkhdf_mb_file_type
-   type(vtkhdf_mb_file) :: file
-   type(vtkhdf_block_handle) :: block
-   type(vtkhdf_cell_data_handle) :: cell_var
-   type(vtkhdf_point_data_handle) :: point_var
-   type(vtkhdf_field_data_handle) :: field_var
-
-Static Data
-~~~~~~~~~~~
-Static point and cell writes are supported in ``VTKHDF_STATIC`` and
-``VTKHDF_FIXED_MESH`` block modes. Static field data is supported in every
-block mode and may be written at any point after block creation and before
-closing the file.
-
-.. method-doc::
-
-   call file%write_cell_data(block, name, array [, attribute])
-   call file%write_point_data(block, name, array [, attribute])
-   call file%write_field_data(block, name, data [, as_vector])
-
-   Write the payload (``array`` for point/cell data, ``data`` for field data)
-   to a new dataset ``name`` for the block identified by ``block``.
-
-   For point and cell data, the optional ``attribute`` argument designates
-   a VTK role; see :doc:`common` for attribute conventions.
-
-Temporal Data
-~~~~~~~~~~~~~
-All temporal blocks share a common timeline created by ``start_time_step``.
-
-* Temporal blocks must be added before the first time step starts.
-* Temporal data registration is block-scoped, and registrations for all
-  temporal blocks must occur before the first time step starts.
-* Temporal variable handles are tied to the block for which they were
-  registered and must not be used with a different block.
-
-.. method-doc::
-
-   cell_var  = file%register_temporal_cell_data(block, name, mold [, attribute])
-   point_var = file%register_temporal_point_data(block, name, mold [, attribute])
-   field_var = file%register_temporal_field_data(block, name, mold)
-
-   Register ``name`` as a time-dependent cell, point, or field dataset
-   for the block identified by ``block``, and return an opaque handle
-   to it.
-
-   For point and cell data, the optional ``attribute`` argument designates
-   a VTK role at registration; see :doc:`common` for attribute conventions.
-
-.. method-doc::
-
-   call file%start_time_step(time)
-
-   Start a new shared time step with the scalar ``real32`` or ``real64``
-   time value ``time`` for every temporal block in the file. In MPI builds,
-   only rank zero's value is used; the call is collective.
-
-.. method-doc::
-
-   call file%write_cell_data(block, cell_var, array)
-   call file%write_point_data(block, point_var, array)
-   call file%write_field_data(block, field_var, data [, as_vector])
-
-   Write the payload (``array`` for point/cell data, ``data`` for field data)
-   to the temporal dataset identified by the variable handle for the block
-   identified by ``block``, associating it with the current time step.
-
-.. method-doc::
-
-   call file%finalize_time_step()
-
-   Complete the current shared time step after all its temporal writes.
-   Starting another step or closing the file also finalizes an open step.
-
-Static blocks may coexist with temporal blocks and are unaffected by
-``start_time_step``.
+``create``, ``start_time_step``, ``finalize_time_step``, ``flush``, and ``close``
+remain on ``vtkhdf_mb_file``.

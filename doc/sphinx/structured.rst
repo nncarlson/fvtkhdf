@@ -7,6 +7,10 @@ The interface below is shared by the :doc:`image`, :doc:`rectilinear`, and
 :doc:`structured_grid` writers; see those sections for geometry definition,
 supported modes, and reader requirements.
 
+Geometry and point/cell data methods also apply to the corresponding typed
+blocks in :doc:`MultiBlock <mb>` files. For blocks, the owning composite file
+performs creation, time stepping, flushing, and closing.
+
 File Creation and Management
 ----------------------------
 

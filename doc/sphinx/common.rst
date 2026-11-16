@@ -4,6 +4,8 @@ Common Conventions
 Writers for simple VTK datasets use the same conventions for data associations,
 names, handles, and collective calls. Mesh-specific array shapes and mesh-writing
 requirements are described in the corresponding reference chapters.
+These conventions also apply to the typed blocks of a :doc:`MultiBlock <mb>`
+file; each block is a separate simple VTK dataset.
 
 The caller is responsible for supplying all required mesh and data writes,
 including complete coverage of datasets written in regions. Closing a file
@@ -36,20 +38,25 @@ and later; earlier versions ignore them.
 Names and Handles
 -----------------
 
-Point, cell, and field data have separate namespaces within each VTK dataset.
+Composite block names form a namespace within the composite file. Point, cell,
+and field data have separate namespaces within each simple VTK dataset,
+including each block of a composite. The following naming rules apply to both
+blocks and data arrays.
+
 Names are trimmed; blank names are replaced by a default. The characters
 ``/``, ``.``, and space are replaced by underscores. Duplicate names, including
 names that become identical after these substitutions, are made unique by
 appending a suffix such as ``_1``. The resulting name is what VTK and ParaView
 see. The original name is written as the ``Name`` attribute on the HDF5
-dataset for user reference.
+dataset or block group for user reference.
 
 Each write by name or temporal registration creates a new dataset.
 Repeating a name does not select an existing dataset. Where subsequent writes
 are supported, they identify the dataset by an opaque handle:
 ``vtkhdf_cell_data_handle``, ``vtkhdf_point_data_handle``, or
 ``vtkhdf_field_data_handle``. These types are exported by the file-type
-modules. Store the returned handle and use it only with its owning file.
+modules. Store the returned handle and use it only with the standalone writer
+or MultiBlock block that created it.
 
 Collective Calls
 ----------------

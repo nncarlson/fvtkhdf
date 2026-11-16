@@ -4,6 +4,10 @@ UnstructuredGrid
 The ``vtkhdf_unstructured_file_type`` module defines the ``vtkhdf_unstructured_file``
 derived type for writing VTKHDF UnstructuredGrid files.
 
+Its mesh and data methods also apply to ``vtkhdf_unstructured_block`` pointers
+returned by :doc:`MultiBlock <mb>`. The owning composite file manages block
+creation, time stepping, flushing, and closing.
+
 Optional VTK attribute roles, specified with the ``attribute`` argument, are
 recognized by VTK 9.7.0 / ParaView 6.2.0 and later; older readers ignore these
 designations while still reading the data. See :doc:`common`.

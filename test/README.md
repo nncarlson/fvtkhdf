@@ -171,9 +171,11 @@ files retain their original layouts without a Steps group. VTK versions before
 reader cases run only with VTK 9.7 or later. Layout checks cover all types.
 
 The simple writers own their registries and construct public data handles.
-MultiBlock adds and checks each handle's block index before forwarding it.
+Each handle records its owning simple dataset, including a MultiBlock leaf.
+Writes go directly to typed block pointers; the composite does not forward data
+handles or add a block index to them.
 Foreign-file handle checks cover cell, point, and field data in UnstructuredGrid and
-MultiBlock, including matching field and block indices, alongside the existing
+MultiBlock, including matching registry indices, alongside the existing
 ImageData ownership check.
 
 See the [developer guide](../doc/developer.md) for writer organization,

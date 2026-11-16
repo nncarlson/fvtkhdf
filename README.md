@@ -29,10 +29,11 @@ required only for parallel builds.
   grid of root cells, including moving geometry, changing refinement, and
   masked cells. Each MPI rank supplies a separate partition of the trees.
 
-* **MultiBlockDataSet:** A flat collection of UnstructuredGrid blocks.
-  Each block selects its own writer mode, and all temporal blocks share a
-  common timeline. Structured block types and hierarchical nesting are not
-  supported.
+* **MultiBlockDataSet:** A flat collection of ImageData, RectilinearGrid,
+  StructuredGrid, and UnstructuredGrid blocks in one file. Typed block pointers
+  provide each simple writer's mesh and data methods. Each block selects its
+  own mode, and all temporal blocks share a common timeline. Hierarchical
+  nesting is not supported.
 
 All simple dataset writers support static and time-dependent cell and field
 data. All except HyperTreeGrid also support point data. Depending on the dataset
@@ -191,9 +192,8 @@ Planned and prospective features include:
   - Add support for [polyhedron cells](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#polyhedron-support)
 
 * Composite VTK datasets
-  - Add structured block types to MultiBlockDataSet.
-  - Replace the legacy MultiBlockDataSet with PartitionedDataSetCollection ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26))
-  - Implement a general `Assembly` tree for PartitionedDataSetCollection to replace the existing flat tree.
+  - Add a PartitionedDataSetCollection writer ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26)).
+  - Implement a general `Assembly` tree for PartitionedDataSetCollection.
 
 ### Additional Dataset Types
 

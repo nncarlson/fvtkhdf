@@ -5,18 +5,13 @@ Field data consists of values associated with a simple VTK dataset as a whole
 rather than with its mesh points or cells. All writers for simple VTK datasets
 provide the interface described here. Field data writes need not be ordered
 with respect to mesh writes. Static field data may be written at any point
-after file creation and before closing the file; temporal field data is
+after file or block creation and before closing the file; temporal field data is
 written within its corresponding time step.
 
-In the signatures below, ``file`` denotes a file writer object for a simple
-VTK dataset; see :doc:`overview` for the available writer types and their
-modules.
-
-.. versionchanged:: 0.8.0
-
-   The payload keyword is now ``data=`` instead of ``array=`` for both static
-   and temporal field writes. Positional calls retain their meaning. Point
-   and cell writes continue to use ``array=``.
+In the signatures below, ``file`` denotes a standalone writer or a typed block
+pointer returned by :doc:`MultiBlock <mb>`. Field data belongs to that simple
+VTK dataset; the composite file itself has no field-data write interface.
+See :doc:`overview` for the available standalone writer types and modules.
 
 Values and Interpretation
 -------------------------
@@ -34,7 +29,7 @@ VTK and ParaView interpret these values as tuples with one or more components:
    * - Fortran argument
      - Number of tuples
      - Components per tuple
-   * - Scalar
+   * - Scalar ``data``
      - 1
      - 1
    * - Rank-1 ``data(n)``
