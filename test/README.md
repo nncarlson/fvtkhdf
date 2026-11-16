@@ -207,6 +207,23 @@ ids, incomplete and oversized trees, masked refined cells, ordering of mesh
 and data writes, mode restrictions, late registration, and reuse of temporal
 data after a change of cell count.
 
+## Constant Point and Cell Data on Moving Unstructured Meshes
+
+`vtkhdf_unstructured_constant_data_test.F90.fypp` writes standalone static,
+fixed-mesh, and moving-mesh controls, plus two moving UnstructuredGrid blocks
+in one MB file. All five numeric kinds have scalar and noncontiguous vector
+payloads. Constants are created before stepping, in early and later open
+steps, after temporal writes, between steps, and after finalization. The MB
+owner closes an open final step. MPI partitions have unequal sizes and rank
+zero is empty.
+
+Independent layout and VTK checks verify one stored constant payload, complete
+zero-offset histories, geometry movement and reuse, unchanged temporal-array
+reuse, names and attributes, and identical per-block behavior. Static and
+fixed-mesh controls retain their existing offset layouts. Expected-failure
+cases retain dynamic-mesh rejection, collective entity-count checks, and
+first-write requirements for registered temporal data.
+
 ## Moving RectilinearGrid and StructuredGrid
 
 `vtkhdf_moving_grid_test.F90.fypp` writes both real kinds, all seven active-axis

@@ -509,6 +509,25 @@ endforeach()
 vtkhdf_add_test_target(vtkhdf_simple_dataset_test vtkhdf_simple_dataset_test.F90)
 vtkhdf_add_runtime_test(vtkhdf_simple_dataset_lifecycle vtkhdf_simple_dataset_test)
 
+add_fypp_sources(UNSTRUCTURED_CONSTANT_DATA_TEST_SRC
+  SOURCES vtkhdf_unstructured_constant_data_test.F90.fypp FLAGS --line-numbering)
+vtkhdf_add_test_target(vtkhdf_unstructured_constant_data_test "${UNSTRUCTURED_CONSTANT_DATA_TEST_SRC}")
+vtkhdf_add_runtime_test(vtkhdf_unstructured_constant_data_files vtkhdf_unstructured_constant_data_test)
+set_tests_properties(vtkhdf_unstructured_constant_data_files PROPERTIES FIXTURES_SETUP vtkhdf_unstructured_constant_files)
+foreach(check layout reader)
+  add_test(NAME vtkhdf_unstructured_constant_data_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_unstructured_constant_data_check.py
+            ${check} ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties(vtkhdf_unstructured_constant_data_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_unstructured_constant_files SKIP_RETURN_CODE 77)
+endforeach()
+vtkhdf_add_test_target(vtkhdf_unstructured_constant_data_fail_test vtkhdf_unstructured_constant_data_fail_test.F90)
+foreach(case dynamic_point dynamic_cell wrong_point_count wrong_cell_count missing_point missing_cell)
+  vtkhdf_add_runtime_test(vtkhdf_unstructured_constant_data_fail_${case}
+    vtkhdf_unstructured_constant_data_fail_test ${case})
+  set_tests_properties(vtkhdf_unstructured_constant_data_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+endforeach()
+
 add_fypp_sources(CONSTANT_FIELD_TEST_SRC SOURCES vtkhdf_constant_field_test.F90.fypp FLAGS --line-numbering)
 vtkhdf_add_test_target(vtkhdf_constant_field_test "${CONSTANT_FIELD_TEST_SRC}")
 vtkhdf_add_runtime_test(vtkhdf_constant_field_files vtkhdf_constant_field_test)

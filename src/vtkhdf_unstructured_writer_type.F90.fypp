@@ -202,7 +202,7 @@ contains
     this%is_temporal = (mode_ > VTKHDF_STATIC)
     this%allow_geometry_change = (mode_ >= VTKHDF_MOVING_MESH)
     this%allow_topology_change = (mode_ >= VTKHDF_DYNAMIC_MESH)
-    this%allow_static_point_cell_data = (mode_ <= VTKHDF_FIXED_MESH)
+    this%allow_static_point_cell_data = (mode_ <= VTKHDF_MOVING_MESH)
 
     this%ctx = ctx
 
@@ -557,6 +557,16 @@ contains
     call this%reserve_${loc}$_data_name(name, external_name, internal_name, var_index)
     call h5_write_dataset(this%ctx, this%${loc}$_data%group_id, internal_name, array)
     call h5_write_data_name_attr(this%ctx, this%${loc}$_data%group_id, internal_name, external_name, attribute)
+    if (this%allow_geometry_change) then ! moving mesh: constants reuse their first payload
+      associate (var => this%${loc}$_data%vars(var_index))
+        var%is_temporal = .true.
+        var%last_entity_count = this%${count}$
+        var%next_offset = this%${count}$_tot
+        var%wrote_this_step = .true.
+      end associate
+      call create_data_offsets(this%ctx, this%${loc}$_data%offsets_id, internal_name, &
+          this%nsteps-merge(1,0,this%step_open))
+    end if
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -583,7 +593,7 @@ contains
 #:for kind, decl, h5type in nums
   function register_temporal_${loc}$_data_${kind}$(this, name, mold, attribute) result(handle)
 
-    use vtkhdf_data_support, only: data_chunk_size, STEPS_CHUNK_SIZE
+    use vtkhdf_data_support, only: data_chunk_size
 
     class(vtkhdf_unstructured_writer), intent(inout) :: this
     character(*), intent(in) :: name
@@ -610,9 +620,7 @@ contains
     call h5_write_data_name_attr(this%ctx, this%${loc}$_data%group_id, internal_name, external_name, attribute)
 
     !! Dataset for its time step offsets
-    associate (mold => 0_int64, chunk_size => STEPS_CHUNK_SIZE)
-      call h5_create_unlimited_dataset(this%ctx, this%${loc}$_data%offsets_id, internal_name, mold, chunk_size)
-    end associate
+    call create_data_offsets(this%ctx, this%${loc}$_data%offsets_id, internal_name, 0)
 
     call err_ctx%restore(0)
 
@@ -792,6 +800,22 @@ contains
   end subroutine finalize_time_step
 
 !!!! REGISTRY AND STORAGE HELPERS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  ! A constant written during an open step backfills only completed steps;
+  ! normal finalization appends its current offset for that step and later ones.
+  subroutine create_data_offsets(ctx, grp_id, name, completed_steps)
+    use vtkhdf_data_support, only: STEPS_CHUNK_SIZE
+    type(vtkhdf_context), intent(in) :: ctx
+    integer(hid_t), intent(in) :: grp_id
+    character(*), intent(in) :: name
+    integer, intent(in) :: completed_steps
+    integer(int64), allocatable :: offsets(:)
+    call h5_create_unlimited_dataset(ctx, grp_id, name, 0_int64, STEPS_CHUNK_SIZE)
+    if (completed_steps > 0) then
+      allocate(offsets(merge(completed_steps,0,ctx%rank == 0)),source=0_int64)
+      call h5_append_to_dataset(ctx, grp_id, name, offsets, root=0)
+    end if
+  end subroutine
 
 #:for loc, group in [('cell','CellData'), ('point','PointData')]
   subroutine reserve_${loc}$_data_name(this, name, external_name, internal_name, index, is_temporal)

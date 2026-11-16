@@ -81,7 +81,7 @@ The writer supports all four modes:
 * ``VTKHDF_FIXED_MESH``: fixed mesh and static or temporal point, cell, and
   field data.
 * ``VTKHDF_MOVING_MESH``: fixed mesh topology with temporal geometry;
-  point/cell datasets must be temporal.
+  point/cell datasets may be static or temporal.
 * ``VTKHDF_DYNAMIC_MESH``: temporal mesh topology and geometry;
   point/cell datasets must be temporal.
 
@@ -166,7 +166,7 @@ may be written, or not, every time step. This is subject to the following rules:
 * If a mesh component is not written for a given time step, its most
   recently written value is used.
 
-* Once point or cell data is written for a time step, no mesh component
+* Once temporal point or cell data is written for a time step, no mesh component
   may be written until the next step.
 
 
@@ -186,8 +186,8 @@ before writing the data. See :doc:`common` for naming and handle conventions.
 
 Static Data
 ~~~~~~~~~~~
-These writes by name are supported in ``VTKHDF_STATIC`` and
-``VTKHDF_FIXED_MESH`` modes.
+These writes by name are supported in ``VTKHDF_STATIC``,
+``VTKHDF_FIXED_MESH``, and ``VTKHDF_MOVING_MESH`` modes.
 
 .. method-doc::
 
@@ -204,6 +204,12 @@ These writes by name are supported in ``VTKHDF_STATIC`` and
 
    The optional ``attribute`` argument designates a VTK role, such as
    ``Tensors`` or ``GlobalIds``; see :doc:`common` for attribute conventions.
+
+Static data is independent of time stepping and retains its values as the mesh
+moves. It may be written at any time after defining the mesh and before closing
+the file.
+No temporal registration or repeated writes are needed. Static writes do not
+prevent a subsequent geometry update during the same step.
 
 .. warning::
 
@@ -350,9 +356,11 @@ Time stepping and temporal registration are not allowed.
 
   * ``call file%finalize_time_step``
 
-The number of points must be constant across time steps.
+The number of points in each MPI partition must be constant across time steps.
 
-Static point and cell datasets are not allowed in this mode.
+Static point and cell datasets may be written by name at any time after
+defining the mesh and before closing the file. They are independent of time
+stepping and retain their values as the mesh moves.
 
 .. rubric:: ``VTKHDF_DYNAMIC_MESH``
 

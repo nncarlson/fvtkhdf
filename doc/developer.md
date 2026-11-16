@@ -111,6 +111,14 @@ UnstructuredGrid, ranks without trees still contribute a part, so the number
 of parts never changes. The VTK 9.7.2 reader fails on a temporal file whose
 part count drops from several to one.
 
+Unstructured moving-mesh constants use the existing temporal records internally:
+their payload is written once, their stored offset remains zero, and their
+entity count is recorded for reuse validation. Late creation backfills offsets
+for completed steps; normal finalization appends the current and later entries.
+Explicit per-array offsets prevent coordinate offsets from being used to read
+constant point data. Static and fixed-mesh constants retain their original
+layouts without per-array offsets.
+
 Field data uses the same implementation in all simple writers. In temporal
 files, complete values are stored as tuple rows with a component dimension;
 per-step offsets and sizes describe the current value. A static field in a

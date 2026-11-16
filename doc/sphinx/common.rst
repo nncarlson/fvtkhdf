@@ -99,10 +99,10 @@ Each file-type module exports the mode constants supported by its writer.
 ImageData supports ``VTKHDF_STATIC`` and ``VTKHDF_FIXED_MESH``.
 RectilinearGrid and StructuredGrid additionally support ``VTKHDF_MOVING_MESH``.
 UnstructuredGrid and HyperTreeGrid support all four modes.
-In moving-mesh mode, the structured and HyperTreeGrid writers also allow
-static point/cell data; UnstructuredGrid requires temporal point/cell data.
+In moving-mesh mode, point/cell data may be static or temporal.
 Static field data is supported in every writer mode.
 
+Static data is independent of time stepping and has the same value at every step.
 Temporal data must be registered before the first ``start_time_step`` call.
 Writes by handle then supply data for the current step. A step is completed
 by ``finalize_time_step``; starting another step or closing the file also
