@@ -99,6 +99,12 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug -DENABLE_MPI=OFF \
 If `vtk` is not available, the build still succeeds and the reader checks are
 skipped.
 
+The independent [MB compatibility project](compatibility/mb/README.md) checks
+an installed library through a selected ParaView version's `pvpython`. It is
+run explicitly, outside the top-level build and CTest suite, and records reader
+limitations separately from writer/layout failures. Fixtures can be reused
+across reader versions.
+
 ## fpm Notes
 
 The pure Fortran executable tests are the best candidates for eventual `fpm`
