@@ -243,21 +243,48 @@ Reader Compatibility
 Each block retains the reader version requirements of its simple dataset type;
 see :doc:`image`, :doc:`rectilinear`, and :doc:`structured_grid`.
 
-.. warning::
+The following observations were checked with ParaView 6.2.1 (VTK 9.7.2), using
+the independent :repo:`test/compatibility/mb/README.md` harness. The initial
+matrix covers serial, three-dimensional files: all supported type/mode
+combinations, standalone controls, and selected heterogeneous collections in
+both block orders. It does not establish parallel-reader or 1D/2D compatibility.
 
-   VTK readers, including versions 9.6.1 and 9.7.2, fail when a file contains
-   both static and temporal blocks; see
-   `VTK issue 19963 <https://gitlab.kitware.com/vtk/vtk/-/work_items/19963>`_.
-   For compatibility, make all blocks temporal if any block is temporal.
-   Use ``VTKHDF_FIXED_MESH`` for otherwise static blocks; these need no
-   registered temporal data or repeated mesh or data writes.
+Geometry and point/cell data read correctly in the tested all-static and
+all-temporal collections, including collections with different dataset types
+and temporal modes. The checks include moving and dynamic geometry, constant
+arrays, omitted-write reuse, and nonsequential time requests.
+
+.. list-table:: Current ParaView 6.2.1 limitations
+   :header-rows: 1
+   :widths: 25 45 30
+
+   * - Feature
+     - Observed limitation
+     - Workaround
+   * - Mixed static and temporal blocks
+     - Time discovery, block output, or point/cell data can fail. The symptoms
+       depend on block order. See
+       `VTK issue 19963 <https://gitlab.kitware.com/vtk/vtk/-/work_items/19963>`_.
+     - Make every block temporal if any block is temporal. Use
+       ``VTKHDF_FIXED_MESH`` for otherwise static blocks.
+   * - Block field data
+     - Static and temporal field arrays are absent from the output leaves and
+       the reader's field-array selection, for all four tested block types.
+       The corresponding standalone files expose the arrays correctly.
+     - Use standalone output when field data is required.
+
+Otherwise static blocks using ``VTKHDF_FIXED_MESH`` need no registered temporal
+data or repeated mesh or data writes. Their values remain constant while they
+participate in the shared timeline. This workaround was checked with constant
+unstructured and rectilinear blocks alongside blocks with temporal data.
 
 With VTK 9.7.2, a direct ``vtkHDFReader`` call sequence using
 ``UpdateInformation()`` before reading the first frame can lose the composite's
 temporal state and fail to read point/cell arrays in ImageData, RectilinearGrid,
 and StructuredGrid blocks. The same dataset groups read correctly as standalone
 files. This is a reader limitation; the supported writer modes above are
-unchanged.
+unchanged. This direct-call failure was not observed through ParaView 6.2.1's
+reader pipeline in the checked cases.
 
 Migration from 0.7
 ------------------
