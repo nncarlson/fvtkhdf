@@ -13,7 +13,7 @@ CONFIGURATIONS = [(kind, mode) for kind, limit in
                   for mode in range(limit)]
 
 
-def matrix():
+def baseline():
     for kind, mode in CONFIGURATIONS:
         for form in ("standalone", "mb"):
             yield f"{form}-{kind}-{MODES[mode]}", form == "mb", [(kind, mode)]
@@ -30,6 +30,31 @@ def matrix():
         yield name + "-reversed", True, list(reversed(blocks))
     yield "unstructured-workaround", True, [("unstructured", "fixed-constant"), ("unstructured", 1)]
     yield "rectilinear-workaround", True, [("rectilinear", "fixed-constant"), ("structured", 1)]
+
+
+def matrix(suite):
+    if suite in ("baseline", "cache"):
+        for name, composite, blocks in baseline():
+            if suite == "cache" and not (name in ("different-modes", "different-modes-reversed") or
+                    name.endswith(("image-fixed", "rectilinear-moving", "structured-moving",
+                                   "unstructured-moving", "unstructured-dynamic"))):
+                continue
+            yield name, composite, blocks, 3
+    elif suite == "dimensions":
+        for ndim in (1, 2):
+            for kind, mode in CONFIGURATIONS:
+                if kind == "unstructured":
+                    continue
+                for form in ("standalone", "mb"):
+                    yield f"{form}-{kind}-{MODES[mode]}-{ndim}d", form == "mb", [(kind, mode)], ndim
+    elif suite == "parallel":
+        for kind, mode in (("image", 1), ("rectilinear", 2), ("structured", 2),
+                           ("unstructured", 1), ("unstructured", 2), ("unstructured", 3)):
+            for form in ("standalone", "mb"):
+                yield f"{form}-{kind}-{MODES[mode]}-mpi", form == "mb", [(kind, mode)], 3
+        for name, composite, blocks in baseline():
+            if name in ("all-fixed", "different-modes", "different-modes-reversed"):
+                yield name + "-mpi", composite, blocks, 3
 
 
 def execute(command, log, timeout):
@@ -50,6 +75,11 @@ def main():
     parser.add_argument("--work-dir", type=Path, required=True, help="generated fixtures and manifest")
     parser.add_argument("--results-dir", type=Path, help="separate directory for this reader version's results")
     parser.add_argument("--writer-label", default="unspecified", help="installed writer version or commit")
+    parser.add_argument("--suite", choices=("baseline", "dimensions", "parallel", "cache"),
+                        help="default: baseline for generation, all manifest cases for --read-only")
+    parser.add_argument("--ranks", type=int, default=1, help="number of writer ranks")
+    parser.add_argument("--mpiexec", default="mpiexec", help="launcher matching the installed writer's MPI")
+    parser.add_argument("--cache", choices=("default", "on", "off"), default="default")
     parser.add_argument("--read-only", action="store_true", help="reuse fixtures without rebuilding or generating")
     parser.add_argument("--generate-only", action="store_true")
     parser.add_argument("--timeout", type=int, default=90, help="timeout in seconds for each worker")
@@ -60,24 +90,39 @@ def main():
         parser.error("--generator is required for generation")
     if not args.generate_only and not args.pvpython:
         parser.error("--pvpython is required for readback")
+    if args.ranks < 1:
+        parser.error("--ranks must be positive")
+    if not args.read_only and args.suite == "parallel" and args.ranks < 2:
+        parser.error("--suite parallel requires --ranks >= 2")
     work = args.work_dir.resolve()
     work.mkdir(parents=True, exist_ok=True)
     manifest = work / "manifest.json"
     if not args.read_only:
+        info = json.loads(subprocess.check_output([str(args.generator.resolve()), "--info"], text=True))
+        if args.ranks > 1 and not info["mpi"]:
+            parser.error("--ranks > 1 requires a generator built against an MPI fVTKHDF installation")
         cases = []
-        for name, composite, blocks in matrix():
+        for name, composite, blocks, ndim in matrix(args.suite or "baseline"):
             case = {"name": name, "composite": composite, "blocks": blocks,
-                    "file": str(work / (name + ".vtkhdf"))}
+                    "dimensions": ndim, "writer_ranks": args.ranks, "file": str(work / (name + ".vtkhdf"))}
             case_path = work / (name + ".json")
             case_path.write_text(json.dumps(case, indent=2) + "\n")
-            command = [str(args.generator.resolve()), case["file"], "mb" if composite else "standalone"]
+            command = [str(args.generator.resolve()), case["file"], "mb" if composite else "standalone", str(ndim)]
             command += [str(value) for block in blocks for value in block]
+            if info["mpi"]:
+                command = [args.mpiexec, "-n", str(args.ranks)] + command
             code = execute(command, work / (name + ".generate.log"), args.timeout)
             if code != 0:
                 raise RuntimeError(f"Generator failed for {name}: {code}; see {work}")
             cases.append(case)
         manifest.write_text(json.dumps({"writer": args.writer_label, "cases": cases}, indent=2) + "\n")
     fixtures = json.loads(manifest.read_text())
+    if args.read_only and args.suite:
+        selected = {name for name, *_ in matrix(args.suite)}
+        missing = selected - {case["name"] for case in fixtures["cases"]}
+        if missing:
+            parser.error(f"Fixtures missing for suite {args.suite}: {sorted(missing)}")
+        fixtures["cases"] = [case for case in fixtures["cases"] if case["name"] in selected]
     # Validate the payload independently before attributing failures to a reader.
     for case in fixtures["cases"]:
         name = case["name"]
@@ -95,13 +140,15 @@ def main():
         parser.error(f"Cannot find pvpython: {args.pvpython}")
     results_dir = (args.results_dir or work / "results").resolve()
     results_dir.mkdir(parents=True, exist_ok=True)
-    results = {"writer": fixtures["writer"], "pvpython": executable, "cases": {}}
+    cache = "on" if args.suite == "cache" and args.cache == "default" else args.cache
+    results = {"writer": fixtures["writer"], "pvpython": executable, "cache": cache, "cases": {}}
     for case in fixtures["cases"]:
         name = case["name"]
         path = results_dir / (name + ".json")
         path.unlink(missing_ok=True)
         code = execute([executable, "--disable-registry", str(HERE / "check.py"), "reader",
-                        str(work / (name + ".json")), str(path)], results_dir / (name + ".log"), args.timeout)
+                        str(work / (name + ".json")), str(path), "--cache", cache],
+                       results_dir / (name + ".log"), args.timeout)
         if code != 0 or not path.exists():
             results["cases"][name] = {"status": "worker-failed", "exit_code": code}
         else:
@@ -111,7 +158,7 @@ def main():
             results["cases"][name] = value
         print(name + ": " + ", ".join(f"{profile}={value['status']}" for profile, value in
                                         results["cases"][name].get("profiles", {}).items()), flush=True)
-    lines = [f"Writer: {results['writer']}", f"pvpython: {executable}", "",
+    lines = [f"Writer: {results['writer']}", f"pvpython: {executable}", f"Cache: {cache}", "",
              "| Case | Geometry | Point | Cell | Field | All | Fresh later step | Fetch |",
              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     worker_failure = False

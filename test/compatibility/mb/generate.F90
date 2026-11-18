@@ -1,5 +1,5 @@
 ! Small, deterministic fixtures for manual reader compatibility testing.
-! Usage: generate output.vtkhdf mb|standalone type mode [type mode ...]
+! Usage: generate output.vtkhdf mb|standalone ndim type mode [type mode ...]
 ! Types: image, rectilinear, structured, unstructured. Modes: 0,1,2,3,
 ! or fixed-constant (mode 1 with only constant arrays, to check a workaround).
 program generate
@@ -15,12 +15,19 @@ program generate
   use vtkhdf_rectilinear_writer_type, only: vtkhdf_rectilinear_writer
   use vtkhdf_structured_writer_type, only: vtkhdf_structured_writer
   use vtkhdf_unstructured_writer_type, only: vtkhdf_unstructured_writer
+#ifdef USE_MPI_F08
+  use mpi_f08
+#elif defined(USE_MPI)
+  use mpi
+#endif
   implicit none
 
   type :: block_info
     class(vtkhdf_simple_dataset), pointer :: dataset => null()
     integer :: mode
     logical :: constant_only = .false.
+    integer :: pdims(3), cdims(3), local_points(3), local_cells(3)
+    integer :: array_origin(3), selection(3,2)
     type(vtkhdf_point_data_handle) :: point_scalar, point_vector
     type(vtkhdf_cell_data_handle) :: cell_scalar, cell_vector
     type(vtkhdf_field_data_handle) :: clock, table
@@ -36,29 +43,54 @@ program generate
   type(vtkhdf_structured_block), pointer :: grid
   type(vtkhdf_unstructured_block), pointer :: solid
   real(real64), parameter :: times(0:4) = [0.0_real64,0.2_real64,0.7_real64,1.5_real64,3.0_real64]
-  integer, parameter :: origin(3) = [-2,3,1], pdims(3) = [3,4,2], cdims(3) = pdims-1
-  integer :: stat, nblocks, b, step, mode
+  integer, parameter :: origin(3) = [-2,3,1]
+  integer :: stat, nblocks, b, step, mode, ndim, rank, nproc
   character(1024) :: filename
   character(32) :: form, kind, argument, name
   character(:), allocatable :: errmsg
   logical :: composite, temporal
 
-  if (command_argument_count() < 4 .or. mod(command_argument_count(),2) /= 0) &
-      error stop 'usage: generate output mb|standalone type mode [type mode ...]'
+  call get_command_argument(1,argument)
+  if (argument == '--info') then
+#ifdef USE_MPI
+    print '(a)', '{"mpi":true}'
+#else
+    print '(a)', '{"mpi":false}'
+#endif
+    stop
+  end if
+  if (command_argument_count() < 5 .or. mod(command_argument_count()-3,2) /= 0) &
+      error stop 'usage: generate output mb|standalone ndim type mode [type mode ...]'
+#ifdef USE_MPI
+  call MPI_Init(stat)
+  call MPI_Comm_rank(MPI_COMM_WORLD,rank,stat)
+  call MPI_Comm_size(MPI_COMM_WORLD,nproc,stat)
+#else
+  rank = 0
+  nproc = 1
+#endif
   call get_command_argument(1,filename)
   call get_command_argument(2,form)
   if (form /= 'mb' .and. form /= 'standalone') error stop 'invalid output form'
   composite = form == 'mb'
-  nblocks = (command_argument_count()-2)/2
+  call get_command_argument(3,argument)
+  read(argument,*,iostat=stat) ndim
+  if (stat /= 0) error stop 'invalid dimensionality'
+  if (ndim < 1 .or. ndim > 3) error stop 'dimensionality must be 1, 2, or 3'
+  nblocks = (command_argument_count()-3)/2
   if (.not.composite .and. nblocks /= 1) error stop 'standalone requires one dataset'
   allocate(blocks(nblocks))
   if (composite) then
-    call mb%create(trim(filename),stat,errmsg)
+    call mb%create(trim(filename), &
+#ifdef USE_MPI
+        MPI_COMM_WORLD, &
+#endif
+        stat,errmsg)
     if (stat /= 0) error stop errmsg
   end if
   do b = 1,nblocks
-    call get_command_argument(2*b+1,kind)
-    call get_command_argument(2*b+2,argument)
+    call get_command_argument(2*b+2,kind)
+    call get_command_argument(2*b+3,argument)
     blocks(b)%constant_only = argument == 'fixed-constant'
     if (blocks(b)%constant_only) then
       mode = VTKHDF_FIXED_MESH
@@ -68,6 +100,7 @@ program generate
     end if
     if (stat /= 0) error stop 'invalid mode'
     blocks(b)%mode = mode
+    call structured_partition(blocks(b),b)
     write(name,'(a,i0)') 'block_',b
     select case (kind)
     case ('image')
@@ -75,7 +108,11 @@ program generate
         call mb%add_block(trim(name),image,mode)
         blocks(b)%dataset => image
       else
-        call image_file%create(trim(filename),stat,errmsg,mode)
+        call image_file%create(trim(filename), &
+#ifdef USE_MPI
+            MPI_COMM_WORLD, &
+#endif
+            stat,errmsg,mode)
         blocks(b)%dataset => image_file
       end if
     case ('rectilinear')
@@ -83,7 +120,11 @@ program generate
         call mb%add_block(trim(name),rect,mode)
         blocks(b)%dataset => rect
       else
-        call rect_file%create(trim(filename),stat,errmsg,mode)
+        call rect_file%create(trim(filename), &
+#ifdef USE_MPI
+            MPI_COMM_WORLD, &
+#endif
+            stat,errmsg,mode)
         blocks(b)%dataset => rect_file
       end if
     case ('structured')
@@ -91,7 +132,11 @@ program generate
         call mb%add_block(trim(name),grid,mode)
         blocks(b)%dataset => grid
       else
-        call struct_file%create(trim(filename),stat,errmsg,mode)
+        call struct_file%create(trim(filename), &
+#ifdef USE_MPI
+            MPI_COMM_WORLD, &
+#endif
+            stat,errmsg,mode)
         blocks(b)%dataset => struct_file
       end if
     case ('unstructured')
@@ -99,7 +144,11 @@ program generate
         call mb%add_block(trim(name),solid,mode)
         blocks(b)%dataset => solid
       else
-        call unstructured_file%create(trim(filename),stat,errmsg,mode)
+        call unstructured_file%create(trim(filename), &
+#ifdef USE_MPI
+            MPI_COMM_WORLD, &
+#endif
+            stat,errmsg,mode)
         blocks(b)%dataset => unstructured_file
       end if
     case default
@@ -138,46 +187,143 @@ program generate
   else
     call blocks(1)%dataset%close()
   end if
+#ifdef USE_MPI
+  call MPI_Finalize(stat)
+#endif
 
 contains
+
+  ! Each block has a different empty rank. Remaining ranks contribute unequal
+  ! contiguous slabs/parts. Rank zero can be empty while still writing metadata.
+  subroutine partition(id,phase,nlocal,start,total)
+    integer, intent(in) :: id, phase
+    integer, intent(out) :: nlocal, start, total
+    integer :: r, count
+    nlocal = 0
+    start = 0
+    total = 0
+    do r = 0,nproc-1
+      count = r+1+phase
+      if (nproc > 1 .and. r == mod(id-1,nproc)) count = 0
+      if (r < rank) start = start+count
+      if (r == rank) nlocal = count
+      total = total+count
+    end do
+  end subroutine
+
+  subroutine structured_partition(block,id)
+    type(block_info), intent(inout) :: block
+    integer, intent(in) :: id
+    integer :: nlocal, start, total
+    block%pdims = [3,4,2]
+    if (ndim < 3) block%pdims(3) = 1
+    if (ndim < 2) block%pdims(2) = 1
+    call partition(id,0,nlocal,start,total)
+    if (nproc == 1) then
+      nlocal = 2
+    else
+      block%pdims(1) = total+1
+    end if
+    block%cdims = max(1,block%pdims-1)
+    block%local_cells = block%cdims
+    block%local_points = block%pdims
+    block%local_cells(1) = nlocal
+    block%local_points(1) = merge(nlocal+1,0,nlocal>0)
+    block%array_origin = origin+[start,0,0]
+    block%selection(:,1) = block%array_origin
+    block%selection(:,2) = block%array_origin+block%local_points-1
+    if (nlocal > 0 .and. start > 0) block%selection(1,1) = block%selection(1,1)+1
+  end subroutine
+
+  subroutine structured_values(block,id,step,ps,pv,cs,cv)
+    type(block_info), intent(in) :: block
+    integer, intent(in) :: id, step
+    real(real64), allocatable, intent(out) :: ps(:,:,:), pv(:,:,:,:), cs(:,:,:), cv(:,:,:,:)
+    integer :: i, j, k, c, start
+    allocate(ps(block%local_points(1),block%local_points(2),block%local_points(3)))
+    allocate(cs(block%local_cells(1),block%local_cells(2),block%local_cells(3)))
+    allocate(pv(3,size(ps,1),size(ps,2),size(ps,3)),cv(3,size(cs,1),size(cs,2),size(cs,3)))
+    start = block%array_origin(1)-origin(1)
+    do k = 1,size(ps,3)
+      do j = 1,size(ps,2)
+        do i = 1,size(ps,1)
+          ps(i,j,k) = 1000*id+100*step+start+i+block%pdims(1)*(j-1+block%pdims(2)*(k-1))
+        end do
+      end do
+    end do
+    do k = 1,size(cs,3)
+      do j = 1,size(cs,2)
+        do i = 1,size(cs,1)
+          cs(i,j,k) = 1000*id+100*step+start+i+block%cdims(1)*(j-1+block%cdims(2)*(k-1))
+        end do
+      end do
+    end do
+    do c = 1,3
+      pv(c,:,:,:) = ps+c
+      cv(c,:,:,:) = cs+c
+    end do
+  end subroutine
+
+  subroutine unstructured_values(block,id,step,ps,pv,cs,cv)
+    type(block_info), intent(in) :: block
+    integer, intent(in) :: id, step
+    real(real64), allocatable, intent(out) :: ps(:), pv(:,:), cs(:), cv(:,:)
+    integer :: i, c, nlocal, start, total, phase
+    phase = 0
+    if (block%mode == VTKHDF_DYNAMIC_MESH .and. step/2 == 1) phase = 1
+    call partition(id,phase,nlocal,start,total)
+    ps = [(real(1000*id+100*step+4*start+i,real64),i=1,4*nlocal)]
+    cs = [(real(1000*id+100*step+start+i,real64),i=1,nlocal)]
+    allocate(pv(3,size(ps)),cv(3,size(cs)))
+    do c = 1,3
+      pv(c,:) = ps+c
+      cv(c,:) = cs+c
+    end do
+  end subroutine
 
   subroutine mesh(block,id,step,initial)
     type(block_info), intent(inout) :: block
     integer, intent(in) :: id, step
     logical, intent(in) :: initial
-    integer :: i, j, k, c, nc, epoch
-    real(real64) :: xyz(3,3,4,2), tetra(3,4)
-    real(real64), allocatable :: points(:,:)
+    integer :: i, j, k, c, nc, epoch, start, total, phase
+    real(real64) :: tetra(3,4)
+    real(real64), allocatable :: points(:,:), xyz(:,:,:,:), x(:), y(:), z(:)
     integer, allocatable :: connectivity(:), offsets(:)
     integer(int8), allocatable :: types(:)
     epoch = step/2
     select type (writer => block%dataset)
     class is (vtkhdf_image_writer)
-      call writer%write_mesh(reshape([origin,origin+pdims-1],[3,2]), &
+      call writer%write_mesh(reshape([origin,origin+block%pdims-1],[3,2]), &
           [10.0_real64*id,-3.0_real64,2.0_real64],[0.5_real64,1.0_real64,2.0_real64])
     class is (vtkhdf_rectilinear_writer)
-      if (initial) call writer%write_mesh(reshape([origin,origin+pdims-1],[3,2]))
-      call writer%write_mesh_geometry([0.0_real64,0.6_real64,1.4_real64]+10*id, &
-          [0.0_real64,1.1_real64,2.4_real64,3.9_real64], [0.0_real64,2.1_real64]+0.25_real64*epoch)
+      if (initial) call writer%write_mesh(reshape([origin,origin+block%pdims-1],[3,2]))
+      x = [(10*id+0.5_real64*i+0.1_real64*i*i,i=0,block%pdims(1)-1)]
+      y = [(j+0.1_real64*j*j,j=0,block%pdims(2)-1)]
+      z = [(2*k+0.1_real64*k*k+0.25_real64*epoch,k=0,block%pdims(3)-1)]
+      call writer%write_mesh_geometry(x,y,z)
     class is (vtkhdf_structured_writer)
-      if (initial) call writer%write_mesh(reshape([origin,origin+pdims-1],[3,2]))
-      do k = 0,1
-        do j = 0,3
-          do i = 0,2
-            xyz(:,i+1,j+1,k+1) = [10*id+0.5_real64*i+0.05_real64*j*k, &
+      if (initial) call writer%write_mesh(reshape([origin,origin+block%pdims-1],[3,2]))
+      allocate(xyz(3,block%local_points(1),block%local_points(2),block%local_points(3)))
+      start = block%array_origin(1)-origin(1)
+      do k = 0,block%local_points(3)-1
+        do j = 0,block%local_points(2)-1
+          do c = 0,block%local_points(1)-1
+            i = start+c
+            xyz(:,c+1,j+1,k+1) = [10*id+0.5_real64*i+0.05_real64*j*k, &
                 j+0.1_real64*i*k,2*k+0.25_real64*epoch]
           end do
         end do
       end do
-      call writer%write_mesh_geometry(xyz,origin)
+      call writer%write_mesh_geometry(xyz,block%array_origin,block%selection)
     class is (vtkhdf_unstructured_writer)
-      nc = 1
-      if (block%mode == VTKHDF_DYNAMIC_MESH .and. epoch == 1) nc = 2
+      phase = 0
+      if (block%mode == VTKHDF_DYNAMIC_MESH .and. epoch == 1) phase = 1
+      call partition(id,phase,nc,start,total)
       allocate(points(3,4*nc))
       tetra = reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,0.,0.,1.],[3,4])
       do c = 1,nc
         points(:,4*c-3:4*c) = tetra
-        points(1,4*c-3:4*c) = points(1,4*c-3:4*c)+10*id+2*(c-1)
+        points(1,4*c-3:4*c) = points(1,4*c-3:4*c)+10*id+2*(start+c-1)
       end do
       points(3,:) = points(3,:)+0.25_real64*epoch
       if (initial .or. block%mode == VTKHDF_DYNAMIC_MESH) then
@@ -194,20 +340,15 @@ contains
   subroutine setup_data(block,id)
     type(block_info), intent(inout) :: block
     integer, intent(in) :: id
-    integer :: i, c
-    real(real64) :: ps(3,4,2), pv(3,3,4,2), cs(2,3,1), cv(3,2,3,1)
-    ps = reshape([(real(1000*id+i,real64),i=1,24)],pdims)
-    cs = reshape([(real(1000*id+i,real64),i=1,6)],cdims)
-    do c = 1,3
-      pv(c,:,:,:) = ps+c
-      cv(c,:,:,:) = cs+c
-    end do
+    real(real64), allocatable :: ps(:,:,:), pv(:,:,:,:), cs(:,:,:), cv(:,:,:,:)
+    real(real64), allocatable :: ups(:), upv(:,:), ucs(:), ucv(:,:)
     select type (writer => block%dataset)
     class is (vtkhdf_structured_base)
-      call writer%write_point_data('point_constant',ps,origin)
-      call writer%write_point_data('point_constant_vector',pv,origin)
-      call writer%write_cell_data('cell_constant',cs,origin)
-      call writer%write_cell_data('cell_constant_vector',cv,origin)
+      call structured_values(block,id,0,ps,pv,cs,cv)
+      call writer%write_point_data('point_constant',ps,block%array_origin,block%selection)
+      call writer%write_point_data('point_constant_vector',pv,block%array_origin,block%selection)
+      call writer%write_cell_data('cell_constant',cs,block%array_origin)
+      call writer%write_cell_data('cell_constant_vector',cv,block%array_origin)
       call writer%write_field_data('block_id',data=id)
       call writer%write_field_data('direction',data=[1.0_real64,2.0_real64,3.0_real64],as_vector=.true.)
       if (block%mode /= VTKHDF_STATIC .and. .not.block%constant_only) then
@@ -220,17 +361,11 @@ contains
       end if
     class is (vtkhdf_unstructured_writer)
       if (block%mode /= VTKHDF_DYNAMIC_MESH) then
-        block_scalar: block
-          real(real64) :: s(4), v(3,4)
-          s = [(real(1000*id+i,real64),i=1,4)]
-          do c = 1,3
-            v(c,:) = s+c
-          end do
-          call writer%write_point_data('point_constant',s)
-          call writer%write_point_data('point_constant_vector',v)
-          call writer%write_cell_data('cell_constant',[real(1000*id+1,real64)])
-          call writer%write_cell_data('cell_constant_vector',v(:,:1))
-        end block block_scalar
+        call unstructured_values(block,id,0,ups,upv,ucs,ucv)
+        call writer%write_point_data('point_constant',ups)
+        call writer%write_point_data('point_constant_vector',upv)
+        call writer%write_cell_data('cell_constant',ucs)
+        call writer%write_cell_data('cell_constant_vector',ucv)
       end if
       call writer%write_field_data('block_id',data=id)
       call writer%write_field_data('direction',data=[1.0_real64,2.0_real64,3.0_real64],as_vector=.true.)
@@ -248,49 +383,37 @@ contains
   subroutine temporal_data(block,id,step)
     type(block_info), intent(inout) :: block
     integer, intent(in) :: id, step
-    integer :: i, c, np, nc, nt
+    integer :: i, nt
     logical :: write_points, write_cells
-    real(real64) :: ps(3,4,2), pv(3,3,4,2), cs(2,3,1), cv(3,2,3,1)
-    real(real64), allocatable :: s(:), v(:,:), table(:,:)
+    real(real64), allocatable :: ps(:,:,:), pv(:,:,:,:), cs(:,:,:), cv(:,:,:,:)
+    real(real64), allocatable :: ups(:), upv(:,:), ucs(:), ucv(:,:), table(:,:)
     write_points = step == 0 .or. step == 1 .or. step == 3
     write_cells = step == 0 .or. step == 2 .or. step == 4
     if (block%mode == VTKHDF_DYNAMIC_MESH .and. (step == 2 .or. step == 4)) write_points = .true.
-    ps = reshape([(real(1000*id+100*step+i,real64),i=1,24)],pdims)
-    cs = reshape([(real(1000*id+100*step+i,real64),i=1,6)],cdims)
-    do c = 1,3
-      pv(c,:,:,:) = ps+c
-      cv(c,:,:,:) = cs+c
-    end do
     nt = 1+mod(step,3)
     table = reshape([(real(1000*id+100*step+i,real64),i=1,2*nt)],[2,nt])
     select type (writer => block%dataset)
     class is (vtkhdf_structured_base)
+      call structured_values(block,id,step,ps,pv,cs,cv)
       if (write_points) then
-        call writer%write_point_data(block%point_scalar,ps,origin)
-        call writer%write_point_data(block%point_vector,pv,origin)
+        call writer%write_point_data(block%point_scalar,ps,block%array_origin,block%selection)
+        call writer%write_point_data(block%point_vector,pv,block%array_origin,block%selection)
       end if
       if (write_cells) then
-        call writer%write_cell_data(block%cell_scalar,cs,origin)
-        call writer%write_cell_data(block%cell_vector,cv,origin)
+        call writer%write_cell_data(block%cell_scalar,cs,block%array_origin)
+        call writer%write_cell_data(block%cell_vector,cv,block%array_origin)
       end if
       call writer%write_field_data(block%clock,data=times(step))
       call writer%write_field_data(block%table,data=table)
     class is (vtkhdf_unstructured_writer)
-      nc = 1
-      if (block%mode == VTKHDF_DYNAMIC_MESH .and. step/2 == 1) nc = 2
-      np = 4*nc
-      allocate(s(np),v(3,np))
-      s = [(real(1000*id+100*step+i,real64),i=1,np)]
-      do c = 1,3
-        v(c,:) = s+c
-      end do
+      call unstructured_values(block,id,step,ups,upv,ucs,ucv)
       if (write_points) then
-        call writer%write_point_data(block%point_scalar,s)
-        call writer%write_point_data(block%point_vector,v)
+        call writer%write_point_data(block%point_scalar,ups)
+        call writer%write_point_data(block%point_vector,upv)
       end if
       if (write_cells) then
-        call writer%write_cell_data(block%cell_scalar,s(:nc))
-        call writer%write_cell_data(block%cell_vector,v(:,:nc))
+        call writer%write_cell_data(block%cell_scalar,ucs)
+        call writer%write_cell_data(block%cell_vector,ucv)
       end if
       call writer%write_field_data(block%clock,data=times(step))
       call writer%write_field_data(block%table,data=table)

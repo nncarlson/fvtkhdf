@@ -244,15 +244,19 @@ Each block retains the reader version requirements of its simple dataset type;
 see :doc:`image`, :doc:`rectilinear`, and :doc:`structured_grid`.
 
 The following observations were checked with ParaView 6.2.1 (VTK 9.7.2), using
-the independent :repo:`test/compatibility/mb/README.md` harness. The initial
-matrix covers serial, three-dimensional files: all supported type/mode
-combinations, standalone controls, and selected heterogeneous collections in
-both block orders. It does not establish parallel-reader or 1D/2D compatibility.
+the independent :repo:`test/compatibility/mb/README.md` harness. Checks cover
+all supported type/mode combinations in serial 3D files, standalone controls,
+and selected heterogeneous collections in both block orders. Additional checks
+cover 1D/2D structured blocks with trailing singleton axes and selected 3D files
+written by four MPI ranks with unequal contributions and empty ranks. All
+readback is serial; distributed reading and nontrailing singleton arrangements
+are outside this assessment.
 
 Geometry and point/cell data read correctly in the tested all-static and
 all-temporal collections, including collections with different dataset types
 and temporal modes. The checks include moving and dynamic geometry, constant
-arrays, omitted-write reuse, and nonsequential time requests.
+arrays, omitted-write reuse, and nonsequential time requests. Representative
+temporal cases were also checked with the reader cache enabled.
 
 .. list-table:: Current ParaView 6.2.1 limitations
    :header-rows: 1
