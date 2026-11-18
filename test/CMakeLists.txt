@@ -389,10 +389,28 @@ set_tests_properties(vtkhdf_image_file_type PROPERTIES FIXTURES_SETUP vtkhdf_ima
 vtkhdf_add_test_target(vtkhdf_image_fail_test vtkhdf_image_fail_test.F90)
 foreach(case bounds source type components late outside_step missing field_duplicate
              before_mesh register_before_mesh field_outside_step wrong_handle static_type
-             static_components ug_duplicate mode_moving mode_dynamic mode_invalid)
+             static_components mode_moving mode_dynamic mode_invalid)
   vtkhdf_add_runtime_test(vtkhdf_image_fail_${case} vtkhdf_image_fail_test ${case})
   set_tests_properties(vtkhdf_image_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
 endforeach()
+# Require the duplicate-write assertion, rather than accepting a setup failure.
+set(ug_duplicate_command $<TARGET_FILE:vtkhdf_image_fail_test>)
+set(ug_duplicate_processors 1)
+if(ENABLE_MPI)
+  list(PREPEND ug_duplicate_command ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4)
+  list(APPEND ug_duplicate_command ${MPIEXEC_POSTFLAGS})
+  set(ug_duplicate_processors 4)
+endif()
+list(APPEND ug_duplicate_command ug_duplicate)
+add_test(NAME vtkhdf_image_fail_ug_duplicate
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_expect_assertion.py
+          --source ${PROJECT_SOURCE_DIR}/src/vtkhdf_ug_file_type.F90.fypp
+          --assertion "no double writing in a single step"
+          -- ${ug_duplicate_command})
+set_tests_properties(vtkhdf_image_fail_ug_duplicate PROPERTIES
+  PROCESSORS ${ug_duplicate_processors}
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  TIMEOUT 30)
 # Rank-disagreement checks use ASSERT and are absent with NDEBUG.
 if(ENABLE_MPI)
   foreach(case geometry_mismatch name_mismatch mode_mismatch)

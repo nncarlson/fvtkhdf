@@ -52,8 +52,12 @@ test rather than just the execution mode.
 
 ## Negative Contract Tests
 
-These are expected-failure tests registered with `WILL_FAIL`. They protect API
-ordering and handle-usage assertions that intentionally abort.
+These tests protect API ordering and handle-usage assertions that intentionally
+abort. Most use `WILL_FAIL`. `vtkhdf_image_fail_ug_duplicate` instead uses
+`vtkhdf_expect_assertion.py` to require both a nonzero exit and the specific
+duplicate-write assertion diagnostic. Its UG setup runs independently of the
+ImageData setup, and the expected source location is resolved from the template
+so unrelated setup errors cannot satisfy the test.
 
 The MPI `geometry_mismatch`, `name_mismatch`, and `mode_mismatch` checks are
 registered only for Debug configurations: they exercise debug-only `ASSERT`

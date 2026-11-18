@@ -20,6 +20,23 @@ program vtkhdf_image_fail_test
   character(:), allocatable :: errmsg
   call test_env_init(rank,nproc)
   call get_command_argument(1,scenario)
+  if (scenario == 'ug_duplicate') then
+#ifdef USE_MPI
+    call ug%create('image_fail_ug_duplicate.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=VTKHDF_FIXED_MESH)
+#else
+    call ug%create('image_fail_ug_duplicate.vtkhdf',stat,errmsg,mode=VTKHDF_FIXED_MESH)
+#endif
+    if (stat /= 0) error stop errmsg
+    call ug%write_mesh(reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,0.,0.,1.],[3,4]), &
+        [1,2,3,4],[1,5],[10_int8])
+    var = ug%register_temporal_cell_data('data',0.0_real64)
+    call ug%start_time_step(0.0)
+    call ug%write_cell_data(var,[1.0_real64])
+    call ug%write_cell_data(var,[2.0_real64])
+    ! Return success if the duplicate-write guard did not terminate execution.
+    call test_env_finalize()
+    stop
+  end if
   mode = VTKHDF_FIXED_MESH
   select case (trim(scenario))
   case ('mode_moving')
@@ -106,19 +123,6 @@ program vtkhdf_image_fail_test
       write(name,'(a,i0)') 'field',rank
       call file%write_cell_data(trim(name),a,[0,0,0])
     end block
-  case ('ug_duplicate')
-#ifdef USE_MPI
-    call ug%create('image_fail_ug_duplicate.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=VTKHDF_FIXED_MESH)
-#else
-    call ug%create('image_fail_ug_duplicate.vtkhdf',stat,errmsg,mode=VTKHDF_FIXED_MESH)
-#endif
-    if (stat /= 0) error stop errmsg
-    call ug%write_mesh(reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,0.,0.,1.],[3,4]), &
-        [1,2,3,4],[1,5],[10_int8])
-    var = ug%register_temporal_cell_data('data',0.0_real64)
-    call ug%start_time_step(0.0)
-    call ug%write_cell_data(var,[1.0_real64])
-    call ug%write_cell_data(var,[2.0_real64])
   case ('missing')
     ! Finalization must reject a registered mesh field with no initial calls.
   end select
