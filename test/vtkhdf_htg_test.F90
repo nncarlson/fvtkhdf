@@ -249,7 +249,15 @@ contains
         call file%write_mesh_geometry(axis_coordinates(1,dims(1),geometry(step)), &
             axis_coordinates(2,dims(2),geometry(step)), axis_coordinates(3,dims(3),geometry(step)))
       end if
+#ifdef GNU_PR123899
+      block
+         real(real64), allocatable :: values(:)
+         values = 1000.0_real64*gid + lid + 0.5_real64*step
+         call file%write_cell_data(value_var, values)
+       end block
+#else
       call file%write_cell_data(value_var, 1000.0_real64*gid + lid + 0.5_real64*step)
+#endif
       if (step /= 1) then ! step 1 reuses the step 0 values
         if (allocated(vec)) deallocate(vec)
         allocate(vec(3,size(gid)))
