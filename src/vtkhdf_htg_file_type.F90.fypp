@@ -983,7 +983,6 @@ contains
     allocate(level_cells(size(refined, kind=int64)), bits(size(refined, kind=int64)))
     ndepth = 0
     nbits = 0
-    valid = .false.
 
     do t = 1, ntree
       pos = xtree(t)
