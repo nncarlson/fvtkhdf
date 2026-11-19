@@ -6,7 +6,6 @@
 !! CREATE, FLUSH, and file cleanup belong here. Explicit CLOSE is collective.
 !! Implicit finalization frees local allocations without performing I/O.
 !!
-!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
 
