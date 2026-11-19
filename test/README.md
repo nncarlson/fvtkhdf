@@ -14,7 +14,7 @@ specific API contract.
 - `vtkhdf_mb_basic_blocks_file_type`: MB ordinary two-block static and temporal writes.
 - `vtkhdf_chunk_settings`: chunk-layout configuration checks.
 - `test_leak`: repeated HDF5 init sanity check.
-- `vtkhdf_simple_dataset_lifecycle`: all four concrete block types borrow one
+- `vtkhdf_simple_dataset_lifecycle`: all five concrete block types borrow one
   parent file and communicator, write static and temporal field data, and
   close/reinitialize through the abstract lifecycle interface. It checks close
   with an open step, repeated close, reset of geometry state, and preservation
@@ -208,8 +208,11 @@ directly without MultiBlock integration.
 one, two, and three dimensions with branch factors 2 and 3. Trees follow three
 refinement patterns chosen by tree id and topology phase, and are dealt to the
 MPI ranks by a phase-dependent rule that leaves the last rank without trees in
-one phase, producing an empty part. The
-fixtures cover both index kinds, both coordinate kinds, either order of
+one phase, producing an empty part while retaining one stored part per rank.
+In the two-rank dynamic fixture, cell counts change from `[35, 35]` to
+`[70, 0]` with `NumberOfParts` remaining 2. Both layout and reader checks cover
+this transition and returning to the earlier populated state. The fixtures
+cover both index kinds, both coordinate kinds, either order of
 geometry and topology, every cell data kind, masks supplied for all, some, or
 none of the topologies, a grid without any refined tree, static cell data
 written during a later step, and temporal omission and reuse.
@@ -227,6 +230,32 @@ expected values at every step, read in ascending and then descending order.
 ids, incomplete and oversized trees, masked refined cells, ordering of mesh
 and data writes, mode restrictions, late registration, and reuse of temporal
 data after a change of cell count.
+
+The HTG fixtures additionally cover all seven active-axis combinations, both
+branch factors, and both root-indexing orders. Independent VTK cursor checks
+verify the resulting tree positions, including transposed root indexing.
+
+`vtkhdf_htg_api_test.F90.fypp` exercises every cell-data numeric kind as a
+scalar and vector in static and temporal files, using noncontiguous arrays,
+empty MPI contributions, changing ownership, and temporal omission/reuse.
+Its layout checker verifies values, types, offsets, and custom versus default
+chunk sizes. Cell-name fixtures cover blank names, trimming, sanitization and
+suffix collisions, and static/temporal collisions in both creation orders;
+reader checks verify that each temporal handle selects its own dataset.
+
+The field-data fixture tests only HTG's integration with the shared component:
+correct parent groups, rank-zero values, completed-step counts for late
+constants, write-flag resets, and finalization of the last open step. Field
+readback uses a fresh reader per step because VTK 9.7.2 can drop reused constant
+field arrays during repeated reads. The shared component's full kind/shape
+matrix is not repeated here.
+
+Additional negative checks cover foreign cell and field handles, duplicate cell
+writes, writes outside an open step, late field registration, missing initial
+cell values, and invalid modes. Foreign-handle and duplicate-write tests require
+the specific assertion diagnostic, so unrelated setup failures cannot satisfy
+them. MPI rank disagreements in mode, dimensions, and branch factor run only in
+Debug builds, where the corresponding diagnostics are enabled.
 
 ## Constant Point and Cell Data on Moving Unstructured Meshes
 

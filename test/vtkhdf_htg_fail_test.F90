@@ -12,8 +12,9 @@ program vtkhdf_htg_fail_test
 #endif
   implicit none
 
-  type(vtkhdf_htg_file) :: file
+  type(vtkhdf_htg_file) :: file, other
   type(vtkhdf_cell_data_handle) :: var
+  type(vtkhdf_field_data_handle) :: field
   character(64) :: case_name
   character(:), allocatable :: errmsg
   integer :: rank, nproc, stat, mode
@@ -28,10 +29,15 @@ program vtkhdf_htg_fail_test
   call get_command_argument(1, case_name)
 
   select case (case_name)
-  case ('geometry_change', 'late_register')
+  case ('geometry_change', 'late_register', 'cell_foreign', 'field_foreign', 'cell_duplicate', &
+        'cell_outside_step', 'field_outside_step', 'field_late_register', 'temporal_count', 'missing_initial')
     mode = VTKHDF_FIXED_MESH
   case ('mesh_after_data')
     mode = VTKHDF_MOVING_MESH
+  case ('invalid_mode')
+    mode = -1
+  case ('mode_mismatch')
+    mode = merge(VTKHDF_STATIC,VTKHDF_FIXED_MESH,rank==0)
   case ('missing_data', 'static_data')
     mode = VTKHDF_DYNAMIC_MESH
   case default
@@ -46,6 +52,54 @@ program vtkhdf_htg_fail_test
   if (stat /= 0) error stop errmsg
 
   select case (case_name)
+  case ('invalid_mode', 'mode_mismatch')
+    ! If creation accepted the invalid mode, exit successfully below.
+  case ('dims_mismatch')
+    call file%write_mesh([3+rank,2,1])
+  case ('branch_mismatch')
+    call file%write_mesh([3,2,1],branch_factor=merge(2,3,rank==0))
+  case ('cell_foreign', 'field_foreign')
+    call write_complete_mesh
+#ifdef USE_MPI
+    call other%create('htg_fail_'//trim(case_name)//'_other.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=mode)
+#else
+    call other%create('htg_fail_'//trim(case_name)//'_other.vtkhdf',stat,errmsg,mode=mode)
+#endif
+    if (stat /= 0) error stop errmsg
+    if (case_name == 'cell_foreign') then
+      var = file%register_temporal_cell_data('value',0.0_real64)
+      var = other%register_temporal_cell_data('value',0.0_real64)
+      call file%start_time_step(0.0)
+      call file%write_cell_data(var,[1.0_real64,2.0_real64,3.0_real64,4.0_real64,5.0_real64,6.0_real64])
+    else
+      field = file%register_temporal_field_data('value',0.0_real64)
+      field = other%register_temporal_field_data('value',0.0_real64)
+      call file%start_time_step(0.0)
+      call file%write_field_data(field,1.0_real64)
+    end if
+  case ('cell_duplicate', 'cell_outside_step', 'temporal_count', 'missing_initial')
+    call write_complete_mesh
+    var = file%register_temporal_cell_data('value',0.0_real64)
+    if (case_name /= 'cell_outside_step') call file%start_time_step(0.0)
+    if (case_name == 'missing_initial') then
+      call file%finalize_time_step()
+    else if (case_name == 'temporal_count') then
+      call file%write_cell_data(var,[1.0_real64,2.0_real64,3.0_real64,4.0_real64,5.0_real64])
+    else
+      call file%write_cell_data(var,[1.0_real64,2.0_real64,3.0_real64,4.0_real64,5.0_real64,6.0_real64])
+      if (case_name == 'cell_duplicate') then
+        call file%write_cell_data(var,[1.0_real64,2.0_real64,3.0_real64,4.0_real64,5.0_real64,6.0_real64])
+      end if
+    end if
+  case ('field_outside_step', 'field_late_register')
+    call write_complete_mesh
+    if (case_name == 'field_outside_step') then
+      field = file%register_temporal_field_data('value',0.0_real64)
+      call file%write_field_data(field,1.0_real64)
+    else
+      call file%start_time_step(0.0)
+      field = file%register_temporal_field_data('value',0.0_real64)
+    end if
   case ('no_grid') ! root grid must be defined first
     call file%write_mesh_topology(tree_ids, xtree, refined)
   case ('bad_dims')
@@ -119,7 +173,7 @@ program vtkhdf_htg_fail_test
     error stop 'unknown case'
   end select
 
-  call file%close
+  ! Do not let cleanup assertions hide a missing guard in the tested call.
   call test_env_finalize()
 
 contains

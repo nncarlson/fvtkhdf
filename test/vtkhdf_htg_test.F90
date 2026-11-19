@@ -21,7 +21,8 @@ program vtkhdf_htg_test
 #endif
   implicit none
 
-  integer :: rank, nproc
+  integer :: rank, nproc, axes, branch_factor, indexing, dims(3)
+  character(80) :: filename
 
   call test_env_init(rank, nproc)
 
@@ -33,6 +34,16 @@ program vtkhdf_htg_test
   call write_moving
   call write_dynamic
   call write_interface
+  do axes = 1,7
+    dims = 1
+    where (btest(axes,[0,1,2])) dims = [3,4,3]
+    do branch_factor = 2,3
+      do indexing = 0,1
+        write(filename,'(a,i0,a,i0,a,i0,a)') 'htg_axes_',axes,'_',branch_factor,'_',indexing,'.vtkhdf'
+        call write_static(trim(filename),dims,branch_factor,with_mask=branch_factor==3,transposed=indexing==1)
+      end do
+    end do
+  end do
 
   call test_env_finalize()
 
@@ -104,17 +115,18 @@ contains
     mask = (.not.refined) .and. (modulo(lid, 5) == 4)
   end subroutine
 
-  subroutine write_static(name, dims, branch_factor, with_mask)
+  subroutine write_static(name, dims, branch_factor, with_mask, transposed)
     character(*), intent(in) :: name
     integer, intent(in) :: dims(3), branch_factor
     logical, intent(in) :: with_mask
+    logical, intent(in), optional :: transposed
     type(vtkhdf_htg_file) :: file
     integer, allocatable :: tree_ids(:), xtree(:), gid(:), lid(:)
     logical, allocatable :: refined(:), mask(:)
     real(real32), allocatable :: vec(:,:)
     integer :: j
     call open_file(file, name, VTKHDF_STATIC)
-    call file%write_mesh(dims, branch_factor=branch_factor)
+    call file%write_mesh(dims, branch_factor=branch_factor, transposed_root_indexing=transposed)
     call local_trees(dims, branch_factor, 0, tree_ids, xtree, refined, mask, gid, lid)
     if (with_mask) then ! topology first, int64 indexing, real32 coordinates
       call file%write_mesh_topology(int(tree_ids,int64), int(xtree,int64), refined, mask)
@@ -125,15 +137,47 @@ contains
           axis_coordinates(2,dims(2),0), axis_coordinates(3,dims(3),0))
       call file%write_mesh_topology(tree_ids, xtree, refined)
     end if
+#ifdef GNU_PR123899
+    block
+      real(real64), allocatable :: values(:)
+      values = 1000.0_real64*gid + lid
+      call file%write_cell_data('value', values, attribute='Scalars')
+    end block
+#else
     call file%write_cell_data('value', 1000.0_real64*gid + lid, attribute='Scalars')
+#endif
     allocate(vec(3,size(gid)))
     do j = 1, size(gid)
       vec(:,j) = [real(gid(j)), real(lid(j)), 0.0]
     end do
     call file%write_cell_data('vec', vec)
+#ifdef GNU_PR123899
+    block
+      integer(int32), allocatable :: values(:)
+      values = int(1000*gid + lid, int32)
+      call file%write_cell_data('ids', values)
+    end block
+#else
     call file%write_cell_data('ids', int(1000*gid + lid, int32))
+#endif
+#ifdef GNU_PR123899
+    block
+      integer(int64), allocatable :: values(:)
+      values = int(1000*gid + lid, int64)
+      call file%write_cell_data('big ids', values)
+    end block
+#else
     call file%write_cell_data('big ids', int(1000*gid + lid, int64))
+#endif
+#ifdef GNU_PR123899
+    block
+      integer(int8), allocatable :: values(:)
+      values = int(modulo(lid,2), int8)
+      call file%write_cell_data('flag', values)
+    end block
+#else
     call file%write_cell_data('flag', int(modulo(lid,2), int8))
+#endif
     call file%write_field_data('field-value', 42.0_real64)
     call file%close
   end subroutine
@@ -218,8 +262,8 @@ contains
   end subroutine
 
   !! Dynamic mesh: topology phases 0,0,1,2 and geometry phases 0,0,0,1. Only
-  !! the phase 1 topology supplies a mask. Changing ownership changes the
-  !! number of parts, and hence of stored coordinate copies, in MPI runs.
+  !! the phase 1 topology supplies a mask. Tree ownership changes in MPI runs,
+  !! including an empty part; every rank continues to contribute one part.
   subroutine write_dynamic
     type(vtkhdf_htg_file) :: file
     type(vtkhdf_cell_data_handle) :: value_var, vec_var

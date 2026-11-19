@@ -49,6 +49,15 @@ FIXTURES = {
     "htg_dynamic": dict(dims=(4, 3, 2), bf=2, topology=[0, 0, 1, 2], geometry=[0, 0, 0, 1], masked={1},
                         static=[], temporal={"value": [0, 1, 2, 3], "vec": [0, 0, 2, 3]}, time=[0., .25, .5, .75]),
 }
+for axes in range(1, 8):
+    dims = tuple(n if axes & (1 << a) else 1 for a, n in enumerate((3, 4, 3)))
+    for bf in (2, 3):
+        for transposed in (0, 1):
+            FIXTURES[f"htg_axes_{axes}_{bf}_{transposed}"] = dict(
+                dims=dims, bf=bf, transposed=transposed, topology=None, geometry=None,
+                masked={0} if bf == 3 else None,
+                static=["value", "vec", "ids", "big ids", "flag"], temporal={}, field=True)
+
 DTYPES = {"value": "f8", "vec": "f4", "ids": "i4", "big ids": "i8", "flag": "u1"}
 
 
@@ -127,7 +136,7 @@ def check_layout(name, fx):
         require(tuple(root.attrs["Version"]) == (2, 8), f"{name}: Version")
         require(tuple(root.attrs["Dimensions"]) == dims, f"{name}: Dimensions")
         require(root.attrs["BranchFactor"] == fx["bf"], f"{name}: BranchFactor")
-        require(root.attrs["TransposedRootIndexing"] == 0, f"{name}: TransposedRootIndexing")
+        require(root.attrs["TransposedRootIndexing"] == fx.get("transposed", 0), f"{name}: TransposedRootIndexing")
         require("PointData" not in root, f"{name}: PointData must be absent")
         for dataset in ("TreeIds", "DepthPerTree", "NumberOfCellsPerTreeDepth", "NumberOfTrees",
                         "NumberOfDepths", "NumberOfCells", "DescriptorsSize"):
@@ -341,10 +350,12 @@ def cell_bounds(root_bounds, dims, bf, flags):
     return bounds
 
 
-def check_tree(htg, where, g, flags, dims, bf, coords, masked):
+def check_tree(htg, where, g, flags, dims, bf, coords, masked, transposed=False):
     """Compare a tree's structure, geometry, and mask; return its global cell indices."""
     nx, ny = max(dims[0] - 1, 1), max(dims[1] - 1, 1)
-    ijk = (g % nx, (g // nx) % ny, g // (nx*ny))
+    nz = max(dims[2] - 1, 1)
+    ijk = ((g // (ny*nz), (g // nz) % ny, g % nz) if transposed else
+           (g % nx, (g // nx) % ny, g // (nx*ny)))
     root_bounds = []
     for a in range(3):
         lo = coords[a][ijk[a]]
@@ -419,6 +430,8 @@ def check_reader(name, fx):
             require(isinstance(htg, vtkHyperTreeGrid), f"{where} is not a HyperTreeGrid")
             require(tuple(htg.GetDimensions()) == dims, f"{where} dimensions")
             require(htg.GetBranchFactor() == bf, f"{where} branch factor")
+            require(bool(htg.GetTransposedRootIndexing()) == bool(fx.get("transposed", False)),
+                    f"{where} transposed root indexing")
             coords = [vtk_to_numpy(c) for c in (htg.GetXCoordinates(), htg.GetYCoordinates(), htg.GetZCoordinates())]
             for a in range(3):
                 require(np.array_equal(coords[a], axis(a, dims[a], geometry[step])), f"{where} coordinates {a}")
@@ -432,7 +445,7 @@ def check_reader(name, fx):
             keys = {key.replace(" ", "_"): key for key in fx["static"] + list(fx["temporal"])}
             require(names == sorted(keys), f"{where} cell arrays {names}")
             for g, tree_flags in zip(ids, flags):
-                index = check_tree(htg, where, g, tree_flags, dims, bf, coords, masked)
+                index = check_tree(htg, where, g, tree_flags, dims, bf, coords, masked, fx.get("transposed", False))
                 for array_name, key in keys.items():
                     source = fx["temporal"][key][step] if key in fx["temporal"] else 0
                     got = vtk_to_numpy(cell_data.GetArray(array_name))[index]
