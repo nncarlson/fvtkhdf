@@ -969,7 +969,16 @@ contains
     integer(int64), allocatable :: level_cells(:)
     logical, allocatable :: bits(:)
 
+    valid = .false.
+
     ntree = size(xtree, kind=int64) - 1
+    ! Validate CSR boundaries before traversing the refinement flags.
+    if (ntree < 0) return
+    if (nchild < 2) return
+    if (xtree(1) /= 1) return
+    if (any(xtree(2:) <= xtree(:ntree))) return
+    if (xtree(ntree+1) - 1_int64 /= size(refined, kind=int64)) return
+
     allocate(depth_per_tree(ntree), source=0_int64)
     allocate(level_cells(size(refined, kind=int64)), bits(size(refined, kind=int64)))
     ndepth = 0
