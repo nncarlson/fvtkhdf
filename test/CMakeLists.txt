@@ -597,93 +597,93 @@ foreach(case duplicate axis_length)
 endforeach()
 
 # HyperTreeGrid: breadth-first tree descriptors, per-part coordinates, and a mask.
-vtkhdf_add_test_target(vtkhdf_htg_test vtkhdf_htg_test.F90)
-vtkhdf_add_runtime_test(vtkhdf_htg_file_types vtkhdf_htg_test)
-set_tests_properties(vtkhdf_htg_file_types PROPERTIES FIXTURES_SETUP vtkhdf_htg_files)
+vtkhdf_add_test_target(vtkhdf_hypertree_test vtkhdf_hypertree_test.F90)
+vtkhdf_add_runtime_test(vtkhdf_hypertree_file_types vtkhdf_hypertree_test)
+set_tests_properties(vtkhdf_hypertree_file_types PROPERTIES FIXTURES_SETUP vtkhdf_hypertree_files)
 foreach(check layout reader)
-  add_test(NAME vtkhdf_htg_${check}
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_htg_check.py
+  add_test(NAME vtkhdf_hypertree_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_hypertree_check.py
             ${check} ${CMAKE_CURRENT_BINARY_DIR})
-  set_tests_properties(vtkhdf_htg_${check} PROPERTIES
-    FIXTURES_REQUIRED vtkhdf_htg_files SKIP_RETURN_CODE 77)
+  set_tests_properties(vtkhdf_hypertree_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_hypertree_files SKIP_RETURN_CODE 77)
 endforeach()
 if(ENABLE_MPI)
-  set(HTG_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/htg-two-rank)
-  file(MAKE_DIRECTORY ${HTG_TWO_RANK_DIR})
-  add_test(NAME vtkhdf_htg_two_rank
+  set(HYPERTREE_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/hypertree-two-rank)
+  file(MAKE_DIRECTORY ${HYPERTREE_TWO_RANK_DIR})
+  add_test(NAME vtkhdf_hypertree_two_rank
     COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
-            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_htg_test ${MPIEXEC_POSTFLAGS})
-  set_tests_properties(vtkhdf_htg_two_rank PROPERTIES PROCESSORS 2
-    WORKING_DIRECTORY ${HTG_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_htg_two_rank_files)
+            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_hypertree_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_hypertree_two_rank PROPERTIES PROCESSORS 2
+    WORKING_DIRECTORY ${HYPERTREE_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_hypertree_two_rank_files)
   foreach(check layout reader)
-    add_test(NAME vtkhdf_htg_two_rank_${check}
-      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_htg_check.py
-              ${check} ${HTG_TWO_RANK_DIR})
-    set_tests_properties(vtkhdf_htg_two_rank_${check} PROPERTIES
-      FIXTURES_REQUIRED vtkhdf_htg_two_rank_files SKIP_RETURN_CODE 77)
+    add_test(NAME vtkhdf_hypertree_two_rank_${check}
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_hypertree_check.py
+              ${check} ${HYPERTREE_TWO_RANK_DIR})
+    set_tests_properties(vtkhdf_hypertree_two_rank_${check} PROPERTIES
+      FIXTURES_REQUIRED vtkhdf_hypertree_two_rank_files SKIP_RETURN_CODE 77)
   endforeach()
 endif()
-vtkhdf_add_test_target(vtkhdf_htg_fail_test vtkhdf_htg_fail_test.F90)
+vtkhdf_add_test_target(vtkhdf_hypertree_fail_test vtkhdf_hypertree_fail_test.F90)
 foreach(case no_grid bad_dims bad_branch_factor grid_twice axis_length tree_id_range missing_cells extra_cells
              masked_refined topology_twice data_before_topology data_before_geometry wrong_cell_count
              geometry_change late_register mesh_after_data static_data missing_data
              interface_one_name interface_bad_name invalid_mode cell_outside_step temporal_count missing_initial
              field_outside_step field_late_register)
-  vtkhdf_add_runtime_test(vtkhdf_htg_fail_${case} vtkhdf_htg_fail_test ${case})
-  set_tests_properties(vtkhdf_htg_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+  vtkhdf_add_runtime_test(vtkhdf_hypertree_fail_${case} vtkhdf_hypertree_fail_test ${case})
+  set_tests_properties(vtkhdf_hypertree_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
 endforeach()
 
 # Numeric overloads, cell-name/handle isolation, and HTG field lifecycle wiring.
-add_fypp_sources(HTG_API_TEST_SRC SOURCES vtkhdf_htg_api_test.F90.fypp FLAGS --line-numbering)
-vtkhdf_add_test_target(vtkhdf_htg_api_test "${HTG_API_TEST_SRC}")
-vtkhdf_add_runtime_test(vtkhdf_htg_api_files vtkhdf_htg_api_test)
-set_tests_properties(vtkhdf_htg_api_files PROPERTIES FIXTURES_SETUP vtkhdf_htg_api_files)
+add_fypp_sources(HYPERTREE_API_TEST_SRC SOURCES vtkhdf_hypertree_api_test.F90.fypp FLAGS --line-numbering)
+vtkhdf_add_test_target(vtkhdf_hypertree_api_test "${HYPERTREE_API_TEST_SRC}")
+vtkhdf_add_runtime_test(vtkhdf_hypertree_api_files vtkhdf_hypertree_api_test)
+set_tests_properties(vtkhdf_hypertree_api_files PROPERTIES FIXTURES_SETUP vtkhdf_hypertree_api_files)
 foreach(check layout reader)
-  add_test(NAME vtkhdf_htg_api_${check}
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_htg_api_check.py
+  add_test(NAME vtkhdf_hypertree_api_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_hypertree_api_check.py
             ${check} ${CMAKE_CURRENT_BINARY_DIR})
-  set_tests_properties(vtkhdf_htg_api_${check} PROPERTIES
-    FIXTURES_REQUIRED vtkhdf_htg_api_files SKIP_RETURN_CODE 77)
+  set_tests_properties(vtkhdf_hypertree_api_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_hypertree_api_files SKIP_RETURN_CODE 77)
 endforeach()
 
 # These checks require the intended diagnostic, not merely a failing setup.
 foreach(case cell_foreign field_foreign cell_duplicate)
-  set(htg_fail_command $<TARGET_FILE:vtkhdf_htg_fail_test>)
-  set(htg_fail_processors 1)
+  set(hypertree_fail_command $<TARGET_FILE:vtkhdf_hypertree_fail_test>)
+  set(hypertree_fail_processors 1)
   if(ENABLE_MPI)
-    list(PREPEND htg_fail_command ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4)
-    list(APPEND htg_fail_command ${MPIEXEC_POSTFLAGS})
-    set(htg_fail_processors 4)
+    list(PREPEND hypertree_fail_command ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4)
+    list(APPEND hypertree_fail_command ${MPIEXEC_POSTFLAGS})
+    set(hypertree_fail_processors 4)
   endif()
-  list(APPEND htg_fail_command ${case})
-  set(htg_fail_source ${PROJECT_SOURCE_DIR}/src/vtkhdf_htg_writer_type.F90.fypp)
+  list(APPEND hypertree_fail_command ${case})
+  set(hypertree_fail_source ${PROJECT_SOURCE_DIR}/src/vtkhdf_hypertree_writer_type.F90.fypp)
   if(case STREQUAL "cell_duplicate")
-    set(htg_fail_assertion "no double writing in a single step")
+    set(hypertree_fail_assertion "no double writing in a single step")
   elseif(case STREQUAL "cell_foreign")
-    set(htg_fail_assertion "INSIST(index >= 1)")
+    set(hypertree_fail_assertion "INSIST(index >= 1)")
   else()
-    set(htg_fail_source ${PROJECT_SOURCE_DIR}/src/vtkhdf_field_data_type.F90.fypp)
-    set(htg_fail_assertion "INSIST(index >= 1 .and. index <= size(this%vars))")
+    set(hypertree_fail_source ${PROJECT_SOURCE_DIR}/src/vtkhdf_field_data_type.F90.fypp)
+    set(hypertree_fail_assertion "INSIST(index >= 1 .and. index <= size(this%vars))")
   endif()
-  add_test(NAME vtkhdf_htg_fail_${case}
+  add_test(NAME vtkhdf_hypertree_fail_${case}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_expect_assertion.py
-            --source ${htg_fail_source} --assertion "${htg_fail_assertion}" -- ${htg_fail_command})
-  set_tests_properties(vtkhdf_htg_fail_${case} PROPERTIES
-    PROCESSORS ${htg_fail_processors} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} TIMEOUT 30)
+            --source ${hypertree_fail_source} --assertion "${hypertree_fail_assertion}" -- ${hypertree_fail_command})
+  set_tests_properties(vtkhdf_hypertree_fail_${case} PROPERTIES
+    PROCESSORS ${hypertree_fail_processors} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} TIMEOUT 30)
 endforeach()
 # Agreement diagnostics are compiled out with NDEBUG.
 if(ENABLE_MPI)
   foreach(case mode_mismatch dims_mismatch branch_mismatch)
-    set(test_name vtkhdf_htg_fail_${case})
+    set(test_name vtkhdf_hypertree_fail_${case})
     if(CMAKE_CONFIGURATION_TYPES)
       add_test(NAME ${test_name}
         COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
-                ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_htg_fail_test ${MPIEXEC_POSTFLAGS} ${case}
+                ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_hypertree_fail_test ${MPIEXEC_POSTFLAGS} ${case}
         CONFIGURATIONS Debug)
       set_tests_properties(${test_name} PROPERTIES
         PROCESSORS 4 WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
     elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
-      vtkhdf_add_runtime_test(${test_name} vtkhdf_htg_fail_test ${case})
+      vtkhdf_add_runtime_test(${test_name} vtkhdf_hypertree_fail_test ${case})
     else()
       continue()
     endif()

@@ -53,19 +53,19 @@ def pieces(output):
     return [output.GetPartitionAsDataObject(i) for i in range(output.GetNumberOfPartitions())]
 
 
-def cell_indices(htg, ids):
+def cell_indices(hypertree, ids):
     cursor = vtkHyperTreeGridNonOrientedGeometryCursor()
     indices = []
     for tree in ids:
-        htg.InitializeNonOrientedGeometryCursor(cursor, int(tree), False)
+        hypertree.InitializeNonOrientedGeometryCursor(cursor, int(tree), False)
         assert cursor.HasTree() and cursor.IsLeaf()
         indices.append(cursor.GetGlobalNodeIndex())
-    assert htg.GetNumberOfCells() == len(ids)
+    assert hypertree.GetNumberOfCells() == len(ids)
     return np.array(indices, dtype=int)
 
 
 def check_numeric(mode, suffix, chunk_bytes):
-    path = directory / f"htg_numeric_{suffix}.vtkhdf"
+    path = directory / f"hypertree_numeric_{suffix}.vtkhdf"
     with h5py.File(path) as file:
         root = file["VTKHDF"]
         nproc = int(root["Steps/NumberOfParts"][0]) if mode else len(root["NumberOfTrees"])
@@ -119,11 +119,11 @@ def check_numeric(mode, suffix, chunk_bytes):
             output = pieces(reader.GetOutputDataObject(0))
             ownership = 1 if mode == 3 and step >= 2 else 0
             assert len(output) == nproc
-            for htg, ids in zip(output, ids_by_part(nproc, ownership)):
-                indices = cell_indices(htg, ids)
+            for hypertree, ids in zip(output, ids_by_part(nproc, ownership)):
+                indices = cell_indices(hypertree, ids)
                 shift = int(mode >= 2 and step >= 2)
-                np.testing.assert_array_equal(vtk_to_numpy(htg.GetXCoordinates()), np.arange(4) + shift)
-                cell_data = htg.GetCellData()
+                np.testing.assert_array_equal(vtk_to_numpy(hypertree.GetXCoordinates()), np.arange(4) + shift)
+                cell_data = hypertree.GetCellData()
                 assert {cell_data.GetArrayName(i) for i in range(cell_data.GetNumberOfArrays())} == set(names)
                 for name, (kind, components, temporal) in names.items():
                     array = cell_data.GetArray(name)
@@ -136,7 +136,7 @@ def check_numeric(mode, suffix, chunk_bytes):
 
 
 def check_names():
-    path = directory / "htg_names.vtkhdf"
+    path = directory / "hypertree_names.vtkhdf"
     # Internal HDF5 name: original label, base value, temporal.
     names = {
         "a_b": ("a/b", 10, False),
@@ -168,15 +168,15 @@ def check_names():
             assert not errors, errors
             output = pieces(reader.GetOutputDataObject(0))
             assert len(output) == nproc
-            for htg, ids in zip(output, ids_by_part(nproc)):
-                indices = cell_indices(htg, ids)
+            for hypertree, ids in zip(output, ids_by_part(nproc)):
+                indices = cell_indices(hypertree, ids)
                 for name, (_, base, temporal) in names.items():
-                    np.testing.assert_array_equal(vtk_to_numpy(htg.GetCellData().GetArray(name))[indices],
+                    np.testing.assert_array_equal(vtk_to_numpy(hypertree.GetCellData().GetArray(name))[indices],
                                                   ids + base + (100 * min(step, 1) if temporal else 0))
 
 
 def check_field_lifecycle():
-    path = directory / "htg_field_lifecycle.vtkhdf"
+    path = directory / "hypertree_field_lifecycle.vtkhdf"
     constants = dict(before=10, during=20, between=30, after=40, last_open=50)
     with h5py.File(path) as file:
         root = file["VTKHDF"]

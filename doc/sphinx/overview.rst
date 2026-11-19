@@ -66,8 +66,8 @@ the owning file manages their lifecycle.
      - ``vtkhdf_unstructured_file``
      - ``vtkhdf_unstructured_file_type``
    * - HyperTreeGrid
-     - ``vtkhdf_htg_file``
-     - ``vtkhdf_htg_file_type``
+     - ``vtkhdf_hypertree_file``
+     - ``vtkhdf_hypertree_file_type``
    * - MultiBlockDataSet
      - ``vtkhdf_mb_file``
      - ``vtkhdf_mb_file_type``

@@ -1,5 +1,5 @@
 !! Fixture producer for the HyperTreeGrid writer. The trees, ownership, and
-!! data follow simple rules that vtkhdf_htg_check.py reproduces independently:
+!! data follow simple rules that vtkhdf_hypertree_check.py reproduces independently:
 !!
 !! * Tree g (0-based) in topology phase p has pattern mod(g+p,3): a single
 !!   leaf; a refined root; or a refined root whose first and last children
@@ -11,11 +11,11 @@
 !! * Cell data values encode the tree, the cell's index in its tree, and the
 !!   step; coordinates encode the axis, the point index, and a geometry phase.
 
-program vtkhdf_htg_test
+program vtkhdf_hypertree_test
 
   use,intrinsic :: iso_fortran_env, only: int8, int32, int64, real32, real64
   use vtkhdf_test_env
-  use vtkhdf_htg_file_type
+  use vtkhdf_hypertree_file_type
 #ifdef USE_MPI
   use mpi
 #endif
@@ -27,8 +27,8 @@ program vtkhdf_htg_test
   call test_env_init(rank, nproc)
 
   call check_valid_topology
-  call write_static('htg_static.vtkhdf', [4,3,2], 2, with_mask=.false.)
-  call write_static('htg_static_mask.vtkhdf', [3,1,3], 3, with_mask=.true.)
+  call write_static('hypertree_static.vtkhdf', [4,3,2], 2, with_mask=.false.)
+  call write_static('hypertree_static_mask.vtkhdf', [3,1,3], 3, with_mask=.true.)
   call write_coarse
   call write_fixed
   call write_moving
@@ -39,7 +39,7 @@ program vtkhdf_htg_test
     where (btest(axes,[0,1,2])) dims = [3,4,3]
     do branch_factor = 2,3
       do indexing = 0,1
-        write(filename,'(a,i0,a,i0,a,i0,a)') 'htg_axes_',axes,'_',branch_factor,'_',indexing,'.vtkhdf'
+        write(filename,'(a,i0,a,i0,a,i0,a)') 'hypertree_axes_',axes,'_',branch_factor,'_',indexing,'.vtkhdf'
         call write_static(trim(filename),dims,branch_factor,with_mask=branch_factor==3,transposed=indexing==1)
       end do
     end do
@@ -50,7 +50,7 @@ program vtkhdf_htg_test
 contains
 
   subroutine open_file(file, name, mode)
-    type(vtkhdf_htg_file), intent(out) :: file
+    type(vtkhdf_hypertree_file), intent(out) :: file
     character(*), intent(in) :: name
     integer, intent(in) :: mode
     integer :: stat
@@ -120,7 +120,7 @@ contains
     integer, intent(in) :: dims(3), branch_factor
     logical, intent(in) :: with_mask
     logical, intent(in), optional :: transposed
-    type(vtkhdf_htg_file) :: file
+    type(vtkhdf_hypertree_file) :: file
     integer, allocatable :: tree_ids(:), xtree(:), gid(:), lid(:)
     logical, allocatable :: refined(:), mask(:)
     real(real32), allocatable :: vec(:,:)
@@ -184,12 +184,12 @@ contains
 
   !! No tree is refined: there are no descriptor bits at all.
   subroutine write_coarse
-    type(vtkhdf_htg_file) :: file
+    type(vtkhdf_hypertree_file) :: file
     integer, parameter :: dims(3) = [5,1,1]
     integer, allocatable :: tree_ids(:), xtree(:)
     logical, allocatable :: refined(:)
     integer :: g
-    call open_file(file, 'htg_coarse.vtkhdf', VTKHDF_STATIC)
+    call open_file(file, 'hypertree_coarse.vtkhdf', VTKHDF_STATIC)
     call file%write_mesh(dims)
     call file%write_mesh_geometry(axis_coordinates(1,dims(1),0), &
         axis_coordinates(2,dims(2),0), axis_coordinates(3,dims(3),0))
@@ -203,7 +203,7 @@ contains
 
   !! Fixed mesh: static and temporal cell data, with omission and reuse.
   subroutine write_fixed
-    type(vtkhdf_htg_file) :: file
+    type(vtkhdf_hypertree_file) :: file
     type(vtkhdf_cell_data_handle) :: value_var, vec_var
     type(vtkhdf_field_data_handle) :: time_var
     integer, parameter :: dims(3) = [3,4,1]
@@ -211,7 +211,7 @@ contains
     logical, allocatable :: refined(:), mask(:)
     real(real32), allocatable :: vec(:,:)
     integer :: step, j
-    call open_file(file, 'htg_fixed.vtkhdf', VTKHDF_FIXED_MESH)
+    call open_file(file, 'hypertree_fixed.vtkhdf', VTKHDF_FIXED_MESH)
     call file%write_mesh(dims)
     call local_trees(dims, 2, 0, tree_ids, xtree, refined, mask, gid, lid)
     call file%write_mesh_topology(tree_ids, xtree, refined, mask)
@@ -240,13 +240,13 @@ contains
 
   !! Moving mesh: new coordinates at steps 0 and 2.
   subroutine write_moving
-    type(vtkhdf_htg_file) :: file
+    type(vtkhdf_hypertree_file) :: file
     type(vtkhdf_cell_data_handle) :: value_var
     integer, parameter :: dims(3) = [3,3,2]
     integer, allocatable :: tree_ids(:), xtree(:), gid(:), lid(:)
     logical, allocatable :: refined(:), mask(:)
     integer :: step
-    call open_file(file, 'htg_moving.vtkhdf', VTKHDF_MOVING_MESH)
+    call open_file(file, 'hypertree_moving.vtkhdf', VTKHDF_MOVING_MESH)
     call file%write_mesh(dims)
     call local_trees(dims, 2, 0, tree_ids, xtree, refined, mask, gid, lid)
     value_var = file%register_temporal_cell_data('value', 0.0_real64)
@@ -265,7 +265,7 @@ contains
   !! the phase 1 topology supplies a mask. Tree ownership changes in MPI runs,
   !! including an empty part; every rank continues to contribute one part.
   subroutine write_dynamic
-    type(vtkhdf_htg_file) :: file
+    type(vtkhdf_hypertree_file) :: file
     type(vtkhdf_cell_data_handle) :: value_var, vec_var
     integer, parameter :: dims(3) = [4,3,2]
     integer, parameter :: topology(0:3) = [0,0,1,2], geometry(0:3) = [0,0,0,1]
@@ -273,7 +273,7 @@ contains
     logical, allocatable :: refined(:), mask(:)
     real(real32), allocatable :: vec(:,:)
     integer :: step, j
-    call open_file(file, 'htg_dynamic.vtkhdf', VTKHDF_DYNAMIC_MESH)
+    call open_file(file, 'hypertree_dynamic.vtkhdf', VTKHDF_DYNAMIC_MESH)
     call file%write_mesh(dims)
     value_var = file%register_temporal_cell_data('value', 0.0_real64)
     vec_var = file%register_temporal_cell_data('vec', [0.0_real32, 0.0_real32, 0.0_real32])
@@ -314,34 +314,34 @@ contains
     call file%close
   end subroutine
 
-  !! VTKHDF_HTG_VALID_TOPOLOGY accepts exactly what WRITE_MESH_TOPOLOGY does.
+  !! VTKHDF_HYPERTREE_VALID_TOPOLOGY accepts exactly what WRITE_MESH_TOPOLOGY does.
   subroutine check_valid_topology
     integer, allocatable :: tree_ids(:), xtree(:), gid(:), lid(:)
     logical, allocatable :: refined(:), mask(:)
     logical, parameter :: quad(6) = [.false., .true., .false., .false., .false., .false.]
     call local_trees([4,3,2], 2, 0, tree_ids, xtree, refined, mask, gid, lid)
-    if (.not.vtkhdf_htg_valid_topology(xtree, refined, 8)) error stop 'valid topology rejected'
-    if (.not.vtkhdf_htg_valid_topology(int(xtree,int64), refined, 8)) error stop 'valid int64 topology rejected'
-    if (.not.vtkhdf_htg_valid_topology([1,2,7], quad, 4)) error stop 'two quadtrees rejected'
-    if (.not.vtkhdf_htg_valid_topology([1], [logical::], 4)) error stop 'empty part rejected'
-    if (vtkhdf_htg_valid_topology([1,2,6], quad(:5), 4)) error stop 'missing child accepted'
-    if (vtkhdf_htg_valid_topology([1,3,8], [.false., quad], 4)) error stop 'extra cell accepted'
-    if (vtkhdf_htg_valid_topology([1,2,7], quad, 8)) error stop 'wrong child count accepted'
-    if (vtkhdf_htg_valid_topology([0,2,7], quad, 4)) error stop 'xtree(1) /= 1 accepted'
-    if (vtkhdf_htg_valid_topology([1,2,8], quad, 4)) error stop 'xtree(last) /= ncell+1 accepted'
-    if (vtkhdf_htg_valid_topology([1,7,2], quad, 4)) error stop 'decreasing xtree accepted'
+    if (.not.vtkhdf_hypertree_valid_topology(xtree, refined, 8)) error stop 'valid topology rejected'
+    if (.not.vtkhdf_hypertree_valid_topology(int(xtree,int64), refined, 8)) error stop 'valid int64 topology rejected'
+    if (.not.vtkhdf_hypertree_valid_topology([1,2,7], quad, 4)) error stop 'two quadtrees rejected'
+    if (.not.vtkhdf_hypertree_valid_topology([1], [logical::], 4)) error stop 'empty part rejected'
+    if (vtkhdf_hypertree_valid_topology([1,2,6], quad(:5), 4)) error stop 'missing child accepted'
+    if (vtkhdf_hypertree_valid_topology([1,3,8], [.false., quad], 4)) error stop 'extra cell accepted'
+    if (vtkhdf_hypertree_valid_topology([1,2,7], quad, 8)) error stop 'wrong child count accepted'
+    if (vtkhdf_hypertree_valid_topology([0,2,7], quad, 4)) error stop 'xtree(1) /= 1 accepted'
+    if (vtkhdf_hypertree_valid_topology([1,2,8], quad, 4)) error stop 'xtree(last) /= ncell+1 accepted'
+    if (vtkhdf_hypertree_valid_topology([1,7,2], quad, 4)) error stop 'decreasing xtree accepted'
   end subroutine
 
   !! Material interface: the names of the normals and intercepts arrays are
   !! stored as root attributes; the arrays are ordinary 3-component cell data.
   subroutine write_interface
-    type(vtkhdf_htg_file) :: file
+    type(vtkhdf_hypertree_file) :: file
     integer, parameter :: dims(3) = [3,3,1]
     integer, allocatable :: tree_ids(:), xtree(:), gid(:), lid(:)
     logical, allocatable :: refined(:), mask(:)
     real(real64), allocatable :: normals(:,:), intercepts(:,:)
     integer :: j
-    call open_file(file, 'htg_interface.vtkhdf', VTKHDF_STATIC)
+    call open_file(file, 'hypertree_interface.vtkhdf', VTKHDF_STATIC)
     call file%write_mesh(dims, interface_normals_name='normals', interface_intercepts_name='intercepts')
     call file%write_mesh_geometry(axis_coordinates(1,dims(1),0), &
         axis_coordinates(2,dims(2),0), axis_coordinates(3,dims(3),0))
@@ -357,4 +357,4 @@ contains
     call file%close
   end subroutine
 
-end program vtkhdf_htg_test
+end program vtkhdf_hypertree_test

@@ -1,8 +1,8 @@
 ! HTG-specific numeric overloads, cell registries, and field lifecycle wiring.
 #:set nums = [('int8','integer(int8)'), ('int32','integer(int32)'), ('int64','integer(int64)'), ('real32','real(real32)'), ('real64','real(real64)')]
-program vtkhdf_htg_api_test
+program vtkhdf_hypertree_api_test
   use,intrinsic :: iso_fortran_env
-  use vtkhdf_htg_file_type
+  use vtkhdf_hypertree_file_type
   use vtkhdf_test_env
 #ifdef USE_MPI
   use mpi
@@ -16,10 +16,10 @@ program vtkhdf_htg_api_test
 
   call test_env_init(rank,nproc)
   do mode = VTKHDF_STATIC,VTKHDF_DYNAMIC_MESH
-    write(filename,'(a,i0,a)') 'htg_numeric_',mode,'.vtkhdf'
+    write(filename,'(a,i0,a)') 'hypertree_numeric_',mode,'.vtkhdf'
     call numeric_file(trim(filename),mode,64_int64)
   end do
-  call numeric_file('htg_numeric_default.vtkhdf',VTKHDF_FIXED_MESH)
+  call numeric_file('hypertree_numeric_default.vtkhdf',VTKHDF_FIXED_MESH)
   call naming_file()
   call field_lifecycle()
   call test_env_finalize()
@@ -27,7 +27,7 @@ program vtkhdf_htg_api_test
 contains
 
   subroutine open_file(file, filename, mode, chunk_bytes)
-    type(vtkhdf_htg_file), intent(out) :: file
+    type(vtkhdf_hypertree_file), intent(out) :: file
     character(*), intent(in) :: filename
     integer, intent(in) :: mode
     integer(int64), intent(in), optional :: chunk_bytes
@@ -57,7 +57,7 @@ contains
   end function
 
   subroutine geometry(file, phase)
-    type(vtkhdf_htg_file), intent(inout) :: file
+    type(vtkhdf_hypertree_file), intent(inout) :: file
     integer, intent(in) :: phase
     real(real32) :: x(8)
     integer :: i
@@ -67,7 +67,7 @@ contains
   end subroutine
 
   subroutine topology(file, ids)
-    type(vtkhdf_htg_file), intent(inout) :: file
+    type(vtkhdf_hypertree_file), intent(inout) :: file
     integer, intent(in) :: ids(:)
     integer :: i
     call file%write_mesh_topology(int(ids,int64),[(int(i,int64),i=1,size(ids)+1)], &
@@ -78,7 +78,7 @@ contains
     character(*), intent(in) :: filename
     integer, intent(in) :: mode
     integer(int64), intent(in), optional :: chunk_bytes
-    type(vtkhdf_htg_file) :: file
+    type(vtkhdf_hypertree_file) :: file
     type(vtkhdf_cell_data_handle) :: scalar(5), vector(5)
     integer, allocatable :: ids(:)
     integer :: step
@@ -122,7 +122,7 @@ contains
 
 #:for kind, decl in nums
   subroutine static_${kind}$(file, ids)
-    type(vtkhdf_htg_file), intent(inout) :: file
+    type(vtkhdf_hypertree_file), intent(inout) :: file
     integer, intent(in) :: ids(:)
     ${decl}$ :: scalar(2*size(ids)), vector(4,2*size(ids))
     integer :: i, j
@@ -140,7 +140,7 @@ contains
   end subroutine
 
   subroutine temporal_${kind}$(file, scalar_var, vector_var, ids, phase)
-    type(vtkhdf_htg_file), intent(inout) :: file
+    type(vtkhdf_hypertree_file), intent(inout) :: file
     type(vtkhdf_cell_data_handle), intent(in) :: scalar_var, vector_var
     integer, intent(in) :: ids(:), phase
     ${decl}$ :: scalar(2*size(ids)), vector(4,2*size(ids))
@@ -160,12 +160,12 @@ contains
 #:endfor
 
   subroutine naming_file()
-    type(vtkhdf_htg_file) :: file
+    type(vtkhdf_hypertree_file) :: file
     type(vtkhdf_cell_data_handle) :: first, second, reverse
     integer, allocatable :: ids(:)
     real(real64), allocatable :: values(:)
     integer :: step
-    call open_file(file,'htg_names.vtkhdf',VTKHDF_FIXED_MESH)
+    call open_file(file,'hypertree_names.vtkhdf',VTKHDF_FIXED_MESH)
     call file%write_mesh([4,1,1])
     ids = local_ids(0)
     call geometry(file,0)
@@ -191,7 +191,7 @@ contains
   end subroutine
 
   subroutine named_values(file, values, offset, name, handle)
-    type(vtkhdf_htg_file), intent(inout) :: file
+    type(vtkhdf_hypertree_file), intent(inout) :: file
     real(real64), intent(in) :: values(:)
     integer, intent(in) :: offset
     character(*), intent(in), optional :: name
@@ -215,10 +215,10 @@ contains
   end subroutine
 
   subroutine field_lifecycle()
-    type(vtkhdf_htg_file) :: file
+    type(vtkhdf_hypertree_file) :: file
     type(vtkhdf_field_data_handle) :: time
     integer :: step
-    call open_file(file,'htg_field_lifecycle.vtkhdf',VTKHDF_FIXED_MESH,64_int64)
+    call open_file(file,'hypertree_field_lifecycle.vtkhdf',VTKHDF_FIXED_MESH,64_int64)
     call file%write_mesh([4,1,1])
     call geometry(file,0)
     call topology(file,local_ids(0))

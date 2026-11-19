@@ -55,11 +55,11 @@ written as in the fixed-mesh example. It supports serial and MPI builds.
 
 ## HyperTreeGrid
 
-`htg_dynamic_mesh.F90` writes a 2D grid of quadtrees that are refined around a
+`hypertree_dynamic_mesh.F90` writes a 2D grid of quadtrees that are refined around a
 circle moving across the grid. It demonstrates `VTKHDF_DYNAMIC_MESH`, the
 breadth-first cell order of each tree, a new topology at every step, and
 temporal cell and field data. Root cells are dealt to the MPI ranks in turn.
-See the [HyperTreeGrid manual](../doc/sphinx/htg.rst). It supports serial and
+See the [HyperTreeGrid manual](../doc/sphinx/hypertree.rst). It supports serial and
 MPI builds.
 
 ## UnstructuredGrid and MultiBlockDataSet

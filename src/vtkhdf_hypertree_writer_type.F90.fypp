@@ -1,5 +1,5 @@
 !!
-!! VTKHDF_HTG_WRITER_TYPE
+!! VTKHDF_HYPERTREE_WRITER_TYPE
 !!
 !! Shared HyperTreeGrid dataset writer, with static, fixed, moving, and dynamic
 !! mesh workflows for cell and field data. INIT creates a composite leaf under
@@ -45,7 +45,7 @@
 #:set nums_no_int8 = nums[1:]
 #:set axes = ['x', 'y', 'z']
 
-module vtkhdf_htg_writer_type
+module vtkhdf_hypertree_writer_type
 
   use,intrinsic :: iso_fortran_env
   use,intrinsic :: iso_c_binding, only: c_sizeof
@@ -65,11 +65,11 @@ module vtkhdf_htg_writer_type
   public :: VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
   public :: vtkhdf_version
   public :: vtkhdf_cell_data_handle, vtkhdf_field_data_handle
-  public :: vtkhdf_htg_valid_topology
+  public :: vtkhdf_hypertree_valid_topology
 
   !! Check, without writing, that breadth-first refinement flags describe
   !! complete trees, as WRITE_MESH_TOPOLOGY requires (see the definition).
-  interface vtkhdf_htg_valid_topology
+  interface vtkhdf_hypertree_valid_topology
 #:for ikind, idecl, ih5type in ints_no_int8
     module procedure valid_topology_${ikind}$
 #:endfor
@@ -84,7 +84,7 @@ module vtkhdf_htg_writer_type
     type(cell_dataset), allocatable :: vars(:)
   end type
 
-  type, abstract, extends(vtkhdf_simple_dataset), public :: vtkhdf_htg_writer
+  type, abstract, extends(vtkhdf_simple_dataset), public :: vtkhdf_hypertree_writer
     private
     type(vtkhdf_context) :: ctx ! unowned copy
     integer(hid_t) :: root_id=H5I_INVALID_HID
@@ -164,23 +164,23 @@ module vtkhdf_htg_writer_type
   ! its standalone file sibling; their shared implementation stays in the
   ! abstract writer. If block-specific behavior is needed, move this type
   ! and that behavior into a separate block module and file.
-  type, extends(vtkhdf_htg_writer), public :: vtkhdf_htg_block
+  type, extends(vtkhdf_hypertree_writer), public :: vtkhdf_hypertree_block
   end type
 
 contains
 
   subroutine close(this)
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     call this%close_dataset
     call reset(this)
   contains
     subroutine reset(this)
-      class(vtkhdf_htg_writer), intent(out) :: this
+      class(vtkhdf_hypertree_writer), intent(out) :: this
     end subroutine
   end subroutine close
 
   subroutine close_dataset(this)
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     integer :: ierr
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
@@ -200,7 +200,7 @@ contains
 
     use vtkhdf_data_support, only: data_chunk_size, STEPS_CHUNK_SIZE
 
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
     type(vtkhdf_context), intent(in) :: ctx
@@ -306,25 +306,25 @@ contains
   end subroutine init
 
   function root(this) result(id)
-    class(vtkhdf_htg_writer), intent(in) :: this
+    class(vtkhdf_hypertree_writer), intent(in) :: this
     integer(hid_t) :: id
     id = this%root_id
   end function
 
   pure function temporal_enabled(this) result(enabled)
-    class(vtkhdf_htg_writer), intent(in) :: this
+    class(vtkhdf_hypertree_writer), intent(in) :: this
     logical :: enabled
     enabled = this%is_temporal
   end function
 
   pure function step_is_open(this) result(is_open)
-    class(vtkhdf_htg_writer), intent(in) :: this
+    class(vtkhdf_hypertree_writer), intent(in) :: this
     logical :: is_open
     is_open = this%step_open
   end function
 
   subroutine set_block_metadata(this, index, name)
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     integer, intent(in) :: index
     character(*), intent(in) :: name
     INSIST(this%root_id >= 0)
@@ -346,7 +346,7 @@ contains
   subroutine write_mesh(this, dims, branch_factor, transposed_root_indexing, &
       interface_normals_name, interface_intercepts_name)
 
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     integer, intent(in) :: dims(:)
     integer, intent(in), optional :: branch_factor
     logical, intent(in), optional :: transposed_root_indexing
@@ -416,7 +416,7 @@ contains
 #:for rkind, rdecl, rh5type in reals
   subroutine write_mesh_geometry_${rkind}$(this, x, y, z)
 
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     ${rdecl}$, intent(in) :: x(:), y(:), z(:)
 
     integer :: j
@@ -464,7 +464,7 @@ contains
 
 #:for ikind, idecl, ih5type in ints_no_int8
   subroutine write_mesh_topology_${ikind}$(this, tree_ids, xtree, refined, mask)
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     ${idecl}$, intent(in) :: tree_ids(:), xtree(:)
     logical, intent(in) :: refined(:)
     logical, intent(in), optional :: mask(:)
@@ -482,7 +482,7 @@ contains
 
     use vtkhdf_data_support, only: data_chunk_size
 
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     integer(int64), intent(in) :: tree_ids(:), xtree(:)
     logical, intent(in) :: refined(:)
     logical, intent(in), optional :: mask(:)
@@ -618,7 +618,7 @@ contains
 
 #:for kind, decl, h5type in nums
   subroutine write_cell_data_${kind}$(this, name, array, attribute)
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: array(..)
     character(*), intent(in), optional :: attribute
@@ -643,7 +643,7 @@ contains
 
 #:for kind, decl, h5type in nums_no_int8
   subroutine write_field_data_${kind}$(this, name, array, as_vector)
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
@@ -663,7 +663,7 @@ contains
 
     use vtkhdf_data_support, only: data_chunk_size, STEPS_CHUNK_SIZE
 
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: mold(..)
     character(*), intent(in), optional :: attribute
@@ -700,7 +700,7 @@ contains
 
 #:for kind, decl, h5type in nums_no_int8
   function register_temporal_field_data_${kind}$(this, name, mold) result(handle)
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     character(*), intent(in) :: name
     ${decl}$, intent(in) :: mold
     integer :: index
@@ -720,7 +720,7 @@ contains
 #:for kind, decl, h5type in nums
   subroutine write_temporal_cell_data_${kind}$(this, var, array)
 
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     type(vtkhdf_cell_data_handle), intent(in) :: var
     ${decl}$, intent(in) :: array(..)
 
@@ -759,7 +759,7 @@ contains
 
 #:for kind, decl, h5type in nums_no_int8
   subroutine write_temporal_field_data_${kind}$(this, var, array, as_vector)
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     type(vtkhdf_field_data_handle), intent(in) :: var
     ${decl}$, intent(in) :: array(..)
     logical, intent(in), optional :: as_vector
@@ -775,7 +775,7 @@ contains
 
   subroutine start_time_step_real64(this, time)
 
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     real(real64), intent(in) :: time
 
     type(vtkhdf_h5e_context) :: err_ctx
@@ -807,7 +807,7 @@ contains
 
   subroutine finalize_time_step(this)
 
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
 
     integer :: j
     type(vtkhdf_h5e_context) :: err_ctx
@@ -850,7 +850,7 @@ contains
 
   subroutine reserve_cell_data_name(this, name, external_name, internal_name, index, is_temporal)
     use vtkhdf_data_support, only: resolve_record_name
-    class(vtkhdf_htg_writer), intent(inout) :: this
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
     character(*), intent(in) :: name
     character(:), allocatable, intent(out) :: external_name, internal_name
     integer, intent(out) :: index
@@ -946,7 +946,7 @@ contains
 
   end subroutine analyze_trees
 
-  !! VTKHDF_HTG_VALID_TOPOLOGY: true if REFINED, the breadth-first refinement
+  !! VTKHDF_HYPERTREE_VALID_TOPOLOGY: true if REFINED, the breadth-first refinement
   !! flags of the trees XTREE delimits (as for WRITE_MESH_TOPOLOGY), describe
   !! complete trees whose refined cells have NCHILD children each. This is the
   !! completeness check WRITE_MESH_TOPOLOGY applies, for producers that want
@@ -984,4 +984,4 @@ contains
     end do
   end subroutine
 
-end module vtkhdf_htg_writer_type
+end module vtkhdf_hypertree_writer_type

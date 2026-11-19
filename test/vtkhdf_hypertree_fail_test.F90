@@ -2,17 +2,17 @@
 !! must terminate through the assertion machinery; reaching the end of the
 !! program is the test failure.
 
-program vtkhdf_htg_fail_test
+program vtkhdf_hypertree_fail_test
 
   use,intrinsic :: iso_fortran_env, only: real64
   use vtkhdf_test_env
-  use vtkhdf_htg_file_type
+  use vtkhdf_hypertree_file_type
 #ifdef USE_MPI
   use mpi
 #endif
   implicit none
 
-  type(vtkhdf_htg_file) :: file, other
+  type(vtkhdf_hypertree_file) :: file, other
   type(vtkhdf_cell_data_handle) :: var
   type(vtkhdf_field_data_handle) :: field
   character(64) :: case_name
@@ -45,9 +45,9 @@ program vtkhdf_htg_fail_test
   end select
 
 #ifdef USE_MPI
-  call file%create('htg_fail_'//trim(case_name)//'.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=mode)
+  call file%create('hypertree_fail_'//trim(case_name)//'.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=mode)
 #else
-  call file%create('htg_fail_'//trim(case_name)//'.vtkhdf', stat, errmsg, mode=mode)
+  call file%create('hypertree_fail_'//trim(case_name)//'.vtkhdf', stat, errmsg, mode=mode)
 #endif
   if (stat /= 0) error stop errmsg
 
@@ -61,9 +61,9 @@ program vtkhdf_htg_fail_test
   case ('cell_foreign', 'field_foreign')
     call write_complete_mesh
 #ifdef USE_MPI
-    call other%create('htg_fail_'//trim(case_name)//'_other.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=mode)
+    call other%create('hypertree_fail_'//trim(case_name)//'_other.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=mode)
 #else
-    call other%create('htg_fail_'//trim(case_name)//'_other.vtkhdf',stat,errmsg,mode=mode)
+    call other%create('hypertree_fail_'//trim(case_name)//'_other.vtkhdf',stat,errmsg,mode=mode)
 #endif
     if (stat /= 0) error stop errmsg
     if (case_name == 'cell_foreign') then
@@ -184,4 +184,4 @@ contains
     call file%write_mesh_topology(tree_ids, xtree, refined)
   end subroutine
 
-end program vtkhdf_htg_fail_test
+end program vtkhdf_hypertree_fail_test

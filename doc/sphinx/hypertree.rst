@@ -1,7 +1,7 @@
 HyperTreeGrid
 =============
 
-The ``vtkhdf_htg_file_type`` module defines the ``vtkhdf_htg_file``
+The ``vtkhdf_hypertree_file_type`` module defines the ``vtkhdf_hypertree_file``
 derived type for writing VTKHDF HyperTreeGrid files, VTK's representation
 of tree-based adaptive mesh refinement (AMR).
 
@@ -28,15 +28,15 @@ File Creation and Management
 
 .. code-block:: fortran
 
-   use vtkhdf_htg_file_type
-   type(vtkhdf_htg_file) :: file
+   use vtkhdf_hypertree_file_type
+   type(vtkhdf_hypertree_file) :: file
 
 .. method-doc::
 
    call file%create(filename, [comm,] stat, errmsg [, mode] [, data_chunk_bytes])
 
    Create a new VTKHDF HyperTreeGrid file. The arguments are those of the
-   :doc:`UnstructuredGrid <ug>` ``create`` method.
+   :doc:`UnstructuredGrid <unstructured>` ``create`` method.
 
 .. method-doc::
 
@@ -77,8 +77,8 @@ its topology, the trees.
 
 .. code-block:: fortran
 
-   use vtkhdf_htg_file_type
-   type(vtkhdf_htg_file) :: file
+   use vtkhdf_hypertree_file_type
+   type(vtkhdf_hypertree_file) :: file
 
 .. method-doc::
 
@@ -164,11 +164,11 @@ Checking a Topology
 
 .. code-block:: fortran
 
-   use vtkhdf_htg_file_type
+   use vtkhdf_hypertree_file_type
 
 .. method-doc::
 
-   valid = vtkhdf_htg_valid_topology(xtree, refined, nchild)
+   valid = vtkhdf_hypertree_valid_topology(xtree, refined, nchild)
 
    Return ``.true.`` if ``refined`` describes complete trees, delimited by
    ``xtree``, whose refined cells each have ``nchild`` children
@@ -187,7 +187,7 @@ written once. ``VTKHDF_MOVING_MESH`` additionally allows
 ``write_mesh_geometry``, and ``VTKHDF_DYNAMIC_MESH`` both
 ``write_mesh_geometry`` and ``write_mesh_topology``, to be called again in
 later time steps, subject to the same rules as for
-:doc:`UnstructuredGrid <ug>`:
+:doc:`UnstructuredGrid <unstructured>`:
 
 * Any mesh component written before the first call to ``start_time_step``
   is regarded as being written for the first time step.
@@ -212,8 +212,8 @@ and handle conventions.
 
 .. code-block:: fortran
 
-   use vtkhdf_htg_file_type
-   type(vtkhdf_htg_file) :: file
+   use vtkhdf_hypertree_file_type
+   type(vtkhdf_hypertree_file) :: file
    type(vtkhdf_cell_data_handle) :: cell_var
 
 .. method-doc::
@@ -241,7 +241,7 @@ and handle conventions.
    call file%write_cell_data(cell_var, array)
    call file%finalize_time_step()
 
-   These behave as for :doc:`UnstructuredGrid <ug>`. A temporal dataset that
+   These behave as for :doc:`UnstructuredGrid <unstructured>`. A temporal dataset that
    is not written during a step reuses its most recently written values,
    which requires that the rank's number of cells is unchanged; after a
    change of topology the dataset must normally be rewritten.
@@ -273,7 +273,7 @@ between ranks.
 Examples
 --------
 
-:repo:`example/htg_dynamic_mesh.F90` refines a two-dimensional grid of
+:repo:`example/hypertree_dynamic_mesh.F90` refines a two-dimensional grid of
 quadtrees around a circle that moves across the grid, writing a new topology
 and temporal cell and field data at every step. It shows how to generate the
 breadth-first cell order, and supports serial and MPI builds.

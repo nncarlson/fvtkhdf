@@ -33,10 +33,10 @@ to those blocks; the composite manages their lifecycle.
 | Module or type | Responsibility |
 | --- | --- |
 | `vtkhdf_unstructured_writer_type` | Unstructured mesh, data registration and writes, lifecycle policy, and concrete UnstructuredGrid blocks |
-| `vtkhdf_htg_writer_type` | Root grid, breadth-first tree descriptors and mask, per-part coordinate copies, cell data, lifecycle policy, and concrete HTG blocks |
+| `vtkhdf_hypertree_writer_type` | Root grid, breadth-first tree descriptors and mask, per-part coordinate copies, cell data, lifecycle policy, and concrete HTG blocks |
 | `vtkhdf_structured_base_class` | Logical grids, rectangular region writes, shared registration, and structured lifecycle policy |
 | `vtkhdf_image_writer_type`, `vtkhdf_rectilinear_writer_type`, `vtkhdf_structured_writer_type` | Geometry definitions, format-specific geometry storage, and concrete structured blocks |
-| `vtkhdf_unstructured_file_type`, `vtkhdf_image_file_type`, `vtkhdf_rectilinear_file_type`, `vtkhdf_structured_file_type`, `vtkhdf_htg_file_type` | Standalone creation, flushing, and owned-file cleanup |
+| `vtkhdf_unstructured_file_type`, `vtkhdf_image_file_type`, `vtkhdf_rectilinear_file_type`, `vtkhdf_structured_file_type`, `vtkhdf_hypertree_file_type` | Standalone creation, flushing, and owned-file cleanup |
 | `vtkhdf_mb_file_type` | Composite assembly, owned typed blocks, and a shared timeline |
 | `vtkhdf_field_data_type` | Shared field data registration, writes, temporal metadata, and cleanup |
 | `vtkhdf_data_support` | Name resolution, registry records, data groups, and chunk sizing |

@@ -204,7 +204,7 @@ data methods, failed standalone creation and reopening, and preservation of
 the borrowed parent file, group, and communicator. This exercises the block
 directly without MultiBlock integration.
 
-`vtkhdf_htg_test.F90` writes static, fixed, moving, and dynamic fixtures in
+`vtkhdf_hypertree_test.F90` writes static, fixed, moving, and dynamic fixtures in
 one, two, and three dimensions with branch factors 2 and 3. Trees follow three
 refinement patterns chosen by tree id and topology phase, and are dealt to the
 MPI ranks by a phase-dependent rule that leaves the last rank without trees in
@@ -217,7 +217,7 @@ geometry and topology, every cell data kind, masks supplied for all, some, or
 none of the topologies, a grid without any refined tree, static cell data
 written during a later step, and temporal omission and reuse.
 
-`vtkhdf_htg_check.py` derives the expected trees from the tree ids of each
+`vtkhdf_hypertree_check.py` derives the expected trees from the tree ids of each
 stored part, so the same checks apply to any number of ranks. The layout check
 uses h5py to verify attributes, types, per-part metadata, packed descriptor
 and mask bytes, coordinates, cell data, every temporal offset, and that
@@ -226,7 +226,7 @@ check requires VTK 9.7 or later. It traverses every tree with a cursor,
 comparing refinement, cell bounds, masking, and cell data against the
 expected values at every step, read in ascending and then descending order.
 
-`vtkhdf_htg_fail_test.F90` checks grid definition, coordinate lengths, tree
+`vtkhdf_hypertree_fail_test.F90` checks grid definition, coordinate lengths, tree
 ids, incomplete and oversized trees, masked refined cells, ordering of mesh
 and data writes, mode restrictions, late registration, and reuse of temporal
 data after a change of cell count.
@@ -235,7 +235,7 @@ The HTG fixtures additionally cover all seven active-axis combinations, both
 branch factors, and both root-indexing orders. Independent VTK cursor checks
 verify the resulting tree positions, including transposed root indexing.
 
-`vtkhdf_htg_api_test.F90.fypp` exercises every cell-data numeric kind as a
+`vtkhdf_hypertree_api_test.F90.fypp` exercises every cell-data numeric kind as a
 scalar and vector in static and temporal files, using noncontiguous arrays,
 empty MPI contributions, changing ownership, and temporal omission/reuse.
 Its layout checker verifies values, types, offsets, and custom versus default

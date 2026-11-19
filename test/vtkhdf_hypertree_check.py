@@ -2,7 +2,7 @@
 """Independent layout and VTK reader checks for HyperTreeGrid fixtures.
 
 The trees, their ownership, and the data follow the rules described in
-vtkhdf_htg_test.F90. Expected values are derived here from the tree ids
+vtkhdf_hypertree_test.F90. Expected values are derived here from the tree ids
 stored in each part, so the checks apply to any number of MPI ranks.
 """
 import sys
@@ -38,22 +38,22 @@ if mode == "reader":
 # phases that supply a mask (None for no Mask dataset), static cell data,
 # temporal cell data with the step whose values each step reads.
 FIXTURES = {
-    "htg_static": dict(dims=(4, 3, 2), bf=2, topology=None, geometry=None, masked=None,
+    "hypertree_static": dict(dims=(4, 3, 2), bf=2, topology=None, geometry=None, masked=None,
                        static=["value", "vec", "ids", "big ids", "flag"], temporal={}, field=True),
-    "htg_static_mask": dict(dims=(3, 1, 3), bf=3, topology=None, geometry=None, masked={0},
+    "hypertree_static_mask": dict(dims=(3, 1, 3), bf=3, topology=None, geometry=None, masked={0},
                             static=["value", "vec", "ids", "big ids", "flag"], temporal={}, field=True),
-    "htg_fixed": dict(dims=(3, 4, 1), bf=2, topology=[0, 0, 0, 0], geometry=[0, 0, 0, 0], masked={0},
+    "hypertree_fixed": dict(dims=(3, 4, 1), bf=2, topology=[0, 0, 0, 0], geometry=[0, 0, 0, 0], masked={0},
                       static=["ids"], temporal={"value": [0, 1, 1, 3], "vec": [0, 0, 0, 0]}, time=[0., 1., 2., 3.]),
-    "htg_moving": dict(dims=(3, 3, 2), bf=2, topology=[0, 0, 0, 0], geometry=[0, 0, 1, 1], masked=None,
+    "hypertree_moving": dict(dims=(3, 3, 2), bf=2, topology=[0, 0, 0, 0], geometry=[0, 0, 1, 1], masked=None,
                        static=["ids"], temporal={"value": [0, 1, 2, 3]}, time=[0., 1., 2., 3.]),
-    "htg_dynamic": dict(dims=(4, 3, 2), bf=2, topology=[0, 0, 1, 2], geometry=[0, 0, 0, 1], masked={1},
+    "hypertree_dynamic": dict(dims=(4, 3, 2), bf=2, topology=[0, 0, 1, 2], geometry=[0, 0, 0, 1], masked={1},
                         static=[], temporal={"value": [0, 1, 2, 3], "vec": [0, 0, 2, 3]}, time=[0., .25, .5, .75]),
 }
 for axes in range(1, 8):
     dims = tuple(n if axes & (1 << a) else 1 for a, n in enumerate((3, 4, 3)))
     for bf in (2, 3):
         for transposed in (0, 1):
-            FIXTURES[f"htg_axes_{axes}_{bf}_{transposed}"] = dict(
+            FIXTURES[f"hypertree_axes_{axes}_{bf}_{transposed}"] = dict(
                 dims=dims, bf=bf, transposed=transposed, topology=None, geometry=None,
                 masked={0} if bf == 3 else None,
                 static=["value", "vec", "ids", "big ids", "flag"], temporal={}, field=True)
@@ -280,29 +280,29 @@ def check_layout(name, fx):
             require(dataset.dtype == np.dtype(DTYPES[key]), f"{name}: CellData/{key} type")
             require(dataset.attrs["Name"] == key.encode(), f"{name}: CellData/{key} Name")
         value = root["CellData/value"]
-        require(value.attrs.get("Attribute") == (None if name in ("htg_moving", "htg_dynamic") else b"Scalars"),
+        require(value.attrs.get("Attribute") == (None if name in ("hypertree_moving", "hypertree_dynamic") else b"Scalars"),
                 f"{name}: value Attribute")
 
 
 def check_coarse_layout():
-    with h5py.File(directory/"htg_coarse.vtkhdf") as f:
+    with h5py.File(directory/"hypertree_coarse.vtkhdf") as f:
         root = f["VTKHDF"]
-        require(tuple(root.attrs["Dimensions"]) == (5, 1, 1), "htg_coarse: Dimensions")
-        require(root["Descriptors"].shape == (1,), "htg_coarse: Descriptors holds one unused byte")
-        require((root["DescriptorsSize"][:] == 0).all(), "htg_coarse: DescriptorsSize")
-        require(sorted(root["TreeIds"][:]) == [0, 1, 2, 3], "htg_coarse: TreeIds")
-        require((root["DepthPerTree"][:] == 1).all(), "htg_coarse: DepthPerTree")
-        require((root["NumberOfCellsPerTreeDepth"][:] == 1).all(), "htg_coarse: NumberOfCellsPerTreeDepth")
-        require(np.array_equal(root["CellData/value"][:], 1000.*root["TreeIds"][:]), "htg_coarse: value")
+        require(tuple(root.attrs["Dimensions"]) == (5, 1, 1), "hypertree_coarse: Dimensions")
+        require(root["Descriptors"].shape == (1,), "hypertree_coarse: Descriptors holds one unused byte")
+        require((root["DescriptorsSize"][:] == 0).all(), "hypertree_coarse: DescriptorsSize")
+        require(sorted(root["TreeIds"][:]) == [0, 1, 2, 3], "hypertree_coarse: TreeIds")
+        require((root["DepthPerTree"][:] == 1).all(), "hypertree_coarse: DepthPerTree")
+        require((root["NumberOfCellsPerTreeDepth"][:] == 1).all(), "hypertree_coarse: NumberOfCellsPerTreeDepth")
+        require(np.array_equal(root["CellData/value"][:], 1000.*root["TreeIds"][:]), "hypertree_coarse: value")
 
 
 def check_interface_layout():
-    with h5py.File(directory/"htg_interface.vtkhdf") as f:
+    with h5py.File(directory/"hypertree_interface.vtkhdf") as f:
         root = f["VTKHDF"]
-        require(root.attrs["InterfaceNormalsName"] == b"normals", "htg_interface: InterfaceNormalsName")
-        require(root.attrs["InterfaceInterceptsName"] == b"intercepts", "htg_interface: InterfaceInterceptsName")
+        require(root.attrs["InterfaceNormalsName"] == b"normals", "hypertree_interface: InterfaceNormalsName")
+        require(root.attrs["InterfaceInterceptsName"] == b"intercepts", "hypertree_interface: InterfaceInterceptsName")
         for key in ("normals", "intercepts"):
-            require(root[f"CellData/{key}"].shape[1:] == (3,), f"htg_interface: CellData/{key} components")
+            require(root[f"CellData/{key}"].shape[1:] == (3,), f"hypertree_interface: CellData/{key} components")
     for name in FIXTURES:
         with h5py.File(directory/f"{name}.vtkhdf") as f:
             for key in ("InterfaceNormalsName", "InterfaceInterceptsName"):
@@ -311,16 +311,16 @@ def check_interface_layout():
 
 def check_interface_reader():
     reader = vtkHDFReader()
-    reader.SetFileName(str(directory/"htg_interface.vtkhdf"))
+    reader.SetFileName(str(directory/"hypertree_interface.vtkhdf"))
     reader.Update()
-    for htg in pieces(reader.GetOutputDataObject(0)):
-        require(htg.GetHasInterface(), "htg_interface: reader did not enable the interface")
-        require(htg.GetInterfaceNormalsName() == "normals", "htg_interface: normals name")
-        require(htg.GetInterfaceInterceptsName() == "intercepts", "htg_interface: intercepts name")
-        cell_data = htg.GetCellData()
+    for hypertree in pieces(reader.GetOutputDataObject(0)):
+        require(hypertree.GetHasInterface(), "hypertree_interface: reader did not enable the interface")
+        require(hypertree.GetInterfaceNormalsName() == "normals", "hypertree_interface: normals name")
+        require(hypertree.GetInterfaceInterceptsName() == "intercepts", "hypertree_interface: intercepts name")
+        cell_data = hypertree.GetCellData()
         for key in ("normals", "intercepts"):
             array = cell_data.GetArray(key)
-            require(array is not None and array.GetNumberOfComponents() == 3, f"htg_interface: {key} array")
+            require(array is not None and array.GetNumberOfComponents() == 3, f"hypertree_interface: {key} array")
 
 
 def pieces(output):
@@ -350,7 +350,7 @@ def cell_bounds(root_bounds, dims, bf, flags):
     return bounds
 
 
-def check_tree(htg, where, g, flags, dims, bf, coords, masked, transposed=False):
+def check_tree(hypertree, where, g, flags, dims, bf, coords, masked, transposed=False):
     """Compare a tree's structure, geometry, and mask; return its global cell indices."""
     nx, ny = max(dims[0] - 1, 1), max(dims[1] - 1, 1)
     nz = max(dims[2] - 1, 1)
@@ -365,7 +365,7 @@ def check_tree(htg, where, g, flags, dims, bf, coords, masked, transposed=False)
     nchild = bf**sum(d > 1 for d in dims)
 
     cursor = vtkHyperTreeGridNonOrientedGeometryCursor()
-    htg.InitializeNonOrientedGeometryCursor(cursor, int(g), False)
+    hypertree.InitializeNonOrientedGeometryCursor(cursor, int(g), False)
     require(cursor.HasTree(), f"{where} tree {g} missing")
     start = cursor.GetGlobalNodeIndex()
     seen = {}
@@ -425,60 +425,60 @@ def check_reader(name, fx):
         field_data = reader.GetOutputDataObject(0).GetFieldData()
         output = pieces(reader.GetOutputDataObject(0))
         require(len(output) == len(part_ids[step]), f"{name}: step {step} piece count")
-        for part, (htg, ids) in enumerate(zip(output, part_ids[step])):
+        for part, (hypertree, ids) in enumerate(zip(output, part_ids[step])):
             where = f"{name}: step {step} part {part}"
-            require(isinstance(htg, vtkHyperTreeGrid), f"{where} is not a HyperTreeGrid")
-            require(tuple(htg.GetDimensions()) == dims, f"{where} dimensions")
-            require(htg.GetBranchFactor() == bf, f"{where} branch factor")
-            require(bool(htg.GetTransposedRootIndexing()) == bool(fx.get("transposed", False)),
+            require(isinstance(hypertree, vtkHyperTreeGrid), f"{where} is not a HyperTreeGrid")
+            require(tuple(hypertree.GetDimensions()) == dims, f"{where} dimensions")
+            require(hypertree.GetBranchFactor() == bf, f"{where} branch factor")
+            require(bool(hypertree.GetTransposedRootIndexing()) == bool(fx.get("transposed", False)),
                     f"{where} transposed root indexing")
-            coords = [vtk_to_numpy(c) for c in (htg.GetXCoordinates(), htg.GetYCoordinates(), htg.GetZCoordinates())]
+            coords = [vtk_to_numpy(c) for c in (hypertree.GetXCoordinates(), hypertree.GetYCoordinates(), hypertree.GetZCoordinates())]
             for a in range(3):
                 require(np.array_equal(coords[a], axis(a, dims[a], geometry[step])), f"{where} coordinates {a}")
             flags = [pattern(g, topology[step], nchild) for g in ids]
-            require(htg.GetNumberOfCells() == sum(len(f) for f in flags), f"{where} cell count")
+            require(hypertree.GetNumberOfCells() == sum(len(f) for f in flags), f"{where} cell count")
             masked = fx["masked"] is not None and topology[step] in fx["masked"]
-            require((htg.GetMask() is not None) == (fx["masked"] is not None), f"{where} mask presence")
-            cell_data = htg.GetCellData()
+            require((hypertree.GetMask() is not None) == (fx["masked"] is not None), f"{where} mask presence")
+            cell_data = hypertree.GetCellData()
             names = sorted(cell_data.GetArrayName(i) for i in range(cell_data.GetNumberOfArrays()))
             # The reader labels HyperTreeGrid arrays by their HDF5 dataset names.
             keys = {key.replace(" ", "_"): key for key in fx["static"] + list(fx["temporal"])}
             require(names == sorted(keys), f"{where} cell arrays {names}")
             for g, tree_flags in zip(ids, flags):
-                index = check_tree(htg, where, g, tree_flags, dims, bf, coords, masked, fx.get("transposed", False))
+                index = check_tree(hypertree, where, g, tree_flags, dims, bf, coords, masked, fx.get("transposed", False))
                 for array_name, key in keys.items():
                     source = fx["temporal"][key][step] if key in fx["temporal"] else 0
                     got = vtk_to_numpy(cell_data.GetArray(array_name))[index]
                     require(np.array_equal(got, cell_values(key, g, len(tree_flags), source)),
                             f"{where} tree {g} {key}")
-            if name not in ("htg_moving", "htg_dynamic"):
+            if name not in ("hypertree_moving", "hypertree_dynamic"):
                 scalars = cell_data.GetScalars()
                 require(scalars is not None and scalars.GetName() == "value", f"{where} active scalars")
         if fx.get("field"):
             field = field_data.GetArray("field-value")
             require(field is not None and field.GetValue(0) == 42.0, f"{name}: field data")
-        if "time" in fx and name == "htg_fixed":
+        if "time" in fx and name == "hypertree_fixed":
             field = field_data.GetArray("time")
             require(field is not None and field.GetValue(0) == fx["time"][step], f"{name}: step {step} time field")
 
 
 def check_coarse_reader():
     reader = vtkHDFReader()
-    reader.SetFileName(str(directory/"htg_coarse.vtkhdf"))
+    reader.SetFileName(str(directory/"hypertree_coarse.vtkhdf"))
     reader.Update()
     total = 0
-    for htg in pieces(reader.GetOutputDataObject(0)):
-        require(htg.GetMask() is None, "htg_coarse: unexpected mask")
-        values = vtk_to_numpy(htg.GetCellData().GetArray("value"))
+    for hypertree in pieces(reader.GetOutputDataObject(0)):
+        require(hypertree.GetMask() is None, "hypertree_coarse: unexpected mask")
+        values = vtk_to_numpy(hypertree.GetCellData().GetArray("value"))
         cursor = vtkHyperTreeGridNonOrientedGeometryCursor()
         for g in range(4):
-            htg.InitializeNonOrientedGeometryCursor(cursor, g, False)
+            hypertree.InitializeNonOrientedGeometryCursor(cursor, g, False)
             if not cursor.HasTree():
                 continue
-            require(cursor.IsLeaf(), f"htg_coarse: tree {g} is refined")
-            require(values[cursor.GetGlobalNodeIndex()] == 1000.*g, f"htg_coarse: tree {g} value")
+            require(cursor.IsLeaf(), f"hypertree_coarse: tree {g} is refined")
+            require(values[cursor.GetGlobalNodeIndex()] == 1000.*g, f"hypertree_coarse: tree {g} value")
             total += 1
-    require(total == 4, "htg_coarse: tree count")
+    require(total == 4, "hypertree_coarse: tree count")
 
 
 for fixture_name, fixture in FIXTURES.items():

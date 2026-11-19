@@ -10,7 +10,7 @@ set(FYPP_SRC
   vtkhdf_image_writer_type.F90.fypp
   vtkhdf_h5.F90.fypp
   vtkhdf_unstructured_writer_type.F90.fypp
-  vtkhdf_htg_writer_type.F90.fypp
+  vtkhdf_hypertree_writer_type.F90.fypp
   vtkhdf_context_type.F90.fypp
 )
 
@@ -28,7 +28,7 @@ set(SRC
   vtkhdf_simple_dataset_class.F90
   vtkhdf_mb_file_type.F90
   vtkhdf_unstructured_file_type.F90
-  vtkhdf_htg_file_type.F90
+  vtkhdf_hypertree_file_type.F90
   vtkhdf_image_file_type.F90
   vtkhdf_rectilinear_file_type.F90
   vtkhdf_structured_file_type.F90

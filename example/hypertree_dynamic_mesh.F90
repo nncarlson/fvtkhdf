@@ -1,7 +1,7 @@
-program htg_dynamic_mesh_example
+program hypertree_dynamic_mesh_example
 
   use,intrinsic :: iso_fortran_env, only: int8
-  use vtkhdf_htg_file_type
+  use vtkhdf_hypertree_file_type
 #ifdef USE_MPI
   use mpi
 #endif
@@ -11,7 +11,7 @@ program htg_dynamic_mesh_example
   integer, parameter :: max_level = 4       ! deepest refinement level
   real, parameter :: radius = 1.2
 
-  type(vtkhdf_htg_file) :: file
+  type(vtkhdf_hypertree_file) :: file
   type(vtkhdf_cell_data_handle) :: level_var, dist_var
   type(vtkhdf_field_data_handle) :: center_var
 
@@ -34,13 +34,13 @@ program htg_dynamic_mesh_example
 
   ! Create the file with support for a time-dependent tree refinement.
 #ifdef USE_MPI
-  call file%create('htg_dynamic_mesh.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_DYNAMIC_MESH)
+  call file%create('hypertree_dynamic_mesh.vtkhdf', MPI_COMM_WORLD, stat, errmsg, mode=VTKHDF_DYNAMIC_MESH)
   if (stat /= 0) then
     call MPI_Finalize(stat)
     error stop errmsg
   end if
 #else
-  call file%create('htg_dynamic_mesh.vtkhdf', stat, errmsg, mode=VTKHDF_DYNAMIC_MESH)
+  call file%create('hypertree_dynamic_mesh.vtkhdf', stat, errmsg, mode=VTKHDF_DYNAMIC_MESH)
   if (stat /= 0) error stop errmsg
 #endif
 

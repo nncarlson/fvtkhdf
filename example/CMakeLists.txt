@@ -23,5 +23,5 @@ foreach(grid rectilinear structured)
   target_link_libraries(${grid}_moving_mesh PRIVATE fvtkhdf)
 endforeach()
 
-add_executable(htg_dynamic_mesh htg_dynamic_mesh.F90)
-target_link_libraries(htg_dynamic_mesh PRIVATE fvtkhdf)
+add_executable(hypertree_dynamic_mesh hypertree_dynamic_mesh.F90)
+target_link_libraries(hypertree_dynamic_mesh PRIVATE fvtkhdf)
