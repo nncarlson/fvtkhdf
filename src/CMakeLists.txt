@@ -10,6 +10,7 @@ set(FYPP_SRC
   vtkhdf_image_file_type.F90.fypp
   vtkhdf_h5.F90.fypp
   vtkhdf_ug_file_type.F90.fypp
+  vtkhdf_htg_file_type.F90.fypp
   vtkhdf_mb_file_type.F90.fypp
   vtkhdf_context_type.F90.fypp
 )

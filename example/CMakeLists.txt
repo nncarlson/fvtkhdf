@@ -22,3 +22,6 @@ foreach(grid rectilinear structured)
   add_executable(${grid}_moving_mesh ${grid}_moving_mesh.F90)
   target_link_libraries(${grid}_moving_mesh PRIVATE fvtkhdf)
 endforeach()
+
+add_executable(htg_dynamic_mesh htg_dynamic_mesh.F90)
+target_link_libraries(htg_dynamic_mesh PRIVATE fvtkhdf)

@@ -25,6 +25,10 @@ required only for parallel builds.
   moving geometry and changing topology. Each MPI rank supplies a separate
   mesh partition.
 
+* **HyperTreeGrid:** Tree-based adaptive mesh refinement on a rectilinear
+  grid of root cells, including moving geometry, changing refinement, and
+  masked cells. Each MPI rank supplies a separate partition of the trees.
+
 * **MultiBlockDataSet:** A flat collection of UnstructuredGrid blocks.
   Each block selects its own writer mode, and all temporal blocks share a
   common timeline. Structured block types and hierarchical nesting are not
@@ -42,6 +46,7 @@ Older releases may work, but compatibility is not guaranteed.
 | Feature | Reader requirement |
 | --- | --- |
 | RectilinearGrid and StructuredGrid | ParaView 6.2+ (VTK 9.7+) |
+| HyperTreeGrid | ParaView 6.2+ (VTK 9.7+) |
 | Dataset attribute designations (`Scalars`, `Vectors`, `Tensors`, `GlobalIds`, etc.) | ParaView 6.2+ (VTK 9.7+); older readers ignore these designations |
 
 See the [reference manual](https://nncarlson.github.io/fvtkhdf/) for

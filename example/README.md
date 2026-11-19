@@ -1,7 +1,7 @@
 # Examples
 
 These programs demonstrate the ImageData, RectilinearGrid, StructuredGrid,
-UnstructuredGrid, and MultiBlockDataSet writers. All support serial and MPI
+UnstructuredGrid, HyperTreeGrid, and MultiBlockDataSet writers. All support serial and MPI
 builds. Configure CMake with `-DBUILD_EXAMPLES=ON` to compile them.
 
 From the `build/example` directory:
@@ -21,8 +21,8 @@ paraview example.vtkhdf
 ```
 
 The UnstructuredGrid and MultiBlockDataSet examples write `example.vtkhdf`.
-Each structured example writes a file named after its executable, such as
-`structured_moving_mesh.vtkhdf`.
+Each structured and HyperTreeGrid example writes a file named after its
+executable, such as `structured_moving_mesh.vtkhdf`.
 
 ## Structured Dataset Types
 
@@ -52,6 +52,15 @@ fixed-mesh example. It supports serial and MPI builds.
 about z by one angular increment at each successive step while keeping each
 point's height fixed. Static diffusivity and temporal point and field data are
 written as in the fixed-mesh example. It supports serial and MPI builds.
+
+## HyperTreeGrid
+
+`htg_dynamic_mesh.F90` writes a 2D grid of quadtrees that are refined around a
+circle moving across the grid. It demonstrates `VTKHDF_DYNAMIC_MESH`, the
+breadth-first cell order of each tree, a new topology at every step, and
+temporal cell and field data. Root cells are dealt to the MPI ranks in turn.
+See the [HyperTreeGrid manual](../doc/sphinx/htg.rst). It supports serial and
+MPI builds.
 
 ## UnstructuredGrid and MultiBlockDataSet
 
