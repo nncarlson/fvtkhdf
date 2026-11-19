@@ -24,6 +24,7 @@ SRC_COPY_FILES = (
     "vtkhdf_simple_dataset_class.F90",
     "vtkhdf_mb_file_type.F90",
     "vtkhdf_unstructured_file_type.F90",
+    "vtkhdf_htg_file_type.F90",
     "vtkhdf_image_file_type.F90",
     "vtkhdf_rectilinear_file_type.F90",
     "vtkhdf_structured_file_type.F90",
@@ -48,7 +49,7 @@ FYPP_FILES = (
     "vtkhdf_image_writer_type.F90.fypp",
     "vtkhdf_h5.F90.fypp",
     "vtkhdf_unstructured_writer_type.F90.fypp",
-    "vtkhdf_htg_file_type.F90.fypp",
+    "vtkhdf_htg_writer_type.F90.fypp",
     "vtkhdf_context_type.F90.fypp",
 )
 

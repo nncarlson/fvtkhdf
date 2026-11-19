@@ -6,9 +6,8 @@ checking policy, and validation practices used by fVTKHDF.
 ## Source Organization
 
 The public file writers implement the API documented in the
-[reference manual](sphinx/index.rst). ImageData, RectilinearGrid, StructuredGrid,
-and UnstructuredGrid each have an abstract writer class containing their dataset
-state and writing implementation, with concrete
+[reference manual](sphinx/index.rst). Each simple dataset has an abstract writer
+class containing its dataset state and writing implementation, with concrete
 file and block descendants. The file descendant adds standalone file ownership,
 creation, flushing, and file cleanup. The block descendant borrows its composite
 owner's file and communicator. File and block types inherit the same writing
@@ -19,8 +18,9 @@ format-specific writer supplies its geometry methods, VTK dataset type name,
 and supported modes. Geometry state belongs to these writer classes so both
 their file and block descendants use the same snapshot bookkeeping.
 
-The HyperTreeGrid writer contains its implementation directly, with trees in
-place of cell connectivity and no point data.
+The HyperTreeGrid writer follows the UnstructuredGrid organization, with trees
+in place of cell connectivity and no point data. Its block type implements the
+shared lifecycle but is not yet exposed by MultiBlock.
 
 `vtkhdf_simple_dataset` defines the common lifecycle contract used by composite
 writers: cleanup, time stepping, and dataset-state queries. It does not define
@@ -33,10 +33,10 @@ to those blocks; the composite manages their lifecycle.
 | Module or type | Responsibility |
 | --- | --- |
 | `vtkhdf_unstructured_writer_type` | Unstructured mesh, data registration and writes, lifecycle policy, and concrete UnstructuredGrid blocks |
-| `vtkhdf_htg_file_type` | Root grid, breadth-first tree descriptors and mask, per-part coordinate copies, cell data, and lifecycle policy |
+| `vtkhdf_htg_writer_type` | Root grid, breadth-first tree descriptors and mask, per-part coordinate copies, cell data, lifecycle policy, and concrete HTG blocks |
 | `vtkhdf_structured_base_class` | Logical grids, rectangular region writes, shared registration, and structured lifecycle policy |
 | `vtkhdf_image_writer_type`, `vtkhdf_rectilinear_writer_type`, `vtkhdf_structured_writer_type` | Geometry definitions, format-specific geometry storage, and concrete structured blocks |
-| `vtkhdf_unstructured_file_type`, `vtkhdf_image_file_type`, `vtkhdf_rectilinear_file_type`, `vtkhdf_structured_file_type` | Standalone creation, flushing, and owned-file cleanup |
+| `vtkhdf_unstructured_file_type`, `vtkhdf_image_file_type`, `vtkhdf_rectilinear_file_type`, `vtkhdf_structured_file_type`, `vtkhdf_htg_file_type` | Standalone creation, flushing, and owned-file cleanup |
 | `vtkhdf_mb_file_type` | Composite assembly, owned typed blocks, and a shared timeline |
 | `vtkhdf_field_data_type` | Shared field data registration, writes, temporal metadata, and cleanup |
 | `vtkhdf_data_support` | Name resolution, registry records, data groups, and chunk sizing |

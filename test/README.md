@@ -197,6 +197,13 @@ resource ownership, shared data helpers, and the runtime checking policy.
 
 ## HyperTreeGrid
 
+The shared lifecycle fixture (`vtkhdf_simple_dataset_test.F90`) includes HTG
+file and block siblings. It checks repeated close and reuse, changed root grids
+and branch factors, automatic finalization of an open step, inherited field
+data methods, failed standalone creation and reopening, and preservation of
+the borrowed parent file, group, and communicator. This exercises the block
+directly without MultiBlock integration.
+
 `vtkhdf_htg_test.F90` writes static, fixed, moving, and dynamic fixtures in
 one, two, and three dimensions with branch factors 2 and 3. Trees follow three
 refinement patterns chosen by tree id and topology phase, and are dealt to the

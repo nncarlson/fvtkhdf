@@ -13,6 +13,8 @@ program vtkhdf_simple_dataset_test
   use vtkhdf_rectilinear_writer_type
   use vtkhdf_structured_file_type
   use vtkhdf_structured_writer_type
+  use vtkhdf_htg_file_type
+  use vtkhdf_htg_writer_type
   use vtkhdf_context_type
   use vtkhdf_h5_c_binding
   use vtkhdf_test_env
@@ -23,12 +25,12 @@ program vtkhdf_simple_dataset_test
   type :: leaf
     class(vtkhdf_simple_dataset), allocatable :: writer
   end type
-  type(leaf) :: blocks(4)
+  type(leaf) :: blocks(5)
   type(vtkhdf_field_data_handle) :: field_var
   type(vtkhdf_context) :: ctx
   type(c_funptr) :: saved_error_handler
   type(c_ptr) :: saved_error_data
-  integer(hid_t) :: file_id, parent_id, fapl, root_ids(4)
+  integer(hid_t) :: file_id, parent_id, fapl, root_ids(size(blocks))
   integer :: rank, nproc, stat, j, cycle
   integer(int32) :: bounds(3,2), selected(3,2)
   character(100) :: filename
@@ -58,9 +60,10 @@ program vtkhdf_simple_dataset_test
   allocate(vtkhdf_image_block :: blocks(2)%writer)
   allocate(vtkhdf_rectilinear_block :: blocks(3)%writer)
   allocate(vtkhdf_structured_block :: blocks(4)%writer)
+  allocate(vtkhdf_htg_block :: blocks(5)%writer)
   do cycle = 1,2
     ! The second cycle reuses closed polymorphic objects and the same parent.
-    do j = 1,4
+    do j = 1,size(blocks)
       write(name,'(a,i0,a,i0)') 'leaf_',j,'_',cycle
       select type (writer => blocks(j)%writer)
       type is (vtkhdf_unstructured_block)
@@ -88,6 +91,11 @@ program vtkhdf_simple_dataset_test
         if (cycle == 2) call writer%start_time_step(0.0_real32)
         call writer%write_mesh(bounds)
         call writer%write_mesh_geometry(points,bounds(:,1),selected)
+      type is (vtkhdf_htg_block)
+        call writer%init(parent_id,trim(name),ctx,mode=merge(VTKHDF_MOVING_MESH,VTKHDF_FIXED_MESH,cycle==2))
+        call register_fields(writer)
+        if (cycle == 2) call writer%start_time_step(0.0_real32)
+        call write_htg_mesh(writer)
       class default
         error stop 'unexpected leaf type'
       end select
@@ -106,13 +114,16 @@ program vtkhdf_simple_dataset_test
         call writer%write_field_data(field_var,real(cycle,real64))
       class is (vtkhdf_structured_base)
         call writer%write_field_data(field_var,real(cycle,real64))
+      class is (vtkhdf_htg_writer)
+        if (cycle == 2) call writer%write_mesh_geometry([1.0,2.0,3.0],[0.0],[0.0])
+        call writer%write_field_data(field_var,real(cycle,real64))
       end select
       if (cycle == 1) then
         call blocks(j)%writer%finalize_time_step()
         if (blocks(j)%writer%step_is_open()) error stop 'step did not close'
       end if
     end do
-    do j = 1,4
+    do j = 1,size(blocks)
       call blocks(j)%writer%close()
       call blocks(j)%writer%close()
       if (blocks(j)%writer%root() >= 0) error stop 'root not reset'
@@ -125,18 +136,19 @@ program vtkhdf_simple_dataset_test
   end do
   ! File and block writers are siblings; replace the borrowed block objects
   ! with standalone file objects for the owned-resource checks below.
-  do j = 1,4
+  do j = 1,size(blocks)
     deallocate(blocks(j)%writer)
   end do
   allocate(vtkhdf_unstructured_file :: blocks(1)%writer)
   allocate(vtkhdf_image_file :: blocks(2)%writer)
   allocate(vtkhdf_rectilinear_file :: blocks(3)%writer)
   allocate(vtkhdf_structured_file :: blocks(4)%writer)
+  allocate(vtkhdf_htg_file :: blocks(5)%writer)
   ! Failed standalone creation must release its duplicated communicator.
   ! The same polymorphic object can then be closed and reopened normally.
   stat = H5Eget_auto2(H5E_DEFAULT,saved_error_handler,saved_error_data)
   if (stat < 0) error stop 'failed to query HDF5 error handler'
-  do j = 1,4
+  do j = 1,size(blocks)
     do cycle = 1,3
       filename = 'simple_dataset_leaves.vtkhdf/not-a-directory.vtkhdf'
       if (cycle > 1) write(filename,'(a,i0,a)') 'simple_dataset_owned_',j,'.vtkhdf'
@@ -177,6 +189,18 @@ program vtkhdf_simple_dataset_test
           ! Cleanup must allow a logical grid whose coordinates were omitted.
           call writer%write_mesh(bounds)
         end if
+      type is (vtkhdf_htg_file)
+#ifdef USE_MPI
+        call writer%create(trim(filename),MPI_COMM_WORLD,stat,errmsg)
+#else
+        call writer%create(trim(filename),stat,errmsg)
+#endif
+        call check_error_handler()
+        if (stat == 0) then
+          call writer%flush()
+          ! Reopening must reset the inherited root grid and topology state.
+          call write_htg_mesh(writer)
+        end if
       class default
         error stop 'unexpected leaf type'
       end select
@@ -208,10 +232,36 @@ contains
     class is (vtkhdf_unstructured_writer)
       call dataset%write_field_data('cycle',cycle)
       field_var = dataset%register_temporal_field_data('time_value',0.0_real64)
+    class is (vtkhdf_htg_writer)
+      call dataset%write_field_data('cycle',cycle)
+      field_var = dataset%register_temporal_field_data('time_value',0.0_real64)
     class is (vtkhdf_structured_base)
       call dataset%write_field_data('cycle',cycle)
       field_var = dataset%register_temporal_field_data('time_value',0.0_real64)
     end select
+  end subroutine
+
+  subroutine write_htg_mesh(writer)
+    class(vtkhdf_htg_writer), intent(inout) :: writer
+    integer :: i, branch_factor
+    ! Change the grid and branch factor on reuse; only rank zero owns a tree.
+    branch_factor = 2+modulo(cycle+1,2)
+    call writer%write_mesh([cycle+1,1,1],branch_factor=branch_factor)
+    call writer%write_mesh_geometry([(real(i,real64),i=0,cycle)],[0.0_real64],[0.0_real64])
+    if (rank == 0) then
+      call writer%write_mesh_topology([1],[1,branch_factor+2],[.true.,(.false.,i=1,branch_factor)])
+      call writer%write_cell_data('value',[(real(i,real64),i=1,branch_factor+1)])
+    else
+      call writer%write_mesh_topology([integer::],[1],[logical::])
+#ifdef GNU_PR123899
+      block
+        real(real64) :: values(0)
+        call writer%write_cell_data('value',values)
+      end block
+#else
+      call writer%write_cell_data('value',[real(real64)::])
+#endif
+    end if
   end subroutine
 
   subroutine check_error_handler()
