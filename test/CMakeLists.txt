@@ -383,6 +383,17 @@ set_tests_properties(vtkhdf_mb_reader_smoke PROPERTIES
   SKIP_RETURN_CODE 77
 )
 
+add_test(
+  NAME vtkhdf_mb_reader_temporal_state
+  COMMAND ${Python3_EXECUTABLE} ${VTKHDF_READER_SMOKE_SCRIPT}
+          mb ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf --check-temporal-state
+)
+set_tests_properties(vtkhdf_mb_reader_temporal_state PROPERTIES
+  DEPENDS vtkhdf_mb_fixture_file
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  SKIP_RETURN_CODE 77
+)
+
 if(ENABLE_MPI)
   add_test(
     NAME vtkhdf_mb_zero_part_reader_smoke

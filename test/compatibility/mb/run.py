@@ -159,8 +159,8 @@ def main():
         print(name + ": " + ", ".join(f"{profile}={value['status']}" for profile, value in
                                         results["cases"][name].get("profiles", {}).items()), flush=True)
     lines = [f"Writer: {results['writer']}", f"pvpython: {executable}", f"Cache: {cache}", "",
-             "| Case | Geometry | Point | Cell | Field | All | Fresh later step | Fetch |",
-             "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+             "| Case | Unchanged reader | Geometry | Point | Cell | Field | All | Fresh later step | Fetch |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     worker_failure = False
     for name, value in results["cases"].items():
         if value.get("status") == "worker-failed":
@@ -169,7 +169,7 @@ def main():
             results["paraview"] = value["paraview"]
             results["vtk"] = value["vtk"]
         cells = [value.get("profiles", {}).get(profile, {}).get("status", "worker failed")
-                 for profile in ("geometry", "point", "cell", "field", "all", "late", "fetch")]
+                 for profile in ("unchanged", "geometry", "point", "cell", "field", "all", "late", "fetch")]
         lines.append("| " + " | ".join([name] + cells) + " |")
     lines.insert(2, f"ParaView: {results.get('paraview', 'unknown')}; VTK: {results.get('vtk', 'unknown')}")
     (results_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")

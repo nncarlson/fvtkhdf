@@ -157,18 +157,25 @@ def layout(case):
     return {"status": "pass"}
 
 
-def reader(case, cache="default"):
-    import paraview
-    from paraview import servermanager
-    from paraview.simple import Delete, VTKHDFReader
+def reader(case, cache="default", native_only=False):
+    paraview_version = None
+    if not native_only:
+        import paraview
+        from paraview import servermanager
+        from paraview.simple import Delete, VTKHDFReader
+        paraview_version = paraview.__version__
+    from vtkmodules.vtkIOHDF import vtkHDFReader
     from vtkmodules.vtkCommonCore import vtkStringOutputWindow, vtkOutputWindow, vtkVersion
+    from vtkmodules.vtkCommonExecutionModel import vtkStreamingDemandDrivenPipeline
     from vtkmodules.util.numpy_support import vtk_to_numpy
 
-    result = {"paraview": paraview.__version__, "vtk": vtkVersion.GetVTKVersion(), "profiles": {}}
+    result = {"paraview": paraview_version, "vtk": vtkVersion.GetVTKVersion(), "profiles": {}}
     temporal = any(mode for _, mode in case["blocks"])
     ndim, nproc = case.get("dimensions", 3), case.get("writer_ranks", 1)
     sequence = [0, 1, 2, 3, 4, 2, 0, 4] if temporal else [0]
-    for profile in ("geometry", "point", "cell", "field", "all", "late", "fetch"):
+    profiles = (("unchanged",) if native_only else
+                ("unchanged", "geometry", "point", "cell", "field", "all", "late", "fetch"))
+    for profile in profiles:
         failures = []
         checked = 0
         proxy = None
@@ -185,32 +192,65 @@ def reader(case, cache="default"):
                 failures.append({"check": label, "error": str(exc)})
 
         try:
-            proxy = VTKHDFReader(FileName=[case["file"]])
-            if cache != "default":
-                proxy.UseCache = int(cache == "on")
-            proxy.UpdatePipelineInformation()
-            result["reader_options"] = {name: str(getattr(proxy, name)) for name in ("UseCache", "PieceDistribution")
-                                        if name in proxy.ListProperties()}
-            verify("time values", list(proxy.TimestepValues), TIMES if temporal else [])
             available = {}
-            for association in ASSOCIATIONS:
-                prop = association.capitalize() + "ArrayStatus"
-                available[association] = list(getattr(proxy, prop).Available)
-                setattr(proxy, prop, available[association] if profile in (association, "all", "late", "fetch") else [])
-            for step in ([3] if temporal else [0]) if profile == "late" else sequence:
-                proxy.UpdatePipeline(time=TIMES[step])
+            if profile == "unchanged":
+                native = vtkHDFReader()
+                native.SetFileName(case["file"])
+                if cache != "default":
+                    native.SetUseCache(cache == "on")
+                native.UpdateInformation()
+                initial_mtime = native.GetMTime()
+                verify("initial step count", native.GetNumberOfSteps(), len(TIMES) if temporal else 1)
+                verify("initial temporal flag", bool(native.GetHasTemporalData()), temporal)
+                info = native.GetOutputInformation(0)
+                key = vtkStreamingDemandDrivenPipeline.TIME_STEPS()
+                verify("time values", [info.Get(key, i) for i in range(info.Length(key))], TIMES if temporal else [])
+                # Selection changes mark the reader modified and can hide the
+                # composite temporal-state reset between information and data.
+                # Keep the first read on a fresh, otherwise unchanged reader.
+                steps = [0]
+            else:
+                proxy = VTKHDFReader(FileName=[case["file"]])
+                if cache != "default":
+                    proxy.UseCache = int(cache == "on")
+                proxy.UpdatePipelineInformation()
+                result["reader_options"] = {name: str(getattr(proxy, name)) for name in ("UseCache", "PieceDistribution")
+                                            if name in proxy.ListProperties()}
+                verify("time values", list(proxy.TimestepValues), TIMES if temporal else [])
+                for association in ASSOCIATIONS:
+                    prop = association.capitalize() + "ArrayStatus"
+                    available[association] = list(getattr(proxy, prop).Available)
+                    setattr(proxy, prop, available[association] if profile in (association, "all", "late", "fetch") else [])
+                steps = ([3] if temporal else [0]) if profile == "late" else sequence
+            for step in steps:
+                if profile == "unchanged":
+                    native.SetStep(step)
+                    verify("reader unmodified before first data request", native.GetMTime(), initial_mtime)
+                    native.Update()
+                    verify("updated step count", native.GetNumberOfSteps(), len(TIMES) if temporal else 1)
+                    verify("updated temporal flag", bool(native.GetHasTemporalData()), temporal)
+                else:
+                    proxy.UpdatePipeline(time=TIMES[step])
                 # In this serial builtin session, inspect the server's actual
                 # reader output. Fetch has its own transfer/append path and is
                 # checked separately so its defects are not blamed on the file.
-                if profile == "fetch":
+                if profile == "unchanged":
+                    output = native.GetOutputDataObject(0)
+                elif profile == "fetch":
                     output = servermanager.Fetch(proxy)
                 else:
                     output = proxy.GetClientSideObject().GetOutputDataObject(0)
                 if case["composite"]:
-                    assert output.IsA("vtkMultiBlockDataSet"), output.GetClassName()
-                    assert output.GetNumberOfBlocks() == len(case["blocks"])
+                    assert (output.IsA("vtkMultiBlockDataSet") or
+                            output.IsA("vtkPartitionedDataSetCollection")), output.GetClassName()
+                    size = (output.GetNumberOfBlocks() if output.IsA("vtkMultiBlockDataSet") else
+                            output.GetNumberOfPartitionedDataSets())
+                    assert size == len(case["blocks"])
                 for b, (kind, mode) in enumerate(case["blocks"], 1):
-                    data = output.GetBlock(b - 1) if case["composite"] else output
+                    data = output
+                    if case["composite"]:
+                        data = (output.GetBlock(b - 1) if output.IsA("vtkMultiBlockDataSet") else
+                                output.GetPartitionedDataSet(b - 1))
                     label = f"step {step}, block {b}"
                     assert data is not None, label + ": missing block"
                     parts = ([data.GetPartition(i) for i in range(data.GetNumberOfPartitions())
@@ -231,7 +271,7 @@ def reader(case, cache="default"):
                                 ids = [cell.GetPointId(i) for i in range(cell.GetNumberOfPoints())]
                                 verify(label + f" part {index}, connectivity {c}", ids, np.arange(4 * c, 4 * c + 4))
                     for association, group in ASSOCIATIONS.items():
-                        if profile not in (association, "all", "late", "fetch"):
+                        if profile not in (association, "unchanged", "all", "late", "fetch"):
                             continue
                         for name, want in arrays(kind, mode, b, local_step, association, ndim, nproc).items():
                             field = data.GetFieldData().GetArray(name) if association == "field" else None
@@ -268,14 +308,15 @@ def reader(case, cache="default"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("layout", "reader"))
+    parser.add_argument("operation", choices=("layout", "reader", "vtk"))
     parser.add_argument("case", type=Path)
     parser.add_argument("result", type=Path)
     parser.add_argument("--cache", choices=("default", "on", "off"), default="default")
     args = parser.parse_args()
     try:
         case = json.loads(args.case.read_text())
-        value = reader(case, args.cache) if args.operation == "reader" else layout(case)
+        value = (layout(case) if args.operation == "layout" else
+                 reader(case, args.cache, native_only=args.operation == "vtk"))
     except Exception:
         value = {"status": "fail", "error": traceback.format_exc()}
     args.result.write_text(json.dumps(value, indent=2) + "\n")

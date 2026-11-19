@@ -81,6 +81,14 @@ and remain tested in Release. See the [runtime checking policy](../doc/developer
 The reader smoke tests use VTK's `vtkHDFReader`. They are enabled only when the
 configured Python interpreter can import the `vtk` package.
 
+`vtkhdf_mb_reader_smoke` always performs its ordinary composite readback checks
+when VTK is available. The separate `vtkhdf_mb_reader_temporal_state` also
+requires the step count and temporal flag to survive each data read. It skips
+released VTK versions through 9.7.2 because of VTK issue 20246 (MR !14030).
+Development builds and newer versions run this check strictly; their failures
+are not converted to skips. The independent compatibility harness continues
+to exercise the defect on all available reader versions.
+
 A repo-local virtual environment is a convenient way to keep this optional
 dependency isolated:
 

@@ -160,6 +160,24 @@ in the serial builtin session. Separate
 profiles read geometry alone, point data, cell data, field data, and all data.
 Each profile starts with a fresh reader and checks forward and nonsequential
 time requests. A final fresh-reader profile starts directly at a later time.
+A separate `unchanged` profile uses `vtkHDFReader` directly and reads step zero
+immediately after `UpdateInformation()`. It leaves array selections unchanged,
+asserts that the reader's modification time has not changed before the data
+request, and checks that the step count and temporal flag survive the read.
+It also verifies geometry and array values at step zero. Changing an array
+selection after discovering metadata marks the reader modified and can mask
+the composite temporal-state reset reported in VTK issue 20246; the other
+profiles retain their selection changes to test those paths independently.
+
+The `unchanged` profile also runs with ordinary Python and VTK, without ParaView:
+
+```sh
+python3 test/compatibility/mb/check.py vtk \
+  build-mb-fixtures/mb-image-fixed.json build-mb-results-vtk.json
+```
+
+As with the ParaView worker, inspect the recorded `profiles.unchanged.status`;
+reader incompatibilities are recorded in JSON rather than the process exit code.
 A separate `fetch` profile checks transfer through `servermanager.Fetch`.
 Its transfer/append path can introduce errors even when the reader output is
 correct; these are distinguished from reader failures.
