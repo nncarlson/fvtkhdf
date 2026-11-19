@@ -1,6 +1,6 @@
 ! Small, deterministic fixtures for manual reader compatibility testing.
 ! Usage: generate output.vtkhdf mb|standalone ndim type mode [type mode ...]
-! Types: image, rectilinear, structured, unstructured. Modes: 0,1,2,3,
+! Types: image, rectilinear, structured, unstructured, hypertree. Modes: 0,1,2,3,
 ! or fixed-constant (mode 1 with only constant arrays, to check a workaround).
 program generate
   use,intrinsic :: iso_fortran_env, only: int8, real64
@@ -9,12 +9,14 @@ program generate
   use vtkhdf_rectilinear_file_type, only: vtkhdf_rectilinear_file
   use vtkhdf_structured_file_type, only: vtkhdf_structured_file
   use vtkhdf_unstructured_file_type, only: vtkhdf_unstructured_file
+  use vtkhdf_hypertree_file_type, only: vtkhdf_hypertree_file
   use vtkhdf_simple_dataset_class, only: vtkhdf_simple_dataset
   use vtkhdf_structured_base_class, only: vtkhdf_structured_base
   use vtkhdf_image_writer_type, only: vtkhdf_image_writer
   use vtkhdf_rectilinear_writer_type, only: vtkhdf_rectilinear_writer
   use vtkhdf_structured_writer_type, only: vtkhdf_structured_writer
   use vtkhdf_unstructured_writer_type, only: vtkhdf_unstructured_writer
+  use vtkhdf_hypertree_writer_type, only: vtkhdf_hypertree_writer
 #ifdef USE_MPI_F08
   use mpi_f08
 #elif defined(USE_MPI)
@@ -28,6 +30,7 @@ program generate
     logical :: constant_only = .false.
     integer :: pdims(3), cdims(3), local_points(3), local_cells(3)
     integer :: array_origin(3), selection(3,2)
+    integer, allocatable :: tree_entities(:)
     type(vtkhdf_point_data_handle) :: point_scalar, point_vector
     type(vtkhdf_cell_data_handle) :: cell_scalar, cell_vector
     type(vtkhdf_field_data_handle) :: clock, table
@@ -38,10 +41,12 @@ program generate
   type(vtkhdf_rectilinear_file), target :: rect_file
   type(vtkhdf_structured_file), target :: struct_file
   type(vtkhdf_unstructured_file), target :: unstructured_file
+  type(vtkhdf_hypertree_file), target :: hypertree_file
   type(vtkhdf_image_block), pointer :: image
   type(vtkhdf_rectilinear_block), pointer :: rect
   type(vtkhdf_structured_block), pointer :: grid
   type(vtkhdf_unstructured_block), pointer :: solid
+  type(vtkhdf_hypertree_block), pointer :: trees
   real(real64), parameter :: times(0:4) = [0.0_real64,0.2_real64,0.7_real64,1.5_real64,3.0_real64]
   integer, parameter :: origin(3) = [-2,3,1]
   integer :: stat, nblocks, b, step, mode, ndim, rank, nproc
@@ -151,6 +156,18 @@ program generate
             stat,errmsg,mode)
         blocks(b)%dataset => unstructured_file
       end if
+    case ('hypertree')
+      if (composite) then
+        call mb%add_block(trim(name),trees,mode)
+        blocks(b)%dataset => trees
+      else
+        call hypertree_file%create(trim(filename), &
+#ifdef USE_MPI
+            MPI_COMM_WORLD, &
+#endif
+            stat,errmsg,mode)
+        blocks(b)%dataset => hypertree_file
+      end if
     case default
       error stop 'invalid dataset type'
     end select
@@ -195,18 +212,21 @@ contains
 
   ! Each block has a different empty rank. Remaining ranks contribute unequal
   ! contiguous slabs/parts. Rank zero can be empty while still writing metadata.
-  subroutine partition(id,phase,nlocal,start,total)
+  subroutine partition(id,phase,nlocal,start,total,owner)
     integer, intent(in) :: id, phase
+    integer, intent(in), optional :: owner
     integer, intent(out) :: nlocal, start, total
-    integer :: r, count
+    integer :: r, count, owner_
+    owner_ = rank
+    if (present(owner)) owner_ = owner
     nlocal = 0
     start = 0
     total = 0
     do r = 0,nproc-1
       count = r+1+phase
       if (nproc > 1 .and. r == mod(id-1,nproc)) count = 0
-      if (r < rank) start = start+count
-      if (r == rank) nlocal = count
+      if (r < owner_) start = start+count
+      if (r == owner_) nlocal = count
       total = total+count
     end do
   end subroutine
@@ -281,6 +301,48 @@ contains
     end do
   end subroutine
 
+  ! Root ownership follows x slabs and rotates between ranks in dynamic mode.
+  ! Alternating roots have one refined level; dynamic phases swap that pattern.
+  subroutine hypertree_topology(block,id,step,ids,xtree,refined,mask)
+    type(block_info), intent(inout) :: block
+    integer, intent(in) :: id, step
+    integer, allocatable, intent(out) :: ids(:), xtree(:)
+    logical, allocatable, intent(out) :: refined(:), mask(:)
+    integer :: phase, nc, start, total, g, j, n, nchild
+    phase = 0
+    if (block%mode == VTKHDF_DYNAMIC_MESH) phase = step/2
+    call partition(id,0,nc,start,total,owner=modulo(rank-phase,nproc))
+    if (nproc == 1) nc = block%cdims(1)
+    ids = [integer::]
+    xtree = [1]
+    refined = [logical::]
+    mask = [logical::]
+    block%tree_entities = [integer::]
+    nchild = 2**ndim
+    do g = 0,product(block%cdims)-1
+      if (modulo(g,block%cdims(1)) < start .or. modulo(g,block%cdims(1)) >= start+nc) cycle
+      ids = [ids,g+1]
+      n = 1
+      if (modulo(g+phase,2) == 0) n = 1+nchild
+      xtree = [xtree,xtree(size(xtree))+n]
+      refined = [refined,(j==0 .and. n>1,j=0,n-1)]
+      mask = [mask,(j==n-1 .and. modulo(g,3)==0,j=0,n-1)]
+      block%tree_entities = [block%tree_entities,((nchild+1)*g+j+1,j=0,n-1)]
+    end do
+  end subroutine
+
+  subroutine hypertree_values(block,id,step,cs,cv)
+    type(block_info), intent(in) :: block
+    integer, intent(in) :: id, step
+    real(real64), allocatable, intent(out) :: cs(:), cv(:,:)
+    integer :: c
+    cs = real(1000*id+100*step+block%tree_entities,real64)
+    allocate(cv(3,size(cs)))
+    do c = 1,3
+      cv(c,:) = cs+c
+    end do
+  end subroutine
+
   subroutine mesh(block,id,step,initial)
     type(block_info), intent(inout) :: block
     integer, intent(in) :: id, step
@@ -289,6 +351,8 @@ contains
     real(real64) :: tetra(3,4)
     real(real64), allocatable :: points(:,:), xyz(:,:,:,:), x(:), y(:), z(:)
     integer, allocatable :: connectivity(:), offsets(:)
+    integer, allocatable :: ids(:), xtree(:)
+    logical, allocatable :: refined(:), mask(:)
     integer(int8), allocatable :: types(:)
     epoch = step/2
     select type (writer => block%dataset)
@@ -334,6 +398,16 @@ contains
       else
         call writer%write_mesh_geometry(points)
       end if
+    class is (vtkhdf_hypertree_writer)
+      if (initial) call writer%write_mesh(block%pdims)
+      x = [(10*id+0.5_real64*i+0.1_real64*i*i,i=0,block%pdims(1)-1)]
+      y = [(j+0.1_real64*j*j,j=0,block%pdims(2)-1)]
+      z = [(2*k+0.1_real64*k*k+0.25_real64*epoch,k=0,block%pdims(3)-1)]
+      call writer%write_mesh_geometry(x,y,z)
+      if (initial .or. block%mode == VTKHDF_DYNAMIC_MESH) then
+        call hypertree_topology(block,id,step,ids,xtree,refined,mask)
+        call writer%write_mesh_topology(ids,xtree,refined,mask)
+      end if
     end select
   end subroutine
 
@@ -354,6 +428,20 @@ contains
       if (block%mode /= VTKHDF_STATIC .and. .not.block%constant_only) then
         block%point_scalar = writer%register_temporal_point_data('point_value',0.0_real64)
         block%point_vector = writer%register_temporal_point_data('point_vector',[0.0_real64,0.0_real64,0.0_real64])
+        block%cell_scalar = writer%register_temporal_cell_data('cell_value',0.0_real64)
+        block%cell_vector = writer%register_temporal_cell_data('cell_vector',[0.0_real64,0.0_real64,0.0_real64])
+        block%clock = writer%register_temporal_field_data('clock',0.0_real64)
+        block%table = writer%register_temporal_field_data('table',0.0_real64)
+      end if
+    class is (vtkhdf_hypertree_writer)
+      if (block%mode /= VTKHDF_DYNAMIC_MESH) then
+        call hypertree_values(block,id,0,ucs,ucv)
+        call writer%write_cell_data('cell_constant',ucs)
+        call writer%write_cell_data('cell_constant_vector',ucv)
+      end if
+      call writer%write_field_data('block_id',id)
+      call writer%write_field_data('direction',[1.0_real64,2.0_real64,3.0_real64],as_vector=.true.)
+      if (block%mode /= VTKHDF_STATIC .and. .not.block%constant_only) then
         block%cell_scalar = writer%register_temporal_cell_data('cell_value',0.0_real64)
         block%cell_vector = writer%register_temporal_cell_data('cell_vector',[0.0_real64,0.0_real64,0.0_real64])
         block%clock = writer%register_temporal_field_data('clock',0.0_real64)
@@ -405,6 +493,14 @@ contains
       end if
       call writer%write_field_data(block%clock,data=times(step))
       call writer%write_field_data(block%table,data=table)
+    class is (vtkhdf_hypertree_writer)
+      call hypertree_values(block,id,step,ucs,ucv)
+      if (write_cells) then
+        call writer%write_cell_data(block%cell_scalar,ucs)
+        call writer%write_cell_data(block%cell_vector,ucv)
+      end if
+      call writer%write_field_data(block%clock,times(step))
+      call writer%write_field_data(block%table,table)
     class is (vtkhdf_unstructured_writer)
       call unstructured_values(block,id,step,ups,upv,ucs,ucv)
       if (write_points) then

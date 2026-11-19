@@ -2,7 +2,7 @@ program consumer_serial
   use,intrinsic :: iso_fortran_env, only: int8
   use vtkhdf_unstructured_file_type
   use vtkhdf_mb_file_type, only: vtkhdf_mb_file, vtkhdf_unstructured_block, vtkhdf_image_block, &
-      vtkhdf_rectilinear_block, vtkhdf_structured_block
+      vtkhdf_rectilinear_block, vtkhdf_structured_block, vtkhdf_hypertree_block
   use vtkhdf_rectilinear_file_type
   use vtkhdf_structured_file_type
   use vtkhdf_image_file_type
@@ -19,6 +19,7 @@ program consumer_serial
   type(vtkhdf_image_block), pointer :: image_block
   type(vtkhdf_rectilinear_block), pointer :: rect_block
   type(vtkhdf_structured_block), pointer :: struct_block
+  type(vtkhdf_hypertree_block), pointer :: hypertree_block
   real :: points(3,2,2,1)
   type(vtkhdf_cell_data_handle) :: variable
   integer :: selected(3,2), rank
@@ -61,6 +62,14 @@ program consumer_serial
   call mb%add_block('struct',struct_block)
   call struct_block%write_mesh(reshape([0,0,0,1,1,0],[3,2]))
   call struct_block%write_mesh_geometry(points,[0,0,0],selected)
+  call mb%add_block('hypertree',hypertree_block)
+  call hypertree_block%write_mesh([2,1,1])
+  call hypertree_block%write_mesh_geometry([0.,1.],[0.],[0.])
+  if (rank == 0) then
+    call hypertree_block%write_mesh_topology([1],[1,2],[.false.])
+  else
+    call hypertree_block%write_mesh_topology([integer::],[1],[logical::])
+  end if
   call mb%close()
 
   print *, 'consumer_serial: link OK'

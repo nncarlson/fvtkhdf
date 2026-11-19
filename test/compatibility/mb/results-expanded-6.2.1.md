@@ -1,5 +1,8 @@
 # ParaView 6.2.1 selective expansion
 
+Historical four-type results. See the [extended five-type results](results-hypertree-6.2.1.md)
+for the current matrix including HyperTreeGrid.
+
 Checked with the same installed fVTKHDF library (`7967b14`) and ParaView 6.2.1
 (VTK 9.7.2) as the original baseline. These are black-box output checks; no
 coverage claims are inferred from reader implementation details.

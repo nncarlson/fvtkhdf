@@ -30,7 +30,7 @@ required only for parallel builds.
   masked cells. Each MPI rank supplies a separate partition of the trees.
 
 * **MultiBlockDataSet:** A flat collection of ImageData, RectilinearGrid,
-  StructuredGrid, and UnstructuredGrid blocks in one file. Typed block pointers
+  StructuredGrid, UnstructuredGrid, and HyperTreeGrid blocks in one file. Typed block pointers
   provide each simple writer's mesh and data methods. Each block selects its
   own mode, and all temporal blocks share a common timeline. Hierarchical
   nesting is not supported.

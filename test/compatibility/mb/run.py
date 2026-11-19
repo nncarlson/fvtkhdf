@@ -9,7 +9,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 MODES = ("static", "fixed", "moving", "dynamic")
 CONFIGURATIONS = [(kind, mode) for kind, limit in
-                  (("image", 2), ("rectilinear", 3), ("structured", 3), ("unstructured", 4))
+                  (("image", 2), ("rectilinear", 3), ("structured", 3), ("unstructured", 4), ("hypertree", 4))
                   for mode in range(limit)]
 
 
@@ -17,19 +17,21 @@ def baseline():
     for kind, mode in CONFIGURATIONS:
         for form in ("standalone", "mb"):
             yield f"{form}-{kind}-{MODES[mode]}", form == "mb", [(kind, mode)]
-    kinds = ("image", "rectilinear", "structured", "unstructured")
+    kinds = ("image", "rectilinear", "structured", "unstructured", "hypertree")
     yield "all-static", True, [(kind, 0) for kind in kinds]
     yield "all-fixed", True, [(kind, 1) for kind in kinds]
-    moving = [("image", 1), ("rectilinear", 2), ("structured", 2), ("unstructured", 3)]
-    mixed = [("image", 0), ("rectilinear", 1), ("structured", 2), ("unstructured", 3)]
+    moving = [("image", 1), ("rectilinear", 2), ("structured", 2), ("unstructured", 3), ("hypertree", 3)]
+    mixed = [("image", 0), ("rectilinear", 1), ("structured", 2), ("unstructured", 3), ("hypertree", 1)]
     for name, blocks in (("different-modes", moving), ("mixed-modes", mixed),
                          ("unstructured-mixed", [("unstructured", 0), ("unstructured", 1)]),
                          ("rectilinear-mixed", [("rectilinear", 0), ("structured", 1)]),
-                         ("structured-mixed", [("structured", 0), ("image", 1)])):
+                         ("structured-mixed", [("structured", 0), ("image", 1)]),
+                         ("hypertree-mixed", [("hypertree", 0), ("hypertree", 1)])):
         yield name, True, blocks
         yield name + "-reversed", True, list(reversed(blocks))
     yield "unstructured-workaround", True, [("unstructured", "fixed-constant"), ("unstructured", 1)]
     yield "rectilinear-workaround", True, [("rectilinear", "fixed-constant"), ("structured", 1)]
+    yield "hypertree-workaround", True, [("hypertree", "fixed-constant"), ("hypertree", 1)]
 
 
 def matrix(suite):
@@ -37,7 +39,8 @@ def matrix(suite):
         for name, composite, blocks in baseline():
             if suite == "cache" and not (name in ("different-modes", "different-modes-reversed") or
                     name.endswith(("image-fixed", "rectilinear-moving", "structured-moving",
-                                   "unstructured-moving", "unstructured-dynamic"))):
+                                   "unstructured-moving", "unstructured-dynamic",
+                                   "hypertree-fixed", "hypertree-moving", "hypertree-dynamic"))):
                 continue
             yield name, composite, blocks, 3
     elif suite == "dimensions":
@@ -49,7 +52,8 @@ def matrix(suite):
                     yield f"{form}-{kind}-{MODES[mode]}-{ndim}d", form == "mb", [(kind, mode)], ndim
     elif suite == "parallel":
         for kind, mode in (("image", 1), ("rectilinear", 2), ("structured", 2),
-                           ("unstructured", 1), ("unstructured", 2), ("unstructured", 3)):
+                           ("unstructured", 1), ("unstructured", 2), ("unstructured", 3),
+                           ("hypertree", 0), ("hypertree", 1), ("hypertree", 2), ("hypertree", 3)):
             for form in ("standalone", "mb"):
                 yield f"{form}-{kind}-{MODES[mode]}-mpi", form == "mb", [(kind, mode)], 3
         for name, composite, blocks in baseline():
@@ -149,13 +153,10 @@ def main():
         code = execute([executable, "--disable-registry", str(HERE / "check.py"), "reader",
                         str(work / (name + ".json")), str(path), "--cache", cache],
                        results_dir / (name + ".log"), args.timeout)
-        if code != 0 or not path.exists():
-            results["cases"][name] = {"status": "worker-failed", "exit_code": code}
-        else:
-            value = json.loads(path.read_text())
-            if "profiles" not in value:
-                value.update(status="worker-failed", exit_code=code)
-            results["cases"][name] = value
+        value = json.loads(path.read_text()) if path.exists() else {}
+        if code != 0 or "profiles" not in value:
+            value.update(status="worker-failed", exit_code=code)
+        results["cases"][name] = value
         print(name + ": " + ", ".join(f"{profile}={value['status']}" for profile, value in
                                         results["cases"][name].get("profiles", {}).items()), flush=True)
     lines = [f"Writer: {results['writer']}", f"pvpython: {executable}", f"Cache: {cache}", "",

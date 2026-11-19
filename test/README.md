@@ -12,6 +12,14 @@ specific API contract.
 - `vtkhdf_moving_unstructured_file_type`: UnstructuredGrid moving-mesh geometry updates.
 - `vtkhdf_dynamic_unstructured_file_type`: UnstructuredGrid dynamic-mesh topology and geometry updates.
 - `vtkhdf_mb_basic_blocks_file_type`: MB ordinary two-block static and temporal writes.
+- `vtkhdf_mb_collections`: all five simple block types share ownership, naming,
+  and static, temporal, or mixed lifecycles; layout and reader checks verify
+  assembly links, block types, metadata, and field forwarding.
+- `vtkhdf_mb_hypertree`: fixed, moving, and dynamic HyperTreeGrid blocks share
+  an MB timeline. Layout and VTK cursor checks verify custom chunk settings,
+  per-block geometry and topology, masks, cell values and omitted-write reuse,
+  explicit and implicit step finalization, and empty parts with changing tree
+  ownership. MPI builds run both two- and four-rank fixtures.
 - `vtkhdf_chunk_settings`: chunk-layout configuration checks.
 - `test_leak`: repeated HDF5 init sanity check.
 - `vtkhdf_simple_dataset_lifecycle`: all five concrete block types borrow one

@@ -10,8 +10,8 @@ except ImportError as exc:
     sys.exit(77)
 
 mode, directory = sys.argv[1:]
-types = ("ImageData", "RectilinearGrid", "StructuredGrid", "UnstructuredGrid")
-names = ("Repeated_Block", "Repeated_Block_1", "Repeated_Block_2", "Repeated_Block_3")
+types = ("ImageData", "RectilinearGrid", "StructuredGrid", "UnstructuredGrid", "HyperTreeGrid")
+names = ("Repeated_Block", "Repeated_Block_1", "Repeated_Block_2", "Repeated_Block_3", "Repeated_Block_4")
 
 if mode == "layout":
     for case in ("static", "temporal", "mixed"):
@@ -41,6 +41,7 @@ elif mode == "reader":
     try:
         from vtkmodules.vtkIOHDF import vtkHDFReader
         from vtkmodules.vtkCommonCore import vtkVersion
+        from vtkmodules.util.numpy_support import vtk_to_numpy
     except ImportError as exc:
         print(exc)
         sys.exit(77)
@@ -52,7 +53,7 @@ elif mode == "reader":
     # Mixed static/temporal blocks are checked at the HDF5 level above because
     # VTK readers have trouble with that mixture (VTK issue 19963):
     # https://gitlab.kitware.com/vtk/vtk/-/work_items/19963
-    # Both homogeneous timelines still contain all four dataset types.
+    # Both homogeneous timelines still contain all five dataset types.
     # The composite reader also omits leaf FieldData arrays; their values and
     # offsets are checked independently by the layout test.
     for case in ("static", "temporal"):
@@ -71,11 +72,15 @@ elif mode == "reader":
             assert not errors, errors
             output = reader.GetOutputDataObject(0)
             assert output.IsA("vtkMultiBlockDataSet")
-            assert output.GetNumberOfBlocks() == 4
+            assert output.GetNumberOfBlocks() == len(types)
             for i, kind in enumerate(types):
                 leaves = list(iter_leaf_datasets(output.GetBlock(i)))
                 assert leaves and all(leaf.IsA("vtk" + kind) for leaf in leaves)
-                assert sum(leaf.GetNumberOfPoints() for leaf in leaves) == 4
+                if kind != "HyperTreeGrid":
+                    assert sum(leaf.GetNumberOfPoints() for leaf in leaves) == 4
+                else:
+                    values = np.concatenate([vtk_to_numpy(leaf.GetCellData().GetArray("value")) for leaf in leaves])
+                    np.testing.assert_array_equal(values, [5.])
                 assert sum(leaf.GetNumberOfCells() for leaf in leaves) == 1
 else:
     raise ValueError(mode)

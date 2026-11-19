@@ -68,7 +68,7 @@ MPI builds.
 `unstructured_dynamic_mesh.F90` demonstrate the four UnstructuredGrid writer modes.
 `mb_example1.F90` writes a collection of named UnstructuredGrid blocks with a
 shared timeline, using typed block pointers for mesh and data writes. The MB
-writer also accepts ImageData, RectilinearGrid, and StructuredGrid blocks;
+writer also accepts ImageData, RectilinearGrid, StructuredGrid, and HyperTreeGrid blocks;
 the [MultiBlock manual](../doc/sphinx/mb.rst) includes a heterogeneous example.
 These examples write `example.vtkhdf`, replacing any file
 with that name in the working directory.

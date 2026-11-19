@@ -20,14 +20,14 @@ their file and block descendants use the same snapshot bookkeeping.
 
 The HyperTreeGrid writer follows the UnstructuredGrid organization, with trees
 in place of cell connectivity and no point data. Its block type implements the
-shared lifecycle but is not yet exposed by MultiBlock.
+shared lifecycle and is exposed by MultiBlock.
 
 `vtkhdf_simple_dataset` defines the common lifecycle contract used by composite
 writers: cleanup, time stepping, and dataset-state queries. It does not define
 geometry or data-writing interfaces. MultiBlock stores polymorphic simple
 writers and dispatches format-specific operations to its supported block types.
 Its public interface returns typed pointers for ImageData, RectilinearGrid,
-StructuredGrid, and UnstructuredGrid blocks. Mesh and data calls go directly
+StructuredGrid, UnstructuredGrid, and HyperTreeGrid blocks. Mesh and data calls go directly
 to those blocks; the composite manages their lifecycle.
 
 | Module or type | Responsibility |
@@ -108,8 +108,7 @@ mask bit streams are packed per part, so every part starts on a byte boundary
 and their temporal offsets count bytes. The reader expects a copy of the root
 grid coordinates for every part; rank zero writes all of them. Unlike
 UnstructuredGrid, ranks without trees still contribute a part, so the number
-of parts never changes. The VTK 9.7.2 reader fails on a temporal file whose
-part count drops from several to one.
+of parts never changes.
 
 Unstructured moving-mesh constants use the existing temporal records internally:
 their payload is written once, their stored offset remains zero, and their

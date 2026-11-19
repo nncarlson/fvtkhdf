@@ -8,7 +8,7 @@ import numpy as np
 
 TIMES = [0.0, 0.2, 0.7, 1.5, 3.0]
 VTK_TYPES = dict(image="vtkImageData", rectilinear="vtkRectilinearGrid",
-                 structured="vtkStructuredGrid", unstructured="vtkUnstructuredGrid")
+                 structured="vtkStructuredGrid", unstructured="vtkUnstructuredGrid", hypertree="vtkHyperTreeGrid")
 ASSOCIATIONS = {"point": "PointData", "cell": "CellData", "field": "FieldData"}
 
 
@@ -30,6 +30,9 @@ def dimensions(block, ndim, nproc):
 
 
 def counts(kind, mode, step, block=1, ndim=3, nproc=1):
+    if kind == "hypertree":
+        return 0, sum(hypertree_size(g, mode, step, ndim)
+                      for part in hypertree_parts(mode, step, block, ndim, nproc) for g in part)
     if kind == "unstructured":
         nc = sum(part_counts(mode, step, block, nproc))
         return 4 * nc, nc
@@ -69,8 +72,14 @@ def arrays(kind, mode, block, step, association, ndim=3, nproc=1):
             result["clock"] = np.array([TIMES[step]])
             result["table"] = (1000 * block + 100 * step + np.arange(1, 2 * nt + 1)).reshape(nt, 2).astype(float)
         return result
+    if kind == "hypertree" and association == "point":
+        return {}
     n = counts(kind, mode, step, block, ndim, nproc)[0 if association == "point" else 1]
-    base = 1000 * block + np.arange(1, n + 1, dtype=float)
+    entities = ([g * (1 + 2**ndim) + j + 1
+                 for part in hypertree_parts(mode, step, block, ndim, nproc) for g in part
+                 for j in range(hypertree_size(g, mode, step, ndim))]
+                if kind == "hypertree" else np.arange(1, n + 1))
+    base = 1000 * block + np.asarray(entities, dtype=float)
     result = {}
     if mode != 3:
         result[association + "_constant"] = base
@@ -80,6 +89,69 @@ def arrays(kind, mode, block, step, association, ndim=3, nproc=1):
         result[association + "_value"] = base + 100 * phases[step]
         result[association + "_vector"] = base[:, None] + 100 * phases[step] + [1, 2, 3]
     return result
+
+
+def hypertree_parts(mode, step, block, ndim, nproc):
+    nx = dimensions(block, ndim, nproc)[0] - 1
+    slabs = part_counts(0, 0, block, nproc) if nproc > 1 else [nx]
+    starts = np.cumsum([0] + slabs)
+    phase = epoch(mode, step) if mode == 3 else 0
+    nroot = int(np.prod(np.maximum(1, np.array(dimensions(block, ndim, nproc)) - 1)))
+    return [[g for g in range(nroot) if starts[(rank-phase) % nproc] <= g % nx <
+             starts[(rank-phase) % nproc + 1]] for rank in range(nproc)]
+
+
+def hypertree_size(g, mode, step, ndim):
+    phase = epoch(mode, step) if mode == 3 else 0
+    return 1 + 2**ndim if (g + phase) % 2 == 0 else 1
+
+
+def hypertree_axes(mode, step, block, ndim, nproc):
+    x, y, z = [np.arange(n, dtype=float) for n in dimensions(block, ndim, nproc)]
+    return [10*block + .5*x + .1*x*x, y + .1*y*y, 2*z + .1*z*z + .25*epoch(mode, step)]
+
+
+def hypertree_layout(group, mode, block, ndim, nproc):
+    np.testing.assert_array_equal(group.attrs["Dimensions"], dimensions(block, ndim, nproc))
+    assert group.attrs["BranchFactor"] == 2
+    assert group.attrs["TransposedRootIndexing"] == 0
+    datasets = {name: [] for name in ("NumberOfTrees", "NumberOfCells", "NumberOfDepths", "DescriptorsSize",
+                                    "TreeIds", "DepthPerTree", "NumberOfCellsPerTreeDepth", "Descriptors", "Mask")}
+    offsets = []
+    for step in ([0, 2, 4] if mode == 3 else [0]):
+        offsets.append({name: len(values) for name, values in datasets.items()})
+        for roots in hypertree_parts(mode, step, block, ndim, nproc):
+            sizes = [hypertree_size(g, mode, step, ndim) for g in roots]
+            depths = [2 if size > 1 else 1 for size in sizes]
+            depth_counts = [n for size in sizes for n in ([1, size-1] if size > 1 else [1])]
+            bits = [True for size in sizes if size > 1]
+            mask = [g % 3 == 0 and j == size-1 for g, size in zip(roots, sizes) for j in range(size)]
+            for name, value in (("NumberOfTrees", len(roots)), ("NumberOfCells", sum(sizes)),
+                                ("NumberOfDepths", len(depth_counts)), ("DescriptorsSize", len(bits))):
+                datasets[name].append(value)
+            for name, values in (("TreeIds", roots), ("DepthPerTree", depths),
+                                 ("NumberOfCellsPerTreeDepth", depth_counts),
+                                 ("Descriptors", np.packbits(np.asarray(bits, dtype=bool))),
+                                 ("Mask", np.packbits(np.asarray(mask, dtype=bool)))):
+                datasets[name].extend(values)
+    for name, values in datasets.items():
+        np.testing.assert_array_equal(group[name], values, err_msg=name)
+    if mode:
+        np.testing.assert_array_equal(group["Steps/NumberOfParts"], [nproc] * 5)
+        for target, source in (("Part", "NumberOfTrees"), ("TreeIds", "TreeIds"), ("DepthPerTree", "DepthPerTree"),
+                               ("NumberOfCellsPerTreeDepth", "NumberOfCellsPerTreeDepth"),
+                               ("Descriptors", "Descriptors"), ("Mask", "Mask")):
+            want = [offsets[step//2 if mode == 3 else 0][source] for step in range(5)]
+            np.testing.assert_array_equal(group[f"Steps/{target}Offsets"], want)
+    for axis, name in enumerate(("XCoordinates", "YCoordinates", "ZCoordinates")):
+        snapshots = [0, 2, 4] if mode in (2, 3) else [0]
+        values = np.concatenate([np.tile(hypertree_axes(mode, step, block, ndim, nproc)[axis], nproc)
+                                 for step in snapshots])
+        np.testing.assert_allclose(group[name], values, rtol=0, atol=1e-12)
+        if mode:
+            length = dimensions(block, ndim, nproc)[axis] * nproc
+            np.testing.assert_array_equal(group[f"Steps/{name}Offsets"],
+                                          [epoch(mode, step)*length for step in range(5)])
 
 
 def layout(case):
@@ -105,9 +177,13 @@ def layout(case):
             if mode:
                 assert g["Steps"].attrs["NSteps"] == 5
                 np.testing.assert_array_equal(g["Steps/Values"], TIMES)
+            if kind == "hypertree":
+                hypertree_layout(g, mode, b, ndim, nproc)
             for step in range(5 if mode else 1):
-                want_xyz = coordinates(kind, mode, b, step, ndim, nproc)
-                if kind == "image":
+                want_xyz = coordinates(kind, mode, b, step, ndim, nproc) if kind != "hypertree" else None
+                if kind == "hypertree":
+                    pass  # Tree topology, packed bits, and coordinate snapshots were checked above.
+                elif kind == "image":
                     extent = np.array([[-2, 3, 1], np.array([-2, 3, 1]) + dims - 1]).T.ravel()
                     np.testing.assert_array_equal(g.attrs["WholeExtent"], extent)
                     np.testing.assert_array_equal(g.attrs["Origin"], [10 * b, -3, 2])
@@ -129,6 +205,9 @@ def layout(case):
                     np.testing.assert_allclose(np.asarray(xyz).reshape(-1, 3), want_xyz, rtol=0, atol=1e-12)
                 for association, group in ASSOCIATIONS.items():
                     expected = arrays(kind, mode, b, step, association, ndim, nproc)
+                    if kind == "hypertree" and association == "point":
+                        assert group not in g
+                        continue
                     assert set(g[group]) == set(expected)
                     for name, want in expected.items():
                         data = g[f"{group}/{name}"]
@@ -139,7 +218,7 @@ def layout(case):
                             if mode:
                                 shape = [want.shape[1] if want.ndim == 2 else 1, len(want)]
                                 np.testing.assert_array_equal(g[f"Steps/FieldDataSizes/{name}"][step], shape)
-                        elif kind == "unstructured":
+                        elif kind in ("unstructured", "hypertree"):
                             actual = data[offset:offset + len(want)]
                         else:
                             actual = data[offset] if mode else data[...]
@@ -157,7 +236,66 @@ def layout(case):
     return {"status": "pass"}
 
 
-def reader(case, cache="default", native_only=False):
+def hypertree_readback(parts, mode, step, block, ndim, nproc, label, verify):
+    from vtkmodules.vtkCommonDataModel import vtkHyperTreeGridNonOrientedGeometryCursor
+    from vtkmodules.util.numpy_support import vtk_to_numpy
+
+    dims = dimensions(block, ndim, nproc)
+    cells = np.maximum(1, np.array(dims)-1)
+    axes = hypertree_axes(mode, step, block, ndim, nproc)
+    roots = hypertree_parts(mode, step, block, ndim, nproc)
+    verify(label + " partition count", len(parts), nproc)
+    indices = []
+    for index, (part, ids) in enumerate(zip(parts, roots)):
+        verify(label + f" part {index} dimensions", part.GetDimensions(), dims)
+        verify(label + f" part {index} branch factor", part.GetBranchFactor(), 2)
+        verify(label + f" part {index} tree count", part.GetNumberOfNonEmptyTrees(), len(ids))
+        for axis, getter in enumerate((part.GetXCoordinates, part.GetYCoordinates, part.GetZCoordinates)):
+            verify(label + f" part {index} axis {axis}", vtk_to_numpy(getter()), axes[axis])
+        cursor = vtkHyperTreeGridNonOrientedGeometryCursor()
+        actual_bounds, want_bounds, actual_mask, want_mask, actual_leaf, want_leaf, nodes = [], [], [], [], [], [], []
+
+        def record(bounds, masked, leaf):
+            actual = [0.] * 6
+            cursor.GetBounds(actual)
+            actual_bounds.append(actual)
+            want_bounds.append(np.asarray(bounds).ravel())
+            actual_mask.append(bool(cursor.IsMasked()))
+            want_mask.append(masked)
+            actual_leaf.append(bool(cursor.IsLeaf()))
+            want_leaf.append(leaf)
+            nodes.append(cursor.GetGlobalNodeIndex())
+
+        for g in ids:
+            part.InitializeNonOrientedGeometryCursor(cursor, g, False)
+            assert cursor.HasTree(), label + f": tree {g} missing"
+            ijk = [g % cells[0], (g // cells[0]) % cells[1], g // (cells[0]*cells[1])]
+            bounds = np.array([[axes[a][ijk[a]], axes[a][min(ijk[a]+1, dims[a]-1)]] for a in range(3)])
+            refined = hypertree_size(g, mode, step, ndim) > 1
+            record(bounds, g % 3 == 0 and not refined, not refined)
+            if refined:
+                verify(label + f" tree {g} child count", cursor.GetNumberOfChildren(), 2**ndim)
+                for child in range(2**ndim):
+                    child_bounds = bounds.copy()
+                    bit = 0
+                    for a in range(3):
+                        if dims[a] == 1:
+                            continue
+                        half = .5*(bounds[a, 1]-bounds[a, 0])
+                        child_bounds[a] = bounds[a, 0] + half*np.array([(child >> bit) & 1, 1 + ((child >> bit) & 1)])
+                        bit += 1
+                    cursor.ToChild(child)
+                    record(child_bounds, g % 3 == 0 and child == 2**ndim-1, True)
+                    cursor.ToParent()
+        verify(label + f" part {index} cell bounds", actual_bounds, want_bounds)
+        verify(label + f" part {index} masks", actual_mask, want_mask)
+        verify(label + f" part {index} refinement", actual_leaf, want_leaf)
+        verify(label + f" part {index} cell count", part.GetNumberOfCells(), len(nodes))
+        indices.append(np.array(nodes, dtype=int))
+    return indices
+
+
+def reader(case, cache="default", native_only=False, result_path=None):
     paraview_version = None
     if not native_only:
         import paraview
@@ -176,6 +314,15 @@ def reader(case, cache="default", native_only=False):
     profiles = (("unchanged",) if native_only else
                 ("unchanged", "geometry", "point", "cell", "field", "all", "late", "fetch"))
     for profile in profiles:
+        # Preserve completed observations and identify the active profile if a
+        # native reader failure terminates this worker before Python can catch it.
+        result["active_profile"] = profile
+        if result_path is not None:
+            result_path.write_text(json.dumps(result, indent=2) + "\n")
+        if profile == "point" and all(kind == "hypertree" for kind, _ in case["blocks"]):
+            result["profiles"][profile] = {"status": "not-applicable", "checks": 0,
+                                            "reason": "HyperTreeGrid has no point data"}
+            continue
         failures = []
         checked = 0
         proxy = None
@@ -253,15 +400,18 @@ def reader(case, cache="default", native_only=False):
                                 output.GetPartitionedDataSet(b - 1))
                     label = f"step {step}, block {b}"
                     assert data is not None, label + ": missing block"
-                    parts = ([data.GetPartition(i) for i in range(data.GetNumberOfPartitions())
-                              if data.GetPartition(i) is not None] if data.IsA("vtkPartitionedDataSet") else [data])
+                    parts = ([data.GetPartitionAsDataObject(i) for i in range(data.GetNumberOfPartitions())
+                              if data.GetPartitionAsDataObject(i) is not None] if data.IsA("vtkPartitionedDataSet") else [data])
                     assert parts and all(p.IsA(VTK_TYPES[kind]) for p in parts), label + ": wrong block type"
                     local_step = step if mode else 0
                     npnt, ncell = counts(kind, mode, local_step, b, ndim, nproc)
-                    verify(label + " point/cell counts",
-                           [sum(p.GetNumberOfPoints() for p in parts), sum(p.GetNumberOfCells() for p in parts)], [npnt, ncell])
-                    xyz = np.array([p.GetPoint(i) for p in parts for i in range(p.GetNumberOfPoints())])
-                    verify(label + " coordinates", xyz, coordinates(kind, mode, b, local_step, ndim, nproc))
+                    if kind == "hypertree":
+                        indices = hypertree_readback(parts, mode, local_step, b, ndim, nproc, label, verify)
+                    else:
+                        verify(label + " point/cell counts",
+                               [sum(p.GetNumberOfPoints() for p in parts), sum(p.GetNumberOfCells() for p in parts)], [npnt, ncell])
+                        xyz = np.array([p.GetPoint(i) for p in parts for i in range(p.GetNumberOfPoints())])
+                        verify(label + " coordinates", xyz, coordinates(kind, mode, b, local_step, ndim, nproc))
                     if kind == "unstructured":
                         types = [p.GetCellType(i) for p in parts for i in range(p.GetNumberOfCells())]
                         verify(label + " cell types", types, [10] * ncell)
@@ -283,8 +433,12 @@ def reader(case, cache="default", native_only=False):
                             # Field data describes the logical dataset. It may
                             # reside on its container or be replicated on parts;
                             # distributed point/cell arrays instead concatenate.
-                            values = ([vtk_to_numpy(a) for a in actual_arrays] if association == "field" else
-                                      [np.concatenate([vtk_to_numpy(a) for a in actual_arrays])])
+                            if association == "field":
+                                values = [vtk_to_numpy(a) for a in actual_arrays]
+                            elif kind == "hypertree":
+                                values = [np.concatenate([vtk_to_numpy(a)[index] for a, index in zip(actual_arrays, indices)])]
+                            else:
+                                values = [np.concatenate([vtk_to_numpy(a) for a in actual_arrays])]
                             for actual in values:
                                 verify(label + " " + name, actual, want)
                                 if actual.dtype != want.dtype:
@@ -301,8 +455,12 @@ def reader(case, cache="default", native_only=False):
             result["profiles"][profile] = {"status": "fail", "checks": checked, "failures": failures,
                                             "error": traceback.format_exc(), "log": capture.GetOutput()}
         finally:
+            result.pop("active_profile", None)
+            if result_path is not None:
+                result_path.write_text(json.dumps(result, indent=2) + "\n")
             if proxy is not None:
                 Delete(proxy)
+    result.pop("active_profile", None)
     return result
 
 
@@ -316,7 +474,7 @@ if __name__ == "__main__":
     try:
         case = json.loads(args.case.read_text())
         value = (layout(case) if args.operation == "layout" else
-                 reader(case, args.cache, native_only=args.operation == "vtk"))
+                 reader(case, args.cache, native_only=args.operation == "vtk", result_path=args.result))
     except Exception:
         value = {"status": "fail", "error": traceback.format_exc()}
     args.result.write_text(json.dumps(value, indent=2) + "\n")

@@ -34,6 +34,7 @@ module vtkhdf_mb_file_type
   use vtkhdf_image_writer_type, only: vtkhdf_image_block
   use vtkhdf_rectilinear_writer_type, only: vtkhdf_rectilinear_block
   use vtkhdf_structured_writer_type, only: vtkhdf_structured_block
+  use vtkhdf_hypertree_writer_type, only: vtkhdf_hypertree_block
   use vtkhdf_file_modes, only: VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
   use vtkhdf_file_context_type
   use vtkhdf_h5e_context_type
@@ -43,6 +44,7 @@ module vtkhdf_mb_file_type
 
   public :: vtkhdf_version, vtkhdf_unstructured_block
   public :: vtkhdf_image_block, vtkhdf_rectilinear_block, vtkhdf_structured_block
+  public :: vtkhdf_hypertree_block
   public :: vtkhdf_cell_data_handle, vtkhdf_point_data_handle, vtkhdf_field_data_handle
   public :: VTKHDF_STATIC, VTKHDF_FIXED_MESH, VTKHDF_MOVING_MESH, VTKHDF_DYNAMIC_MESH
 
@@ -67,8 +69,10 @@ module vtkhdf_mb_file_type
     procedure, private :: create_impl
     procedure :: close
     procedure :: flush
-    generic :: add_block => add_unstructured_block, add_image_block, add_rectilinear_block, add_structured_block
-    procedure, private :: add_unstructured_block, add_image_block, add_rectilinear_block, add_structured_block
+    generic :: add_block => add_unstructured_block, add_image_block, add_rectilinear_block, &
+        add_structured_block, add_hypertree_block
+    procedure, private :: add_unstructured_block, add_image_block, add_rectilinear_block, &
+        add_structured_block, add_hypertree_block
     procedure, private :: add_block_impl
     generic :: start_time_step => start_time_step_real32, start_time_step_real64
     procedure, private :: start_time_step_real32, start_time_step_real64
@@ -275,6 +279,15 @@ contains
     call this%add_block_impl(name, dataset, mode)
   end subroutine add_structured_block
 
+  subroutine add_hypertree_block(this, name, dataset, mode)
+    class(vtkhdf_mb_file), intent(inout) :: this
+    character(*), intent(in) :: name
+    type(vtkhdf_hypertree_block), pointer, intent(out) :: dataset
+    integer, intent(in), optional :: mode
+    allocate(dataset)
+    call this%add_block_impl(name, dataset, mode)
+  end subroutine add_hypertree_block
+
   ! DATASET is an individually allocated pointer target supplied by an overload.
   ! MB retains that target after this procedure returns.
   subroutine add_block_impl(this, name, dataset, mode)
@@ -331,6 +344,9 @@ contains
       call dataset%init(this%vtk_id, trim(group_name), this%file%ctx, mode_, this%data_chunk_bytes)
       call dataset%set_block_metadata(this%next_block_index, external_name)
     type is (vtkhdf_structured_block)
+      call dataset%init(this%vtk_id, trim(group_name), this%file%ctx, mode_, this%data_chunk_bytes)
+      call dataset%set_block_metadata(this%next_block_index, external_name)
+    type is (vtkhdf_hypertree_block)
       call dataset%init(this%vtk_id, trim(group_name), this%file%ctx, mode_, this%data_chunk_bytes)
       call dataset%set_block_metadata(this%next_block_index, external_name)
     class default

@@ -36,7 +36,8 @@ Currently supported VTK dataset types:
   refinement.
 
 * **MultiBlockDataSet (MB)**: a composite type containing a flat collection
-  of ImageData, RectilinearGrid, StructuredGrid, and UnstructuredGrid blocks.
+  of ImageData, RectilinearGrid, StructuredGrid, UnstructuredGrid, and
+  HyperTreeGrid blocks.
   Each block selects its own mode; temporal blocks share a common timeline.
 
 fVTKHDF provides a file writer for each supported VTK dataset type. Each

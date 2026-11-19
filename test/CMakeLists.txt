@@ -30,6 +30,7 @@ vtkhdf_add_test_target(vtkhdf_mb_test vtkhdf_mb_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_basic_blocks_test vtkhdf_mb_basic_blocks_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_typed_blocks_test vtkhdf_mb_typed_blocks_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_collections_test vtkhdf_mb_collections_test.F90)
+vtkhdf_add_test_target(vtkhdf_mb_hypertree_test vtkhdf_mb_hypertree_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_duplicate_block_name_test vtkhdf_mb_duplicate_block_name_test.F90)
 vtkhdf_add_test_target(vtkhdf_unstructured_test vtkhdf_unstructured_test.F90)
 vtkhdf_add_test_target(vtkhdf_unstructured_static_test vtkhdf_unstructured_static_test.F90)
@@ -64,6 +65,31 @@ foreach(check layout reader)
   set_tests_properties(vtkhdf_mb_collections_${check} PROPERTIES
     FIXTURES_REQUIRED vtkhdf_mb_collection_files SKIP_RETURN_CODE 77)
 endforeach()
+vtkhdf_add_runtime_test(vtkhdf_mb_hypertree vtkhdf_mb_hypertree_test)
+set_tests_properties(vtkhdf_mb_hypertree PROPERTIES FIXTURES_SETUP vtkhdf_mb_hypertree_files)
+foreach(check layout reader)
+  add_test(NAME vtkhdf_mb_hypertree_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_hypertree_check.py
+            ${check} ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties(vtkhdf_mb_hypertree_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_mb_hypertree_files SKIP_RETURN_CODE 77)
+endforeach()
+if(ENABLE_MPI)
+  set(MB_HYPERTREE_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/mb-hypertree-two-rank)
+  file(MAKE_DIRECTORY ${MB_HYPERTREE_TWO_RANK_DIR})
+  add_test(NAME vtkhdf_mb_hypertree_two_rank
+    COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
+            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_mb_hypertree_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_mb_hypertree_two_rank PROPERTIES PROCESSORS 2
+    WORKING_DIRECTORY ${MB_HYPERTREE_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_mb_hypertree_two_rank_files)
+  foreach(check layout reader)
+    add_test(NAME vtkhdf_mb_hypertree_two_rank_${check}
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_hypertree_check.py
+              ${check} ${MB_HYPERTREE_TWO_RANK_DIR})
+    set_tests_properties(vtkhdf_mb_hypertree_two_rank_${check} PROPERTIES
+      FIXTURES_REQUIRED vtkhdf_mb_hypertree_two_rank_files SKIP_RETURN_CODE 77)
+  endforeach()
+endif()
 vtkhdf_add_runtime_test(vtkhdf_mb_duplicate_block_name_file_type vtkhdf_mb_duplicate_block_name_test)
 vtkhdf_add_runtime_test(vtkhdf_unstructured_fixture_file vtkhdf_unstructured_test)
 vtkhdf_add_runtime_test(vtkhdf_unstructured_static_file_type vtkhdf_unstructured_static_test)

@@ -14,7 +14,7 @@ flushing, and closing are performed on the owning ``vtkhdf_mb_file``.
 Supported Blocks and Modes
 --------------------------
 
-All four block types and the shared ``VTKHDF_*`` mode constants are exported
+All five block types and the shared ``VTKHDF_*`` mode constants are exported
 by ``vtkhdf_mb_file_type``. The pointer type selects the VTK dataset type:
 
 .. list-table::
@@ -34,6 +34,9 @@ by ``vtkhdf_mb_file_type``. The pointer type selects the VTK dataset type:
      - Static, fixed mesh, moving mesh
    * - :doc:`UnstructuredGrid <unstructured>`
      - ``vtkhdf_unstructured_block``
+     - Static, fixed mesh, moving mesh, dynamic mesh
+   * - :doc:`HyperTreeGrid <hypertree>`
+     - ``vtkhdf_hypertree_block``
      - Static, fixed mesh, moving mesh, dynamic mesh
 
 The modes correspond to ``VTKHDF_STATIC``, ``VTKHDF_FIXED_MESH``,
@@ -100,7 +103,7 @@ Block Creation and Ownership
    * ``name``: block name. Names are normalized and disambiguated within the
      file according to :doc:`common`; the original name is preserved in the
      block group's ``Name`` attribute.
-   * ``dataset``: pointer of one of the four concrete block types above.
+   * ``dataset``: pointer of one of the five concrete block types above.
      The file allocates and initializes its target; the caller does not
      allocate it.
    * ``mode``: optional mode supported by that block type; defaults to
@@ -137,8 +140,10 @@ StructuredGrid also provide their usual ``write_mesh_geometry`` methods.
 
 The :doc:`structured` interface applies to point/cell data in ImageData,
 RectilinearGrid, and StructuredGrid blocks. The :doc:`unstructured` interface
-applies to UnstructuredGrid blocks. All blocks use :doc:`field_data`, including
-the ``data=`` payload keyword and ``as_vector`` interpretation.
+applies to UnstructuredGrid blocks. These four types use :doc:`field_data`,
+including the ``data=`` payload keyword and ``as_vector`` interpretation.
+HyperTreeGrid blocks use the cell and field methods described in
+:doc:`hypertree`, with the ``array=`` payload keyword; they have no point data.
 
 The ``vtkhdf_cell_data_handle``, ``vtkhdf_point_data_handle``, and
 ``vtkhdf_field_data_handle`` types are exported by ``vtkhdf_mb_file_type``.
@@ -241,13 +246,13 @@ Reader Compatibility
 --------------------
 
 Each block retains the reader version requirements of its simple dataset type;
-see :doc:`image`, :doc:`rectilinear`, and :doc:`structured_grid`.
+see :doc:`image`, :doc:`rectilinear`, :doc:`structured_grid`, and :doc:`hypertree`.
 
 The following observations were checked with ParaView 6.2.1 (VTK 9.7.2), using
 the independent :repo:`test/compatibility/mb/README.md` harness. Checks cover
-all supported type/mode combinations in serial 3D files, standalone controls,
+all five supported dataset types and their writer modes in serial 3D files, standalone controls,
 and selected heterogeneous collections in both block orders. Additional checks
-cover 1D/2D structured blocks with trailing singleton axes and selected 3D files
+cover 1D/2D structured and HyperTreeGrid blocks with trailing singleton axes and selected 3D files
 written by four MPI ranks with unequal contributions and empty ranks. All
 readback is serial; distributed reading and nontrailing singleton arrangements
 are outside this assessment.
@@ -257,6 +262,15 @@ all-temporal collections, including collections with different dataset types
 and temporal modes. The checks include moving and dynamic geometry, constant
 arrays, omitted-write reuse, and nonsequential time requests. Representative
 temporal cases were also checked with the reader cache enabled.
+HyperTreeGrid checks traverse every tree, including refined parents and leaves,
+and verify cell bounds, masks, cell values, and changing rank ownership.
+
+A subset containing HTG was also checked with ParaView 6.2.0 (VTK 9.7.1).
+HTG-only homogeneous timelines pass geometry and cell checks, but this older
+reader fails structured arrays in heterogeneous collections. That failure
+also reproduces in a four-type collection without HTG. The
+:repo:`test/compatibility/mb/results-hypertree-6.2.1.md` results distinguish
+these older-reader failures from the ParaView 6.2.1 observations below.
 
 .. list-table:: Current ParaView 6.2.1 limitations
    :header-rows: 1
@@ -267,20 +281,23 @@ temporal cases were also checked with the reader cache enabled.
      - Workaround
    * - Mixed static and temporal blocks
      - Time discovery, block output, or point/cell data can fail. The symptoms
-       depend on block order. See
+       depend on block order. A static HTG block beside a temporal HTG block
+       also terminates the reader with a floating-point exception in both
+       tested block orders. See
        `VTK issue 19963 <https://gitlab.kitware.com/vtk/vtk/-/work_items/19963>`_.
      - Make every block temporal if any block is temporal. Use
        ``VTKHDF_FIXED_MESH`` for otherwise static blocks.
    * - Block field data
      - Static and temporal field arrays are absent from the output leaves and
-       the reader's field-array selection, for all four tested block types.
-       The corresponding standalone files expose the arrays correctly.
-     - Use standalone output when field data is required.
+       the reader's field-array selection, for all five tested block types.
+       See `VTK issue 20248 <https://gitlab.kitware.com/vtk/vtk/-/work_items/20248>`_.
+     - Use standalone output when field data is required. For HTG, also observe
+       the standalone :ref:`field-cache limitation <hypertree-reader-limitations>`.
 
 Otherwise static blocks using ``VTKHDF_FIXED_MESH`` need no registered temporal
 data or repeated mesh or data writes. Their values remain constant while they
 participate in the shared timeline. This workaround was checked with constant
-unstructured and rectilinear blocks alongside blocks with temporal data.
+unstructured, rectilinear, and HyperTreeGrid blocks alongside blocks with temporal data.
 
 With VTK 9.7.2, a direct ``vtkHDFReader`` call sequence using
 ``UpdateInformation()`` before reading the first frame can lose the composite's
@@ -288,7 +305,11 @@ temporal state and fail to read point/cell arrays in ImageData, RectilinearGrid,
 and StructuredGrid blocks. The same dataset groups read correctly as standalone
 files. This is a reader limitation; the supported writer modes above are
 unchanged. This direct-call failure was not observed through ParaView 6.2.1's
-reader pipeline in the checked cases.
+reader pipeline in the checked homogeneous-timeline cases. HTG and unstructured
+blocks also show the temporal-state reset, although their tested geometry and
+cell data read correctly. See
+`VTK issue 20246 <https://gitlab.kitware.com/vtk/vtk/-/work_items/20246>`_ and
+`fVTKHDF issue 68 <https://github.com/nncarlson/fvtkhdf/issues/68>`_.
 
 Migration from 0.7
 ------------------

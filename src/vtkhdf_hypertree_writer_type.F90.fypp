@@ -31,9 +31,7 @@
 !!   zero supplies the vectors and writes all of the copies.
 !!
 !! Unlike UnstructuredGrid, every rank contributes a part, including a rank
-!! without trees. VTK 9.7.2 reads such 0-sized HyperTreeGrid parts correctly,
-!! but its reader fails when the number of parts of a temporal file drops
-!! from several to one, which omitting them could cause as trees migrate.
+!! without trees. VTK 9.7.2 reads such 0-sized HyperTreeGrid parts correctly.
 !!
 
 #include "vtkhdf_assert.inc"

@@ -1,5 +1,8 @@
 # ParaView 6.2.1 baseline
 
+Historical four-type results. See the [extended five-type results](results-hypertree-6.2.1.md)
+for the current matrix including HyperTreeGrid.
+
 Checked 2026-11-17 with serial fVTKHDF at commit `7967b14`, ParaView 6.2.1,
 and bundled VTK 9.7.2. All 38 fixtures passed independent layout checks.
 The initial scope is serial 3D output; parallel and reduced-dimensional cases
