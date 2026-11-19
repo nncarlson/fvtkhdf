@@ -1,8 +1,8 @@
 name = "fvtkhdf"
 version = "0.8.0"
 license = "BSD-2-Clause"
-maintainer = "Neil Carlson"
-author = "Neil Carlson"
+maintainer = "Neil N. Carlson"
+author = "Neil N. Carlson and contributors"
 description = "Modern Fortran library for writing VTKHDF files"
 
 [build]

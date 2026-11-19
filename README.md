@@ -34,9 +34,9 @@ required only for parallel builds.
   common timeline. Structured block types and hierarchical nesting are not
   supported.
 
-All simple dataset writers support static and time-dependent point, cell, and
-field data. Depending on the dataset type, the mesh can remain fixed, move,
-or change topology between time steps.
+All simple dataset writers support static and time-dependent cell and field
+data. All except HyperTreeGrid also support point data. Depending on the dataset
+type, the mesh can remain fixed, move, or change topology between time steps.
 
 ## Reader Compatibility
 
@@ -198,13 +198,20 @@ Planned and prospective features include:
 ### Additional Dataset Types
 
 The [VTKHDF format specification](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/index.html)
-defines the format for additional VTK dataset types (e.g., HyperTreeGrid,
-OverlappingAMR, etc.) that are not currently supported.
+defines the format for additional VTK dataset types, such as OverlappingAMR,
+that are not currently supported.
 
 Contributions supporting additional dataset types are welcome. Please open an
 issue to discuss design and integration before starting an implementation.
+
+## Questions and Bug Reports
+
+Please use [GitHub Issues](https://github.com/nncarlson/fvtkhdf/issues) for bug
+reports, feature requests, and usage questions. For bug reports, include a small
+reproducing example and your compiler, HDF5, and MPI versions, as applicable.
 
 ## License
 
 **fVTKHDF** is distributed under the 2-clause BSD license.
 See [LICENSE.md](./LICENSE.md) for details.
+See [CONTRIBUTORS.md](./CONTRIBUTORS.md) for contributor credits.

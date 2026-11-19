@@ -27,7 +27,7 @@ def git_output(*args):
 
 
 project = 'fVTKHDF'
-copyright = '2026, Neil N. Carlson'
+copyright = '2026, Neil N. Carlson and contributors'
 author = 'Neil N. Carlson'
 # Keep CMakeLists.txt as the source of the project version. No compiler or
 # configured CMake build is needed to work on the documentation.

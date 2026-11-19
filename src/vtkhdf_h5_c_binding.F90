@@ -4,7 +4,6 @@
 !! Private bindings to a relatively small subset of HDF5 C functions that
 !! are used by the VTKHDF modules.
 !!
-!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

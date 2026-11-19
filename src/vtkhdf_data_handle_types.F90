@@ -5,7 +5,6 @@
 !! simple writers and composite interfaces. Handles identify datasets; block placement is supplied
 !! separately at each write.
 !!
-!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
 

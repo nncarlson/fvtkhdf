@@ -169,3 +169,10 @@ install(EXPORT fVTKHDFTargets
     NAMESPACE fVTKHDF::
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/fVTKHDF"
 )
+
+# 5. Install Attribution Files
+install(FILES
+    "${PROJECT_SOURCE_DIR}/LICENSE.md"
+    "${PROJECT_SOURCE_DIR}/CONTRIBUTORS.md"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/fvtkhdf"
+)

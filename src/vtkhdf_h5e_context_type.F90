@@ -15,7 +15,6 @@
 !! procedures inherit the active context and need not manage it. On unsuccessful
 !! returns (STAT /= 0), the error stack is preserved for the caller to inspect.
 !!
-!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

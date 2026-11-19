@@ -147,6 +147,7 @@ def main() -> int:
     copy_file(FPM_DIR / "fpm.toml", OUT / "fpm.toml")
     copy_file(FPM_DIR / "README.md", OUT / "README.md")
     copy_file(REPO_ROOT / "LICENSE.md", OUT / "LICENSE.md")
+    copy_file(REPO_ROOT / "CONTRIBUTORS.md", OUT / "CONTRIBUTORS.md")
 
     for name in SRC_COPY_FILES:
         copy_file(SRC_IN / name, SRC_OUT / name)

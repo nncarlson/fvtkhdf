@@ -5,7 +5,6 @@
 !! UnstructuredGrid, structured, MultiBlock, and FieldData implementations.
 !! It also provides name resolution and dataset chunk sizing.
 !!
-!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
 

@@ -5,7 +5,6 @@
 !! supports an appropriate subset of the static, fixed-mesh, moving-mesh, and
 !! dynamic-mesh modes.
 !!
-!! Copyright (c) 2026 Neil Carlson <neil.n.carlson@gmail.com>
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
 
