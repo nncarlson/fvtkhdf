@@ -7,8 +7,8 @@
 !! time-dependent cell, point, and field data. Composite-owned typed blocks
 !! expose their mesh and data operations directly through borrowed pointers.
 !!
-!! The output is limited to a flat collection of simple dataset blocks;
-!! hierarchical nesting of MultiBlockDataSets is not supported.
+!! This writer creates a flat block assembly.
+!! Nested block groups are not supported by this API.
 !!
 !! SPDX-License-Identifier: BSD-2-Clause
 !!
@@ -151,7 +151,7 @@ contains
     character(:), allocatable, intent(out) :: errmsg
     integer(int64), intent(in), optional :: data_chunk_bytes
     call this%create(filename, comm%mpi_val, stat, errmsg, data_chunk_bytes)
-  end subroutine create_f08
+  end subroutine
 
 #endif
 #ifdef USE_MPI
@@ -163,7 +163,7 @@ contains
     character(:), allocatable, intent(out) :: errmsg
     integer(int64), intent(in), optional :: data_chunk_bytes
     call this%create_impl(filename, comm, stat, errmsg, data_chunk_bytes)
-  end subroutine create_int
+  end subroutine
 #else
   subroutine create(this, filename, stat, errmsg, data_chunk_bytes)
     class(vtkhdf_mb_file), intent(out) :: this
@@ -172,7 +172,7 @@ contains
     character(:), allocatable, intent(out) :: errmsg
     integer(int64), intent(in), optional :: data_chunk_bytes
     call this%create_impl(filename, stat, errmsg, data_chunk_bytes)
-  end subroutine create
+  end subroutine
 #endif
 
 #ifdef USE_MPI
@@ -250,7 +250,7 @@ contains
     integer, intent(in), optional :: mode
     allocate(dataset)
     call this%add_block_impl(name, dataset, mode)
-  end subroutine add_unstructured_block
+  end subroutine
 
   subroutine add_image_block(this, name, dataset, mode)
     class(vtkhdf_mb_file), intent(inout) :: this
@@ -259,7 +259,7 @@ contains
     integer, intent(in), optional :: mode
     allocate(dataset)
     call this%add_block_impl(name, dataset, mode)
-  end subroutine add_image_block
+  end subroutine
 
   subroutine add_rectilinear_block(this, name, dataset, mode)
     class(vtkhdf_mb_file), intent(inout) :: this
@@ -268,7 +268,7 @@ contains
     integer, intent(in), optional :: mode
     allocate(dataset)
     call this%add_block_impl(name, dataset, mode)
-  end subroutine add_rectilinear_block
+  end subroutine
 
   subroutine add_structured_block(this, name, dataset, mode)
     class(vtkhdf_mb_file), intent(inout) :: this
@@ -277,7 +277,7 @@ contains
     integer, intent(in), optional :: mode
     allocate(dataset)
     call this%add_block_impl(name, dataset, mode)
-  end subroutine add_structured_block
+  end subroutine
 
   subroutine add_hypertree_block(this, name, dataset, mode)
     class(vtkhdf_mb_file), intent(inout) :: this
@@ -286,11 +286,12 @@ contains
     integer, intent(in), optional :: mode
     allocate(dataset)
     call this%add_block_impl(name, dataset, mode)
-  end subroutine add_hypertree_block
+  end subroutine
 
   ! DATASET is an individually allocated pointer target supplied by an overload.
   ! MB retains that target after this procedure returns.
   subroutine add_block_impl(this, name, dataset, mode)
+
     class(vtkhdf_mb_file), intent(inout) :: this
     character(*), intent(in) :: name
     class(vtkhdf_simple_dataset), target, intent(inout) :: dataset
@@ -368,7 +369,7 @@ contains
     class(vtkhdf_mb_file), intent(inout) :: this
     real(real32), intent(in) :: time
     call this%start_time_step(real(time, real64))
-  end subroutine start_time_step_real32
+  end subroutine
 
   subroutine start_time_step_real64(this, time)
     class(vtkhdf_mb_file), intent(inout) :: this
@@ -386,7 +387,7 @@ contains
       end do
     end if
     call err_ctx%restore(0)
-  end subroutine start_time_step_real64
+  end subroutine
 
   subroutine finalize_time_step(this)
     class(vtkhdf_mb_file), intent(inout) :: this
@@ -402,6 +403,6 @@ contains
       end do
     end if
     call err_ctx%restore(0)
-  end subroutine finalize_time_step
+  end subroutine
 
 end module vtkhdf_mb_file_type
