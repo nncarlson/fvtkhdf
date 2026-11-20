@@ -4,8 +4,8 @@ Common Conventions
 Writers for simple VTK datasets use the same conventions for data associations,
 names, handles, and collective calls. Mesh-specific array shapes and mesh-writing
 requirements are described in the corresponding reference chapters.
-These conventions also apply to the typed blocks of a :doc:`MultiBlock <mb>`
-file; each block is a separate simple VTK dataset.
+These conventions also apply to the typed blocks of a :doc:`composite file
+<composite>` (MB or PDC); each block is a separate simple VTK dataset.
 
 The caller is responsible for supplying all required mesh and data writes,
 including complete coverage of datasets written in regions. Closing a file
@@ -56,7 +56,7 @@ are supported, they identify the dataset by an opaque handle:
 ``vtkhdf_cell_data_handle``, ``vtkhdf_point_data_handle``, or
 ``vtkhdf_field_data_handle``. These types are exported by the file-type
 modules. Store the returned handle and use it only with the standalone writer
-or MultiBlock block that created it.
+or composite block that created it.
 
 Collective Calls
 ----------------

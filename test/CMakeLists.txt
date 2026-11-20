@@ -30,6 +30,22 @@ vtkhdf_add_test_target(vtkhdf_mb_test vtkhdf_mb_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_basic_blocks_test vtkhdf_mb_basic_blocks_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_typed_blocks_test vtkhdf_mb_typed_blocks_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_collections_test vtkhdf_mb_collections_test.F90)
+vtkhdf_add_test_target(vtkhdf_pdc_collections_test vtkhdf_mb_collections_test.F90)
+target_compile_definitions(vtkhdf_pdc_collections_test PRIVATE PDC_COLLECTION)
+vtkhdf_add_runtime_test(vtkhdf_pdc_collections vtkhdf_pdc_collections_test)
+set_tests_properties(vtkhdf_pdc_collections PROPERTIES FIXTURES_SETUP vtkhdf_pdc_collection_files)
+add_test(NAME vtkhdf_pdc_collections_layout
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_collections_check.py
+          layout ${CMAKE_CURRENT_BINARY_DIR} pdc)
+set_tests_properties(vtkhdf_pdc_collections_layout PROPERTIES
+  FIXTURES_REQUIRED vtkhdf_pdc_collection_files SKIP_RETURN_CODE 77)
+add_test(NAME vtkhdf_pdc_reader_compatibility
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_pdc_reader_probe.py
+          ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(vtkhdf_pdc_reader_compatibility PROPERTIES
+  FIXTURES_REQUIRED vtkhdf_pdc_collection_files SKIP_RETURN_CODE 77 LABELS reader-compatibility)
+
+
 vtkhdf_add_test_target(vtkhdf_mb_hypertree_test vtkhdf_mb_hypertree_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_duplicate_block_name_test vtkhdf_mb_duplicate_block_name_test.F90)
 vtkhdf_add_test_target(vtkhdf_unstructured_test vtkhdf_unstructured_test.F90)

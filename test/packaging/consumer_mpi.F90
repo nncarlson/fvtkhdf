@@ -5,6 +5,7 @@ program consumer_mpi
 #else
   use mpi
 #endif
+  use vtkhdf_pdc_file_type, only: vtkhdf_pdc_file
   use vtkhdf_unstructured_file_type
   use vtkhdf_mb_file_type, only: vtkhdf_mb_file, vtkhdf_unstructured_block, vtkhdf_image_block, &
       vtkhdf_rectilinear_block, vtkhdf_structured_block, vtkhdf_hypertree_block
@@ -18,6 +19,7 @@ program consumer_mpi
   type(vtkhdf_rectilinear_file) :: rect
   type(vtkhdf_structured_file) :: grid
   type(vtkhdf_mb_file) :: mb
+  type(vtkhdf_pdc_file) :: pdc
   type(vtkhdf_unstructured_block), pointer :: block
   type(vtkhdf_image_block), pointer :: image_block
   type(vtkhdf_rectilinear_block), pointer :: rect_block
@@ -78,6 +80,14 @@ program consumer_mpi
     call hypertree_block%write_mesh_topology([integer::],[1],[logical::])
   end if
   call mb%close()
+
+  call pdc%create('consumer_pdc.vtkhdf',MPI_COMM_WORLD,ierr,errmsg)
+  if (ierr /= 0) error stop errmsg
+  call pdc%add_block('mesh',block)
+  call block%write_mesh(reshape(points,[3,4]),[1,2,4,3],[1,5],[9_int8])
+  call block%write_cell_data('value',[2.])
+  call pdc%flush()
+  call pdc%close()
 
   call MPI_Finalize(ierr)
   print *, 'consumer_mpi: link OK'

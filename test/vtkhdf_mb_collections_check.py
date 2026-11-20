@@ -9,15 +9,20 @@ except ImportError as exc:
     print(exc)
     sys.exit(77)
 
-mode, directory = sys.argv[1:]
+mode, directory = sys.argv[1:3]
+prefix = sys.argv[3] if len(sys.argv) > 3 else "mb"
+composite_type = b"PartitionedDataSetCollection" if prefix == "pdc" else b"MultiBlockDataSet"
 types = ("ImageData", "RectilinearGrid", "StructuredGrid", "UnstructuredGrid", "HyperTreeGrid")
 names = ("Repeated_Block", "Repeated_Block_1", "Repeated_Block_2", "Repeated_Block_3", "Repeated_Block_4")
 
 if mode == "layout":
     for case in ("static", "temporal", "mixed"):
-        with h5py.File(Path(directory) / f"mb_collection_{case}.vtkhdf") as file:
+        with h5py.File(Path(directory) / f"{prefix}_collection_{case}.vtkhdf") as file:
             root = file["VTKHDF"]
-            assert root.attrs["Type"] == b"MultiBlockDataSet"
+            assert root.attrs["Type"] == composite_type
+            np.testing.assert_array_equal(root.attrs["Version"], [2, 8])
+            assert list(root["Assembly"]) == list(names)
+            assert list(root) == ["Assembly"] + [f"Group_{i}" for i in range(5)]
             assert set(root["Assembly"]) == set(names)
             for i, (kind, name) in enumerate(zip(types, names)):
                 block = root[f"Group_{i}"]
@@ -60,7 +65,7 @@ elif mode == "reader":
         reader = vtkHDFReader()
         errors = []
         reader.AddObserver("ErrorEvent", lambda *args: errors.append(args))
-        reader.SetFileName(str(Path(directory) / f"mb_collection_{case}.vtkhdf"))
+        reader.SetFileName(str(Path(directory) / f"{prefix}_collection_{case}.vtkhdf"))
         reader.UpdateInformation()
         assert not errors, errors
         if case == "temporal":

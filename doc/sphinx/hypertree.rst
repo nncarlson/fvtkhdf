@@ -6,7 +6,7 @@ derived type for writing VTKHDF HyperTreeGrid files, VTK's representation
 of tree-based adaptive mesh refinement (AMR).
 
 Its mesh and data methods also apply to ``vtkhdf_hypertree_block`` pointers
-returned by a :doc:`composite file writer <mb>`. The owning composite file
+returned by a :doc:`composite file writer <composite>`. The owning composite file
 writer manages block creation, time stepping, flushing, and closing.
 
 A HyperTreeGrid is a rectilinear grid of *root cells*. Each root cell is the
@@ -288,8 +288,8 @@ hypertree files. Reused temporal field values can also be affected. Leave
 ``UseCache`` disabled, or register the affected fields as temporal data and
 write their values explicitly at every step, including unchanged values.
 
-Hypertree blocks in MultiBlock files also share the :doc:`composite reader
-limitations <mb>`, including missing block field data and mixed
+Hypertree blocks in composite files (MB or PDC) also share the
+:doc:`composite reader limitations <composite>`, including missing block field data and mixed
 static/temporal timelines. Geometry and cell-data checks pass for the tested
 all-static and all-temporal collections.
 

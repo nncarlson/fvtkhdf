@@ -42,4 +42,4 @@ A serial build is also available.
    :maxdepth: 1
    :caption: Composite VTK Dataset Types
 
-   MultiBlockDataSet <mb>
+   Composite Datasets (MB and PDC) <composite>

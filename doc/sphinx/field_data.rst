@@ -9,7 +9,7 @@ after file or block creation and before closing the file; temporal field data is
 written within its corresponding time step.
 
 In the signatures below, ``file`` denotes a standalone writer or a typed block
-pointer returned by a :doc:`composite file writer <mb>`. Field data belongs
+pointer returned by a :doc:`composite file writer <composite>`. Field data belongs
 to that simple VTK dataset; the composite file itself has no field-data write
 interface.
 See :doc:`overview` for the available standalone writer types and modules.

@@ -5,7 +5,7 @@ The ``vtkhdf_unstructured_file_type`` module defines the ``vtkhdf_unstructured_f
 derived type for writing VTKHDF UnstructuredGrid files.
 
 Its mesh and data methods also apply to ``vtkhdf_unstructured_block`` pointers
-returned by a :doc:`composite file writer <mb>`. The owning composite file
+returned by a :doc:`composite file writer <composite>`. The owning composite file
 writer manages block creation, time stepping, flushing, and closing.
 
 Optional VTK attribute roles, specified with the ``attribute`` argument, are
