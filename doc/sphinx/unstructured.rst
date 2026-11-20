@@ -5,8 +5,8 @@ The ``vtkhdf_unstructured_file_type`` module defines the ``vtkhdf_unstructured_f
 derived type for writing VTKHDF UnstructuredGrid files.
 
 Its mesh and data methods also apply to ``vtkhdf_unstructured_block`` pointers
-returned by :doc:`MultiBlock <mb>`. The owning composite file manages block
-creation, time stepping, flushing, and closing.
+returned by a :doc:`composite file writer <mb>`. The owning composite file
+writer manages block creation, time stepping, flushing, and closing.
 
 Optional VTK attribute roles, specified with the ``attribute`` argument, are
 recognized by VTK 9.7.0 / ParaView 6.2.0 and later; older readers ignore these
@@ -16,15 +16,6 @@ In the MPI build, all type-bound procedures are collective over the
 communicator passed to ``create``. Every rank must call the same method
 in the same order and supply identical values for all non-distributed
 arguments.
-
-Migration from 0.7
-------------------
-
-In 0.8, ``vtkhdf_ug_file_type`` is renamed to
-``vtkhdf_unstructured_file_type``, and ``vtkhdf_ug_file`` to
-``vtkhdf_unstructured_file``. Update ``use`` statements and type declarations;
-the old module and type names are no longer provided. The MultiBlock names
-``vtkhdf_mb_file_type`` and ``vtkhdf_mb_file`` are retained.
 
 File Creation and Management
 ----------------------------

@@ -5,20 +5,9 @@ The ``vtkhdf_hypertree_file_type`` module defines the ``vtkhdf_hypertree_file``
 derived type for writing VTKHDF HyperTreeGrid files, VTK's representation
 of tree-based adaptive mesh refinement (AMR).
 
-For a block owned by a :doc:`MultiBlock file <mb>`, use the
-``vtkhdf_hypertree_block`` type exported by ``vtkhdf_mb_file_type``:
-
-.. code-block:: fortran
-
-   use vtkhdf_mb_file_type
-   type(vtkhdf_mb_file) :: collection
-   type(vtkhdf_hypertree_block), pointer :: trees
-
-   ! After creating the collection:
-   call collection%add_block('trees', trees, mode=VTKHDF_DYNAMIC_MESH)
-
-Mesh and data methods are the same as for the standalone writer below.
-Start and finalize time steps, flush, and close through ``collection``.
+Its mesh and data methods also apply to ``vtkhdf_hypertree_block`` pointers
+returned by a :doc:`composite file writer <mb>`. The owning composite file
+writer manages block creation, time stepping, flushing, and closing.
 
 A HyperTreeGrid is a rectilinear grid of *root cells*. Each root cell is the
 root of a *tree*: a cell is either a leaf or is *refined* into children by
@@ -26,7 +15,10 @@ dividing it into ``branch_factor`` equal parts along every nonsingleton axis.
 A refined cell thus has ``branch_factor**d`` children in a ``d``-dimensional
 grid; the default ``branch_factor`` of 2 gives binary trees, quadtrees, and
 octrees. Every cell of every tree, refined or leaf, carries cell data.
-There is no point data.
+
+.. note::
+
+   HyperTreeGrid supports cell data and field data. It does not support point data.
 
 Reading these files requires ParaView 6.2 or later (VTK 9.7 or later).
 
@@ -292,13 +284,11 @@ Reader Limitations
 
 In ParaView 6.2.1 (VTK 9.7.2), enabling the reader cache can make constant
 field arrays disappear when changing time steps in serial (single-partition)
-HTG files. Reused temporal field values can also be affected. Leave
+hypertree files. Reused temporal field values can also be affected. Leave
 ``UseCache`` disabled, or register the affected fields as temporal data and
 write their values explicitly at every step, including unchanged values.
-See `VTK issue 20251 <https://gitlab.kitware.com/vtk/vtk/-/work_items/20251>`_
-and `fVTKHDF issue 67 <https://github.com/nncarlson/fvtkhdf/issues/67>`_.
 
-HTG blocks in MultiBlock files also share the :doc:`composite reader
+Hypertree blocks in MultiBlock files also share the :doc:`composite reader
 limitations <mb>`, including missing block field data and mixed
 static/temporal timelines. Geometry and cell-data checks pass for the tested
 all-static and all-temporal collections.

@@ -8,8 +8,8 @@ The interface below is shared by the :doc:`image`, :doc:`rectilinear`, and
 supported modes, and reader requirements.
 
 Geometry and point/cell data methods also apply to the corresponding typed
-blocks in :doc:`MultiBlock <mb>` files. For blocks, the owning composite file
-performs creation, time stepping, flushing, and closing.
+blocks returned by a :doc:`composite file writer <mb>`. For blocks, the owning
+composite file writer performs creation, time stepping, flushing, and closing.
 
 File Creation and Management
 ----------------------------

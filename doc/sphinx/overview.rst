@@ -24,27 +24,26 @@ Currently supported VTK dataset types:
 
 * **ImageData, RectilinearGrid, and StructuredGrid**: logically rectangular
   grids. ImageData uses uniform spacing; RectilinearGrid is defined by the
-  tensor product of three coordinate vectors; StructuredGrid gives each point
+  Cartesian product of three coordinate vectors; StructuredGrid gives each point
   explicit physical coordinates. RectilinearGrid and StructuredGrid also
   support moving geometry with fixed logical grids.
 
 * **UnstructuredGrid**: meshes with arbitrary cell connectivity,
   supporting moving geometry and changing topology.
 
-* **HyperTreeGrid (HTG)**: tree-based adaptive mesh refinement on a
+* **HyperTreeGrid**: tree-based adaptive mesh refinement on a
   rectilinear grid of root cells, supporting moving geometry and changing
   refinement.
 
 * **MultiBlockDataSet (MB)**: a composite type containing a flat collection
-  of ImageData, RectilinearGrid, StructuredGrid, UnstructuredGrid, and
-  HyperTreeGrid blocks.
-  Each block selects its own mode; temporal blocks share a common timeline.
+  of simple block types. Each block selects its own mode; temporal blocks
+  share a common timeline.
 
 fVTKHDF provides a file writer for each supported VTK dataset type. Each
 writer is a Fortran derived type exported by its corresponding module.
 Writers for simple VTK datasets provide methods for defining the mesh and
 writing point, cell, and field data. Composite writers manage collections
-of simple VTK datasets. :doc:`MultiBlock <mb>` returns typed block pointers
+of simple VTK datasets. The :doc:`MB writer <mb>` returns typed block pointers
 with the same mesh and data methods as the corresponding standalone writers;
 the owning file manages their lifecycle.
 
@@ -101,6 +100,10 @@ Unless otherwise indicated, reader support targets ParaView 5.13 and later.
 Older releases may work, but compatibility is not guaranteed. Additional
 version requirements and known reader limitations are described in the
 individual VTK dataset chapters.
+
+For best results, use the latest stable release of ParaView, or VTK when
+reading files directly. The VTKHDF reader in VTK is actively developed, with
+ongoing compatibility improvements and bug fixes.
 
 Parallel and Serial I/O
 =======================
