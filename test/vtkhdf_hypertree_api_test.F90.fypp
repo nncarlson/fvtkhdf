@@ -223,11 +223,11 @@ contains
     call geometry(file,0)
     call topology(file,local_ids(0))
     time = file%register_temporal_field_data('time',0.0_real64)
-    call file%write_field_data('before',real(10+rank,real64))
+    call file%write_field_data('before',data=real(10+rank,real64))
     do step = 0,3
       call file%start_time_step(real(step))
       if (step == 1) then
-        call file%write_field_data(time,11.0_real64+rank)
+        call file%write_field_data(time,data=11.0_real64+rank)
         call file%write_field_data('during',real(20+rank,real64))
       end if
       if (step == 3) then

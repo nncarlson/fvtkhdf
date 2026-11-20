@@ -140,10 +140,10 @@ StructuredGrid also provide their usual ``write_mesh_geometry`` methods.
 
 The :doc:`structured` interface applies to point/cell data in ImageData,
 RectilinearGrid, and StructuredGrid blocks. The :doc:`unstructured` interface
-applies to UnstructuredGrid blocks. These four types use :doc:`field_data`,
-including the ``data=`` payload keyword and ``as_vector`` interpretation.
-HyperTreeGrid blocks use the cell and field methods described in
-:doc:`hypertree`, with the ``array=`` payload keyword; they have no point data.
+applies to UnstructuredGrid blocks. HyperTreeGrid blocks use the cell methods
+described in :doc:`hypertree`; they have no point data. All block types use
+:doc:`field_data`, including the ``data=`` payload keyword and ``as_vector``
+interpretation.
 
 The ``vtkhdf_cell_data_handle``, ``vtkhdf_point_data_handle``, and
 ``vtkhdf_field_data_handle`` types are exported by ``vtkhdf_mb_file_type``.

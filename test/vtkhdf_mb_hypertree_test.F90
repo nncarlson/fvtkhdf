@@ -32,7 +32,7 @@ program vtkhdf_mb_hypertree_test
   do mode = VTKHDF_FIXED_MESH,VTKHDF_DYNAMIC_MESH
     call file%add_block(trim(names(mode)),blocks(mode)%p,mode=mode)
     call blocks(mode)%p%write_mesh([3,1,1])
-    call blocks(mode)%p%write_field_data('id',mode)
+    call blocks(mode)%p%write_field_data('id',data=mode)
     value(mode) = blocks(mode)%p%register_temporal_cell_data('value',0.0_real64)
   end do
   do step = 0,2
