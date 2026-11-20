@@ -5,17 +5,19 @@ Field data consists of values associated with a simple VTK dataset as a whole
 rather than with its mesh points or cells. All writers for simple VTK datasets
 provide the interface described here. Field data writes need not be ordered
 with respect to mesh writes. Static field data may be written at any point
-after file creation and before closing the file; temporal field data is
+after file or block creation and before closing the file; temporal field data is
 written within its corresponding time step.
 
-In the signatures below, ``file`` denotes a file writer object for a simple
-VTK dataset; see :doc:`overview` for the available writer types and their
-modules.
+In the signatures below, ``file`` denotes a standalone writer or a typed block
+pointer returned by a :doc:`composite file writer <mb>`. Field data belongs
+to that simple VTK dataset; the composite file itself has no field-data write
+interface.
+See :doc:`overview` for the available standalone writer types and modules.
 
 Values and Interpretation
 -------------------------
 
-The ``array`` argument may be a scalar, a rank-1 array, or a rank-2 array of
+The ``data`` argument may be a scalar, a rank-1 array, or a rank-2 array of
 kind ``int32``, ``int64``, ``real32``, or ``real64``.
 The kind constants are available from ``iso_fortran_env``.
 
@@ -28,16 +30,16 @@ VTK and ParaView interpret these values as tuples with one or more components:
    * - Fortran argument
      - Number of tuples
      - Components per tuple
-   * - Scalar
+   * - Scalar ``data``
      - 1
      - 1
-   * - Rank-1 ``array(n)``
+   * - Rank-1 ``data(n)``
      - ``n``
      - 1
-   * - Rank-1 ``array(n)``, ``as_vector=.true.``
+   * - Rank-1 ``data(n)``, ``as_vector=.true.``
      - 1
      - ``n``
-   * - Rank-2 ``array(ncomp,ntuples)``
+   * - Rank-2 ``data(ncomp,ntuples)``
      - ``ntuples``
      - ``ncomp``
 
@@ -60,12 +62,12 @@ Static Field Data
 
 .. method-doc::
 
-   call file%write_field_data(name, array [, as_vector])
+   call file%write_field_data(name, data [, as_vector])
 
    Write a complete static field dataset.
 
    * ``name``: character name, handled according to :doc:`common`.
-   * ``array``: complete scalar or array value, interpreted as described above.
+   * ``data``: complete scalar or array value, interpreted as described above.
    * ``as_vector``: optional logical controlling rank-1 interpretation.
 
    Static field data is allowed in every writer mode. Each call creates a new
@@ -100,12 +102,12 @@ Temporal Field Data
 
 .. method-doc::
 
-   call file%write_field_data(field_var, array [, as_vector])
+   call file%write_field_data(field_var, data [, as_vector])
 
    Write the complete value for the current time step to the registered field.
 
    * ``field_var``: handle returned by registration.
-   * ``array``: scalar or array with the registered type and kind.
+   * ``data``: scalar or array with the registered type and kind.
    * ``as_vector``: optional logical controlling rank-1 interpretation.
 
    A time step must be open. Each field may be written at most once per step.
@@ -123,5 +125,5 @@ respectively, in a static file:
 
 .. code-block:: fortran
 
-   call file%write_field_data('values', [1.0,2.0,3.0])
-   call file%write_field_data('direction', [1.0,0.0,0.0], as_vector=.true.)
+   call file%write_field_data('values', data=[1.0,2.0,3.0])
+   call file%write_field_data('direction', data=[1.0,0.0,0.0], as_vector=.true.)

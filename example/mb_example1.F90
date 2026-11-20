@@ -17,7 +17,7 @@ program mb_example1
   real :: t
 
   type(vtkhdf_mb_file) :: file
-  type(vtkhdf_block_handle) :: liq_blk, sol_blk
+  type(vtkhdf_unstructured_block), pointer :: liq_blk => null(), sol_blk => null()
   type(vtkhdf_cell_data_handle) :: prs_var
   type(vtkhdf_point_data_handle) :: vel_var
 
@@ -54,8 +54,8 @@ program mb_example1
   call get_liquid_mesh_data(points, cnode, xcnode, types)
 
   ! Add the liquid block and write the local mesh piece.
-  liq_blk = file%add_block('liquid', mode=VTKHDF_FIXED_MESH)
-  call file%write_mesh(liq_blk, points, cnode, xcnode, types)
+  call file%add_block('liquid', liq_blk, mode=VTKHDF_FIXED_MESH)
+  call liq_blk%write_mesh(points, cnode, xcnode, types)
 
   ! local mesh sizes
   npoints_liquid = size(points,dim=2)
@@ -68,9 +68,9 @@ program mb_example1
   ! Add the solid block and write the local mesh piece.
   ! Collective: rank with 0-sized mesh must participate!
   ! NB: Paraview reader bug requires it to be temporal; see issue #27.
-  !sol_blk = file%add_block('solid', mode=VTKHDF_STATIC)
-  sol_blk = file%add_block('solid', mode=VTKHDF_FIXED_MESH)
-  call file%write_mesh(sol_blk, points, cnode, xcnode, types)
+  !call file%add_block('solid', sol_blk, mode=VTKHDF_STATIC)
+  call file%add_block('solid', sol_blk, mode=VTKHDF_FIXED_MESH)
+  call sol_blk%write_mesh(points, cnode, xcnode, types)
 
   ! local mesh sizes
   npoints_solid = size(points,dim=2)
@@ -80,8 +80,8 @@ program mb_example1
   ! velocity for the liquid block.
   allocate(pressure(ncells_liquid), velocity(3,npoints_liquid))
   associate (scalar_mold => pressure(1), vector_mold => velocity(:,1))
-    prs_var = file%register_temporal_cell_data(liq_blk, 'pressure', scalar_mold)
-    vel_var = file%register_temporal_point_data(liq_blk, 'velocity', vector_mold)
+    prs_var = liq_blk%register_temporal_cell_data('pressure', scalar_mold)
+    vel_var = liq_blk%register_temporal_point_data('velocity', vector_mold)
   end associate
 
   ! Start time stepping.
@@ -91,11 +91,11 @@ program mb_example1
 
     ! Write cell-centered pressure for the liquid block.
     pressure = [(rank + j*t, j=1, ncells_liquid)]
-    call file%write_cell_data(liq_blk, prs_var, pressure)
+    call liq_blk%write_cell_data(prs_var, pressure)
 
     ! Write point-centered velocity for the liquid block.
     velocity = spread([cos(t+rank),sin(t+rank),0.0],dim=2,ncopies=npoints_liquid)
-    call file%write_point_data(liq_blk, vel_var, velocity)
+    call liq_blk%write_point_data(vel_var, velocity)
 
     ! Return file to a complete, readable state until start of next step.
     call file%finalize_time_step
@@ -106,10 +106,10 @@ program mb_example1
   !! Rank with 0-sized mesh must participate in the call for the solid block
   !! with its 0-sized temperature data.
   temperature = spread(rank, dim=1, ncopies=npoints_liquid)
-  call file%write_point_data(liq_blk, 'temperature', temperature)
+  call liq_blk%write_point_data('temperature', temperature)
 
   temperature = spread(rank, dim=1, ncopies=npoints_solid)
-  call file%write_point_data(sol_blk, 'temperature', temperature)
+  call sol_blk%write_point_data('temperature', temperature)
 
   call file%close
 

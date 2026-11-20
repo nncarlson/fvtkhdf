@@ -1,0 +1,245 @@
+! HTG-specific numeric overloads, cell registries, and field lifecycle wiring.
+#:set nums = [('int8','integer(int8)'), ('int32','integer(int32)'), ('int64','integer(int64)'), ('real32','real(real32)'), ('real64','real(real64)')]
+program vtkhdf_hypertree_api_test
+  use,intrinsic :: iso_fortran_env
+  use vtkhdf_hypertree_file_type
+  use vtkhdf_test_env
+#ifdef USE_MPI
+  use mpi
+#endif
+#ifdef USE_MPI_F08
+  use mpi_f08, only: world_f08 => MPI_COMM_WORLD
+#endif
+  implicit none
+  integer :: rank, nproc, mode
+  character(80) :: filename
+
+  call test_env_init(rank,nproc)
+  do mode = VTKHDF_STATIC,VTKHDF_DYNAMIC_MESH
+    write(filename,'(a,i0,a)') 'hypertree_numeric_',mode,'.vtkhdf'
+    call numeric_file(trim(filename),mode,64_int64)
+  end do
+  call numeric_file('hypertree_numeric_default.vtkhdf',VTKHDF_FIXED_MESH)
+  call naming_file()
+  call field_lifecycle()
+  call test_env_finalize()
+
+contains
+
+  subroutine open_file(file, filename, mode, chunk_bytes)
+    type(vtkhdf_hypertree_file), intent(out) :: file
+    character(*), intent(in) :: filename
+    integer, intent(in) :: mode
+    integer(int64), intent(in), optional :: chunk_bytes
+    integer :: stat
+    character(:), allocatable :: errmsg
+#ifdef USE_MPI_F08
+    ! Exercise both communicator overloads through the standalone sibling.
+    if (mode == VTKHDF_STATIC) then
+      call file%create(filename,world_f08,stat,errmsg,mode=mode,data_chunk_bytes=chunk_bytes)
+    else
+      call file%create(filename,MPI_COMM_WORLD,stat,errmsg,mode=mode,data_chunk_bytes=chunk_bytes)
+    end if
+#elif defined(USE_MPI)
+    call file%create(filename,MPI_COMM_WORLD,stat,errmsg,mode=mode,data_chunk_bytes=chunk_bytes)
+#else
+    call file%create(filename,stat,errmsg,mode=mode,data_chunk_bytes=chunk_bytes)
+#endif
+    if (stat /= 0) error stop errmsg
+  end subroutine
+
+  function local_ids(phase) result(ids)
+    integer, intent(in) :: phase
+    integer, allocatable :: ids(:)
+    integer :: i
+    ! Rank zero is empty initially in a four-rank run.
+    ids = pack([(i,i=1,3)],[(modulo(i+phase,nproc)==rank,i=1,3)])
+  end function
+
+  subroutine geometry(file, phase)
+    type(vtkhdf_hypertree_file), intent(inout) :: file
+    integer, intent(in) :: phase
+    real(real32) :: x(8)
+    integer :: i
+    x = -999
+    x(1::2) = [(real(i+phase,real32),i=0,3)]
+    call file%write_mesh_geometry(x(1::2),[0.0_real32],[0.0_real32])
+  end subroutine
+
+  subroutine topology(file, ids)
+    type(vtkhdf_hypertree_file), intent(inout) :: file
+    integer, intent(in) :: ids(:)
+    integer :: i
+    call file%write_mesh_topology(int(ids,int64),[(int(i,int64),i=1,size(ids)+1)], &
+        [(.false.,i=1,size(ids))])
+  end subroutine
+
+  subroutine numeric_file(filename, mode, chunk_bytes)
+    character(*), intent(in) :: filename
+    integer, intent(in) :: mode
+    integer(int64), intent(in), optional :: chunk_bytes
+    type(vtkhdf_hypertree_file) :: file
+    type(vtkhdf_cell_data_handle) :: scalar(5), vector(5)
+    integer, allocatable :: ids(:)
+    integer :: step
+    call open_file(file,filename,mode,chunk_bytes)
+    call file%write_mesh([4,1,1],branch_factor=3)
+    ids = local_ids(0)
+    call geometry(file,0)
+    call topology(file,ids)
+    if (mode /= VTKHDF_DYNAMIC_MESH) then
+#:for kind, decl in nums
+      call static_${kind}$(file,ids)
+#:endfor
+    end if
+    if (mode /= VTKHDF_STATIC) then
+#:for index in range(1,len(nums)+1)
+#:set kind, decl = nums[index-1]
+#:set zero = '0.0_' + kind if kind.startswith('real') else '0_' + kind
+      scalar(${index}$) = file%register_temporal_cell_data('${kind}$_scalar',${zero}$)
+      vector(${index}$) = file%register_temporal_cell_data('${kind}$_vector',[${zero}$,${zero}$])
+#:endfor
+      do step = 0,3
+        call file%start_time_step(real(step,real64))
+        if (step == 2) then
+          if (mode >= VTKHDF_MOVING_MESH) call geometry(file,1)
+          if (mode == VTKHDF_DYNAMIC_MESH) then
+            ids = local_ids(1)
+            call topology(file,ids)
+          end if
+        end if
+        if (modulo(step,2) == 0) then
+#:for index in range(1,len(nums)+1)
+#:set kind, decl = nums[index-1]
+          call temporal_${kind}$(file,scalar(${index}$),vector(${index}$),ids,step)
+#:endfor
+        end if
+        if (step /= 3) call file%finalize_time_step()
+      end do
+    end if
+    call file%close()
+  end subroutine
+
+#:for kind, decl in nums
+  subroutine static_${kind}$(file, ids)
+    type(vtkhdf_hypertree_file), intent(inout) :: file
+    integer, intent(in) :: ids(:)
+    ${decl}$ :: scalar(2*size(ids)), vector(4,2*size(ids))
+    integer :: i, j
+    scalar = -99
+    vector = -99
+#:set value = 'real(3*(ids(i)-1),'+kind+') + 0.25_'+kind if kind.startswith('real') else 'int(3*(ids(i)-1),'+kind+')'
+    do i = 1,size(ids)
+      scalar(2*i-1) = ${value}$
+      do j = 1,2
+        vector(2*j-1,2*i-1) = scalar(2*i-1) + j
+      end do
+    end do
+    call file%write_cell_data('static_${kind}$_scalar',scalar(1::2))
+    call file%write_cell_data('static_${kind}$_vector',vector(1::2,1::2))
+  end subroutine
+
+  subroutine temporal_${kind}$(file, scalar_var, vector_var, ids, phase)
+    type(vtkhdf_hypertree_file), intent(inout) :: file
+    type(vtkhdf_cell_data_handle), intent(in) :: scalar_var, vector_var
+    integer, intent(in) :: ids(:), phase
+    ${decl}$ :: scalar(2*size(ids)), vector(4,2*size(ids))
+    integer :: i, j
+    scalar = -99
+    vector = -99
+#:set value = 'real(10*phase+3*(ids(i)-1),'+kind+') + 0.25_'+kind if kind.startswith('real') else 'int(10*phase+3*(ids(i)-1),'+kind+')'
+    do i = 1,size(ids)
+      scalar(2*i-1) = ${value}$
+      do j = 1,2
+        vector(2*j-1,2*i-1) = scalar(2*i-1) + j
+      end do
+    end do
+    call file%write_cell_data(scalar_var,scalar(1::2))
+    call file%write_cell_data(vector_var,vector(1::2,1::2))
+  end subroutine
+#:endfor
+
+  subroutine naming_file()
+    type(vtkhdf_hypertree_file) :: file
+    type(vtkhdf_cell_data_handle) :: first, second, reverse
+    integer, allocatable :: ids(:)
+    real(real64), allocatable :: values(:)
+    integer :: step
+    call open_file(file,'hypertree_names.vtkhdf',VTKHDF_FIXED_MESH)
+    call file%write_mesh([4,1,1])
+    ids = local_ids(0)
+    call geometry(file,0)
+    call topology(file,ids)
+    values = real(ids-1,real64)
+    call named_values(file,values,10,name='a/b')
+    first = file%register_temporal_cell_data('a.b',0.0_real64)
+    call named_values(file,values,30,name='a_b_1')
+    call named_values(file,values,40,name='')
+    call named_values(file,values,50,name='label   ')
+    second = file%register_temporal_cell_data('a/b',0.0_real64)
+    reverse = file%register_temporal_cell_data('reverse.one',0.0_real64)
+    call named_values(file,values,70,name='reverse one')
+    do step = 0,2
+      call file%start_time_step(real(step))
+      if (step < 2) then
+        call named_values(file,values,20+100*step,handle=first)
+        call named_values(file,values,60+100*step,handle=second)
+        call named_values(file,values,80+100*step,handle=reverse)
+      end if
+    end do
+    call file%close()
+  end subroutine
+
+  subroutine named_values(file, values, offset, name, handle)
+    type(vtkhdf_hypertree_file), intent(inout) :: file
+    real(real64), intent(in) :: values(:)
+    integer, intent(in) :: offset
+    character(*), intent(in), optional :: name
+    type(vtkhdf_cell_data_handle), intent(in), optional :: handle
+#ifdef GNU_PR123899
+    ! GNU misdescribes zero-sized expression temporaries at assumed-rank calls.
+    real(real64), allocatable :: payload(:)
+    payload = values+offset
+    if (present(name)) then
+      call file%write_cell_data(name,payload)
+    else
+      call file%write_cell_data(handle,payload)
+    end if
+#else
+    if (present(name)) then
+      call file%write_cell_data(name,values+offset)
+    else
+      call file%write_cell_data(handle,values+offset)
+    end if
+#endif
+  end subroutine
+
+  subroutine field_lifecycle()
+    type(vtkhdf_hypertree_file) :: file
+    type(vtkhdf_field_data_handle) :: time
+    integer :: step
+    call open_file(file,'hypertree_field_lifecycle.vtkhdf',VTKHDF_FIXED_MESH,64_int64)
+    call file%write_mesh([4,1,1])
+    call geometry(file,0)
+    call topology(file,local_ids(0))
+    time = file%register_temporal_field_data('time',0.0_real64)
+    call file%write_field_data('before',data=real(10+rank,real64))
+    do step = 0,3
+      call file%start_time_step(real(step))
+      if (step == 1) then
+        call file%write_field_data(time,data=11.0_real64+rank)
+        call file%write_field_data('during',real(20+rank,real64))
+      end if
+      if (step == 3) then
+        call file%write_field_data(time,33.0_real64+rank)
+        call file%write_field_data('last_open',real(50+rank,real64))
+        exit ! Closing the owner must append the final field metadata.
+      end if
+      call file%finalize_time_step()
+      if (step == 1) call file%write_field_data('between',real(30+rank,real64))
+      if (step == 2) call file%write_field_data('after',real(40+rank,real64))
+    end do
+    call file%close()
+  end subroutine
+
+end program

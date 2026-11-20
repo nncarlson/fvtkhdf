@@ -1,8 +1,8 @@
 !!
 !! VTKHDF_FILE_CONTEXT
 !!
-!! Owned standalone file and communicator resources. Composite leaves leave
-!! this component inactive and borrow the containing writer's context instead.
+!! Internal helper for owned HDF5 file and communicator resources.
+!! File owners access ID and CTX directly; dataset writers borrow CTX.
 !! Cleanup is explicit and collective; implicit finalization performs no I/O.
 !! Callers initialize the HDF5 bindings and establish the HDF5 error context.
 !!
@@ -19,11 +19,10 @@ module vtkhdf_file_context_type
   private
 
   type, public :: vtkhdf_file_context
-    private
-    integer(hid_t) :: file_id = H5I_INVALID_HID
+    integer(hid_t) :: id = H5I_INVALID_HID
     type(vtkhdf_context) :: ctx
   contains
-    procedure :: open, close, flush, id, context
+    procedure :: open, close, flush
   end type
 
 contains
@@ -52,14 +51,14 @@ contains
 #endif
 
     call this%ctx%get_fapl(fapl)
-    this%file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl)
+    this%id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl)
     ierr = H5Pclose(fapl)
     stat = 0
-    if (this%ctx%global_any(this%file_id < 0)) then
+    if (this%ctx%global_any(this%id < 0)) then
       stat = 1
       errmsg = 'failed to open file'
-      if (this%file_id >= 0) ierr = H5Fclose(this%file_id)
-      this%file_id = H5I_INVALID_HID
+      if (this%id >= 0) ierr = H5Fclose(this%id)
+      this%id = H5I_INVALID_HID
       call this%ctx%free ! frees duplicated comm in MPI build
     end if
 
@@ -68,31 +67,19 @@ contains
   subroutine close(this)
     class(vtkhdf_file_context), intent(inout) :: this
     integer :: ierr
-    if (this%file_id < 0) return ! no owned file or communicator
-    ierr = H5Fclose(this%file_id)
+    if (this%id < 0) return ! no owned file or communicator
+    ierr = H5Fclose(this%id)
     INSIST(ierr >= 0)
-    this%file_id = H5I_INVALID_HID
+    this%id = H5I_INVALID_HID
     call this%ctx%free()
   end subroutine
 
   subroutine flush(this)
     class(vtkhdf_file_context), intent(in) :: this
     integer :: ierr
-    INSIST(this%file_id >= 0)
-    ierr = H5Fflush(this%file_id, H5F_SCOPE_LOCAL)
+    INSIST(this%id >= 0)
+    ierr = H5Fflush(this%id, H5F_SCOPE_LOCAL)
     INSIST(ierr >= 0)
   end subroutine
-
-  function id(this) result(file_id)
-    class(vtkhdf_file_context), intent(in) :: this
-    integer(hid_t) :: file_id
-    file_id = this%file_id
-  end function
-
-  function context(this) result(ctx)
-    class(vtkhdf_file_context), intent(in) :: this
-    type(vtkhdf_context) :: ctx
-    ctx = this%ctx ! unowned copy
-  end function
 
 end module

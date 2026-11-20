@@ -3,7 +3,7 @@ RectilinearGrid
 
 The ``vtkhdf_rectilinear_file_type`` module defines the ``vtkhdf_rectilinear_file``
 derived type for writing VTKHDF RectilinearGrid files. The geometry is the
-tensor product of three coordinate vectors, allowing nonuniform spacing
+Cartesian product of three coordinate vectors, allowing nonuniform spacing
 along each axis. One-, two-, and three-dimensional grids are supported.
 Reading these files requires ParaView 6.2 or later (VTK 9.7 or later).
 

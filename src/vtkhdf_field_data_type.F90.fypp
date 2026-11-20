@@ -60,12 +60,12 @@ contains
   end subroutine
 
 #:for kind, decl, h5type in nums
-  subroutine write_field_data_${kind}$(this, ctx, name, array, as_vector, data_chunk_bytes, completed_steps)
+  subroutine write_field_data_${kind}$(this, ctx, name, data, as_vector, data_chunk_bytes, completed_steps)
 
     class(field_data_list), intent(inout) :: this
     type(vtkhdf_context), intent(in) :: ctx
     character(*), intent(in) :: name
-    ${decl}$, intent(in) :: array(..)
+    ${decl}$, intent(in) :: data(..)
     logical, intent(in), optional :: as_vector
     integer(int64), intent(in) :: data_chunk_bytes
     integer, intent(in) :: completed_steps
@@ -79,26 +79,26 @@ contains
     if (this%offsets_id >= 0) then
       ! Constant fields in temporal files use one value at every step.
       index = this%register_temporal(ctx, name, ${'0' if kind.startswith('int') else '0.0'}$_${kind}$, data_chunk_bytes)
-      call this%write_temporal(ctx, index, array, as_vector)
+      call this%write_temporal(ctx, index, data, as_vector)
       do j = 1, completed_steps
         call this%append_var_metadata(ctx, index)
       end do
       return
     end if
     call this%reserve_name(name, external_name, internal_name, index)
-    select rank (array)
+    select rank (data)
     rank (0)
       INSIST(.not.as_vector_)
-      call h5_write_dataset(ctx, this%group_id, internal_name, [array], root=0)
+      call h5_write_dataset(ctx, this%group_id, internal_name, [data], root=0)
     rank (1)
       if (as_vector_) then
-        call h5_write_dataset(ctx, this%group_id, internal_name, reshape(array,[size(array),1]), root=0)
+        call h5_write_dataset(ctx, this%group_id, internal_name, reshape(data,[size(data),1]), root=0)
       else
-        call h5_write_dataset(ctx, this%group_id, internal_name, array, root=0)
+        call h5_write_dataset(ctx, this%group_id, internal_name, data, root=0)
       end if
     rank (2)
       INSIST(.not.as_vector_)
-      call h5_write_dataset(ctx, this%group_id, internal_name, array, root=0)
+      call h5_write_dataset(ctx, this%group_id, internal_name, data, root=0)
     rank default
       INSIST(.false.)
     end select
@@ -127,11 +127,11 @@ contains
 #:endfor
 
 #:for kind, decl, h5type in nums
-  subroutine write_temporal_field_data_${kind}$(this, ctx, index, array, as_vector)
+  subroutine write_temporal_field_data_${kind}$(this, ctx, index, data, as_vector)
     class(field_data_list), intent(inout) :: this
     type(vtkhdf_context), intent(in) :: ctx
     integer, intent(in) :: index
-    ${decl}$, intent(in) :: array(..)
+    ${decl}$, intent(in) :: data(..)
     logical, intent(in), optional :: as_vector
     logical :: as_vector_
     INSIST(allocated(this%vars))
@@ -142,23 +142,23 @@ contains
       INSIST(var%is_temporal)
       INSIST(.not.var%wrote_this_step)
       INSIST(var%type_id == ${h5type}$)
-      select rank (array)
+      select rank (data)
       rank (0)
         INSIST(.not.as_vector_)
         var%ncomp = 1
         var%tuples = 1
       rank (1)
-        var%ncomp = merge(size(array),1,as_vector_)
-        var%tuples = merge(1,size(array),as_vector_)
+        var%ncomp = merge(size(data),1,as_vector_)
+        var%tuples = merge(1,size(data),as_vector_)
       rank (2)
         INSIST(.not.as_vector_)
-        var%ncomp = size(array,1)
-        var%tuples = size(array,2)
+        var%ncomp = size(data,1)
+        var%tuples = size(data,2)
       rank default
         INSIST(.false.)
       end select
       var%offset = var%next_offset
-      call h5_append_field_data(ctx, this%group_id, var%internal_name, array, var%ncomp, var%tuples)
+      call h5_append_field_data(ctx, this%group_id, var%internal_name, data, var%ncomp, var%tuples)
       var%next_offset = var%next_offset + int(var%tuples,int64)
       var%wrote_this_step = .true.
     end associate

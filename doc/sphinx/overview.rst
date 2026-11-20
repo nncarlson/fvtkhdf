@@ -24,25 +24,28 @@ Currently supported VTK dataset types:
 
 * **ImageData, RectilinearGrid, and StructuredGrid**: logically rectangular
   grids. ImageData uses uniform spacing; RectilinearGrid is defined by the
-  tensor product of three coordinate vectors; StructuredGrid gives each point
+  Cartesian product of three coordinate vectors; StructuredGrid gives each point
   explicit physical coordinates. RectilinearGrid and StructuredGrid also
   support moving geometry with fixed logical grids.
 
-* **UnstructuredGrid (UG)**: meshes with arbitrary cell connectivity,
+* **UnstructuredGrid**: meshes with arbitrary cell connectivity,
   supporting moving geometry and changing topology.
 
-* **HyperTreeGrid (HTG)**: tree-based adaptive mesh refinement on a
+* **HyperTreeGrid**: tree-based adaptive mesh refinement on a
   rectilinear grid of root cells, supporting moving geometry and changing
   refinement.
 
 * **MultiBlockDataSet (MB)**: a composite type containing a flat collection
-  of UnstructuredGrid blocks.
+  of simple block types. Each block selects its own mode; temporal blocks
+  share a common timeline.
 
 fVTKHDF provides a file writer for each supported VTK dataset type. Each
 writer is a Fortran derived type exported by its corresponding module.
 Writers for simple VTK datasets provide methods for defining the mesh and
 writing point, cell, and field data. Composite writers manage collections
-of simple VTK datasets.
+of simple VTK datasets. The :doc:`MB writer <mb>` returns typed block pointers
+with the same mesh and data methods as the corresponding standalone writers;
+the owning file manages their lifecycle.
 
 .. list-table::
    :header-rows: 1
@@ -60,11 +63,11 @@ of simple VTK datasets.
      - ``vtkhdf_structured_file``
      - ``vtkhdf_structured_file_type``
    * - UnstructuredGrid
-     - ``vtkhdf_ug_file``
-     - ``vtkhdf_ug_file_type``
+     - ``vtkhdf_unstructured_file``
+     - ``vtkhdf_unstructured_file_type``
    * - HyperTreeGrid
-     - ``vtkhdf_htg_file``
-     - ``vtkhdf_htg_file_type``
+     - ``vtkhdf_hypertree_file``
+     - ``vtkhdf_hypertree_file_type``
    * - MultiBlockDataSet
      - ``vtkhdf_mb_file``
      - ``vtkhdf_mb_file_type``
@@ -97,6 +100,10 @@ Unless otherwise indicated, reader support targets ParaView 5.13 and later.
 Older releases may work, but compatibility is not guaranteed. Additional
 version requirements and known reader limitations are described in the
 individual VTK dataset chapters.
+
+For best results, use the latest stable release of ParaView, or VTK when
+reading files directly. The VTKHDF reader in VTK is actively developed, with
+ongoing compatibility improvements and bug fixes.
 
 Parallel and Serial I/O
 =======================

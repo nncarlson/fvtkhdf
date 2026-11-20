@@ -7,6 +7,10 @@ The interface below is shared by the :doc:`image`, :doc:`rectilinear`, and
 :doc:`structured_grid` writers; see those sections for geometry definition,
 supported modes, and reader requirements.
 
+Geometry and point/cell data methods also apply to the corresponding typed
+blocks returned by a :doc:`composite file writer <mb>`. For blocks, the owning
+composite file writer performs creation, time stepping, flushing, and closing.
+
 File Creation and Management
 ----------------------------
 

@@ -4,7 +4,7 @@ program vtkhdf_constant_field_test
   use,intrinsic :: iso_fortran_env
   use vtkhdf_simple_dataset_class
   use vtkhdf_structured_base_class, only: vtkhdf_structured_base
-  use vtkhdf_ug_file_type
+  use vtkhdf_unstructured_file_type
   use vtkhdf_image_file_type
   use vtkhdf_rectilinear_file_type
   use vtkhdf_structured_file_type
@@ -26,7 +26,7 @@ program vtkhdf_constant_field_test
       if (grid > 2 .and. mode == VTKHDF_DYNAMIC_MESH) cycle
       select case (grid)
       case (1)
-        allocate(vtkhdf_ug_file :: file)
+        allocate(vtkhdf_unstructured_file :: file)
       case (2)
         allocate(vtkhdf_image_file :: file)
       case (3)
@@ -36,7 +36,7 @@ program vtkhdf_constant_field_test
       end select
       write(filename,'(a,i0,a,i0,a)') 'constant_fields_',grid,'_',mode,'.vtkhdf'
       select type (writer => file)
-#:for guard in ['type is (vtkhdf_ug_file)', 'class is (vtkhdf_structured_base)']
+#:for guard in ['type is (vtkhdf_unstructured_file)', 'type is (vtkhdf_image_file)', 'type is (vtkhdf_rectilinear_file)', 'type is (vtkhdf_structured_file)']
       ${guard}$
 #ifdef USE_MPI
         call writer%create(trim(filename),MPI_COMM_WORLD,stat,errmsg,mode=mode,data_chunk_bytes=64_int64)
@@ -50,10 +50,10 @@ program vtkhdf_constant_field_test
       if (mode /= VTKHDF_STATIC) then
         ! Both creation orders must preserve distinct constant/temporal identities.
         select type (writer => file)
-#:for guard in ['type is (vtkhdf_ug_file)', 'class is (vtkhdf_structured_base)']
+#:for guard in ['type is (vtkhdf_unstructured_file)', 'class is (vtkhdf_structured_base)']
         ${guard}$
           temporal_var = writer%register_temporal_field_data('before_real64_scalar',0.0_real64)
-          call writer%write_field_data('before_real64_scalar',222_int32)
+          call writer%write_field_data('before_real64_scalar',data=222_int32)
 #:endfor
         end select
       end if
@@ -66,10 +66,10 @@ program vtkhdf_constant_field_test
           if (mode >= VTKHDF_MOVING_MESH .and. step > 0) call geometry(step)
           if (step == 1) call constants('open')
           select type (writer => file)
-#:for guard in ['type is (vtkhdf_ug_file)', 'class is (vtkhdf_structured_base)']
+#:for guard in ['type is (vtkhdf_unstructured_file)', 'class is (vtkhdf_structured_base)']
           ${guard}$
-            if (step == 1) call writer%write_field_data(temporal_var,111.0_real64)
-            if (step == 3) call writer%write_field_data(temporal_var,[301.0_real64,302.0_real64],as_vector=.true.)
+            if (step == 1) call writer%write_field_data(temporal_var,data=111.0_real64)
+            if (step == 3) call writer%write_field_data(temporal_var,data=[301.0_real64,302.0_real64],as_vector=.true.)
 #:endfor
           end select
           call file%finalize_time_step
@@ -89,7 +89,7 @@ contains
     ${decl}$ :: scalar_${kind}$, values_${kind}$(4), matrix_${kind}$(2,6)
 #:endfor
     select type (writer => file)
-#:for guard in ['type is (vtkhdf_ug_file)', 'class is (vtkhdf_structured_base)']
+#:for guard in ['type is (vtkhdf_unstructured_file)', 'class is (vtkhdf_structured_base)']
     ${guard}$
 #:for kind, decl in nums
     ! Non-root values deliberately differ; only rank zero contributes.
@@ -97,11 +97,11 @@ contains
     values_${kind}$ = [11,12,13,14]+1000*rank
     matrix_${kind}$ = -999
     matrix_${kind}$(:,::2) = reshape([31,32,33,34,35,36]+1000*rank,[2,3])
-    call writer%write_field_data(prefix//'_${kind}$_scalar',scalar_${kind}$)
-    call writer%write_field_data(prefix//'_${kind}$_tuples',values_${kind}$)
-    call writer%write_field_data(prefix//'_${kind}$_vector',values_${kind}$(:3),as_vector=.true.)
-    call writer%write_field_data(prefix//'_${kind}$_matrix',matrix_${kind}$(:,::2))
-    if (mode /= VTKHDF_STATIC) call writer%write_field_data(prefix//'_${kind}$_empty',values_${kind}$(:0))
+    call writer%write_field_data(prefix//'_${kind}$_scalar',data=scalar_${kind}$)
+    call writer%write_field_data(prefix//'_${kind}$_tuples',data=values_${kind}$)
+    call writer%write_field_data(prefix//'_${kind}$_vector',data=values_${kind}$(:3),as_vector=.true.)
+    call writer%write_field_data(prefix//'_${kind}$_matrix',data=matrix_${kind}$(:,::2))
+    if (mode /= VTKHDF_STATIC) call writer%write_field_data(prefix//'_${kind}$_empty',data=values_${kind}$(:0))
 #:endfor
 #:endfor
     end select
@@ -118,7 +118,7 @@ contains
     points = reshape([0.,0.,0.,1.,0.,0.,0.,1.,0.,1.,1.,0.,.5,.5,0.],[3,5])
     points(1,:) = points(1,:)+0.1_real64*max(phase,0)
     select type (file)
-    type is (vtkhdf_ug_file)
+    type is (vtkhdf_unstructured_file)
       count = 4
       if (mode == VTKHDF_DYNAMIC_MESH .and. phase >= 2) count = 5
       if (rank /= 0) count = 0

@@ -6,26 +6,38 @@ checking policy, and validation practices used by fVTKHDF.
 ## Source Organization
 
 The public file writers implement the API documented in the
-[reference manual](sphinx/index.rst). The UnstructuredGrid writer contains its
-mesh and data implementation directly. The three structured writers share
-`vtkhdf_structured_base`; each concrete writer supplies its geometry methods,
-VTK dataset type name, and supported modes. The HyperTreeGrid writer follows
-the UnstructuredGrid organization, with trees in place of cell connectivity
-and no point data.
+[reference manual](sphinx/index.rst). Each simple dataset has an abstract writer
+class containing its dataset state and writing implementation, with concrete
+file and block descendants. The file descendant adds standalone file ownership,
+creation, flushing, and file cleanup. The block descendant borrows its composite
+owner's file and communicator. File and block types inherit the same writing
+methods, overloads, and temporal behavior.
+
+The three structured writer classes share `vtkhdf_structured_base`; each
+format-specific writer supplies its geometry methods, VTK dataset type name,
+and supported modes. Geometry state belongs to these writer classes so both
+their file and block descendants use the same snapshot bookkeeping.
+
+The HyperTreeGrid writer follows the UnstructuredGrid organization, with trees
+in place of cell connectivity and no point data. Its block type implements the
+shared lifecycle and is exposed by MultiBlock.
 
 `vtkhdf_simple_dataset` defines the common lifecycle contract used by composite
 writers: cleanup, time stepping, and dataset-state queries. It does not define
 geometry or data-writing interfaces. MultiBlock stores polymorphic simple
 writers and dispatches format-specific operations to its supported block types.
-Its public block interface currently supports UnstructuredGrid only.
+Its public interface returns typed pointers for ImageData, RectilinearGrid,
+StructuredGrid, UnstructuredGrid, and HyperTreeGrid blocks. Mesh and data calls go directly
+to those blocks; the composite manages their lifecycle.
 
 | Module or type | Responsibility |
 | --- | --- |
-| `vtkhdf_ug_file_type` | Unstructured mesh, data registration and writes, and lifecycle policy |
-| `vtkhdf_htg_file_type` | Root grid, breadth-first tree descriptors and mask, per-part coordinate copies, cell data, and lifecycle policy |
+| `vtkhdf_unstructured_writer_type` | Unstructured mesh, data registration and writes, lifecycle policy, and concrete UnstructuredGrid blocks |
+| `vtkhdf_hypertree_writer_type` | Root grid, breadth-first tree descriptors and mask, per-part coordinate copies, cell data, lifecycle policy, and concrete HTG blocks |
 | `vtkhdf_structured_base_class` | Logical grids, rectangular region writes, shared registration, and structured lifecycle policy |
-| `vtkhdf_image_file_type`, `vtkhdf_rectilinear_file_type`, `vtkhdf_structured_file_type` | Geometry definitions and format-specific geometry storage |
-| `vtkhdf_mb_file_type` | Composite assembly, block handles, and a shared timeline |
+| `vtkhdf_image_writer_type`, `vtkhdf_rectilinear_writer_type`, `vtkhdf_structured_writer_type` | Geometry definitions, format-specific geometry storage, and concrete structured blocks |
+| `vtkhdf_unstructured_file_type`, `vtkhdf_image_file_type`, `vtkhdf_rectilinear_file_type`, `vtkhdf_structured_file_type`, `vtkhdf_hypertree_file_type` | Standalone creation, flushing, and owned-file cleanup |
+| `vtkhdf_mb_file_type` | Composite assembly, owned typed blocks, and a shared timeline |
 | `vtkhdf_field_data_type` | Shared field data registration, writes, temporal metadata, and cleanup |
 | `vtkhdf_data_support` | Name resolution, registry records, data groups, and chunk sizing |
 | `vtkhdf_file_context_type`, `vtkhdf_context_type` | File operations and communicator management |
@@ -39,17 +51,32 @@ with the same organization for point and cell data.
 ### Resource and Handle Ownership
 
 For simple dataset writers, `create` owns a standalone file and duplicated MPI
-communicator through a `vtkhdf_file_context`. Internal `init` methods create
-simple VTK datasets under a parent group and borrow the composite writer's
-parallel context. Closing a leaf must not release its parent's file or
-communicator. Implicit Fortran finalization cannot perform collective cleanup;
-callers must use `close`.
+communicator through a `vtkhdf_file_context` helper. Its public `id` and `ctx`
+components provide direct access to the owned file and parallel context.
+Internal `init` methods create simple VTK datasets under a parent group and
+borrow the composite writer's parallel context. Closing a leaf must not release
+its parent's file or communicator. Implicit Fortran finalization cannot perform
+collective cleanup; callers must use `close`.
+
+Internal lifecycle bindings remain public where cross-module dispatch requires
+it; they are not part of the supported block-writing API. Composite owners
+initialize, step, and close their blocks. The writer's internal `close_dataset`
+releases dataset resources without resetting the object or closing an owned
+file. Block `close` then resets the dynamic object. Standalone file `close`
+instead closes its file and communicator before resetting the dynamic object,
+including format-specific geometry state. No implicit finalizer performs I/O.
 
 Each writer owns its data registry and constructs the public handles it returns.
 A data handle records the root HDF5 group ID of its owning VTK dataset; handle
-access validates that owner. MultiBlock additionally records and checks the
-block index before forwarding a handle to its leaf writer. Components remain
-private so callers cannot construct indices independently of the owning writer.
+access validates that owner, including when the dataset is a composite block.
+There is no additional block index in a data handle and no composite forwarding
+layer. Handle components remain private so callers cannot construct indices
+independently of the owning writer.
+
+MultiBlock allocates each concrete block separately and keeps pointers to those
+targets in its collection. Growing the collection preserves borrowed block
+pointers. Closing the composite closes and deallocates all targets, invalidating
+borrowed pointers and their data handles.
 
 `named_record` represents an entry in a namespace, including composite block
 names and point, cell, or field dataset names. `dataset_record` adds temporal
@@ -81,8 +108,15 @@ mask bit streams are packed per part, so every part starts on a byte boundary
 and their temporal offsets count bytes. The reader expects a copy of the root
 grid coordinates for every part; rank zero writes all of them. Unlike
 UnstructuredGrid, ranks without trees still contribute a part, so the number
-of parts never changes. The VTK 9.7.2 reader fails on a temporal file whose
-part count drops from several to one.
+of parts never changes.
+
+Unstructured moving-mesh constants use the existing temporal records internally:
+their payload is written once, their stored offset remains zero, and their
+entity count is recorded for reuse validation. Late creation backfills offsets
+for completed steps; normal finalization appends the current and later entries.
+Explicit per-array offsets prevent coordinate offsets from being used to read
+constant point data. Static and fixed-mesh constants retain their original
+layouts without per-array offsets.
 
 Field data uses the same implementation in all simple writers. In temporal
 files, complete values are stored as tuple rows with a component dimension;

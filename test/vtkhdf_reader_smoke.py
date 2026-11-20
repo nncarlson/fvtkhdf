@@ -103,14 +103,14 @@ def read_output(reader, step):
     return output
 
 
-def validate_ug_output(summary):
+def validate_unstructured_output(summary):
     if summary["points"] <= 0:
-        raise RuntimeError("UG reader returned no points")
+        raise RuntimeError("UnstructuredGrid reader returned no points")
     if summary["cells"] <= 0:
-        raise RuntimeError("UG reader returned no cells")
+        raise RuntimeError("UnstructuredGrid reader returned no cells")
     if "vtkUnstructuredGrid" not in summary["leaf_classes"]:
         raise RuntimeError(
-            "UG reader did not yield an unstructured-grid leaf "
+            "UnstructuredGrid reader did not yield an unstructured-grid leaf "
             f"(root={summary['class_name']}, leaves={summary['leaf_classes']})"
         )
 
@@ -131,9 +131,11 @@ def validate_mb_output(output, summary):
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Smoke-test VTK HDF reader availability and file readback.")
-    parser.add_argument("kind", nargs="?", choices=("ug", "mb"))
+    parser.add_argument("kind", nargs="?", choices=("unstructured", "mb"))
     parser.add_argument("path", nargs="?")
     parser.add_argument("--check-import", action="store_true")
+    parser.add_argument("--check-temporal-state", action="store_true",
+                        help="also require temporal state to survive data reads")
     args = parser.parse_args(argv)
 
     vtk_hdf_reader, error_message = import_vtk_reader()
@@ -153,6 +155,21 @@ def main(argv: list[str]) -> int:
     if not path.is_file():
         return fail(f"missing input file: {path}")
 
+    if args.check_temporal_state and args.kind == "mb":
+        try:
+            from vtkmodules.vtkCommonCore import vtkVersion
+        except ImportError:
+            from vtk import vtkVersion
+        version = (vtkVersion.GetVTKMajorVersion(), vtkVersion.GetVTKMinorVersion(),
+                   vtkVersion.GetVTKBuildVersion())
+        # Known released-reader failure (VTK issue 20246 / MR !14030).
+        # Run development builds strictly so the proposed fix is exercised;
+        # do not turn an unexpected failure on a newer reader into a skip.
+        if version <= (9, 7, 2):
+            print(f"VTK {vtkVersion.GetVTKVersion()}: skipping composite temporal-state "
+                  "check (VTK issue 20246); ordinary MB readback remains enabled")
+            return SKIP_CODE
+
     reader = vtk_hdf_reader()
     if hasattr(reader, "CanReadFile") and not reader.CanReadFile(str(path)):
         return fail(f"vtkHDFReader rejected input file: {path}")
@@ -163,14 +180,23 @@ def main(argv: list[str]) -> int:
 
     try:
         steps_to_read = validate_temporal_read(reader)
+        expected_steps = (reader.GetNumberOfSteps()
+                          if args.check_temporal_state and steps_to_read is not None else None)
         if steps_to_read is None:
             steps_to_read = [None]
 
         for step in steps_to_read:
             output = read_output(reader, step)
+            if expected_steps is not None:
+                if reader.GetNumberOfSteps() != expected_steps or not reader.GetHasTemporalData():
+                    raise RuntimeError(
+                        f"temporal state changed after reading step {step}: "
+                        f"expected {expected_steps} steps, got {reader.GetNumberOfSteps()}, "
+                        f"HasTemporalData={bool(reader.GetHasTemporalData())}"
+                    )
             summary = summarize_output(output)
-            if args.kind == "ug":
-                validate_ug_output(summary)
+            if args.kind == "unstructured":
+                validate_unstructured_output(summary)
             else:
                 validate_mb_output(output, summary)
     except Exception as exc:

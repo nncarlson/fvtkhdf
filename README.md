@@ -29,10 +29,11 @@ required only for parallel builds.
   grid of root cells, including moving geometry, changing refinement, and
   masked cells. Each MPI rank supplies a separate partition of the trees.
 
-* **MultiBlockDataSet:** A flat collection of UnstructuredGrid blocks.
-  Each block selects its own writer mode, and all temporal blocks share a
-  common timeline. Structured block types and hierarchical nesting are not
-  supported.
+* **MultiBlockDataSet:** A flat collection of ImageData, RectilinearGrid,
+  StructuredGrid, UnstructuredGrid, and HyperTreeGrid blocks in one file. Typed block pointers
+  provide each simple writer's mesh and data methods. Each block selects its
+  own mode, and all temporal blocks share a common timeline. Hierarchical
+  nesting is not supported.
 
 All simple dataset writers support static and time-dependent cell and field
 data. All except HyperTreeGrid also support point data. Depending on the dataset
@@ -136,7 +137,7 @@ can find the package.
 
 This minimal example requires a serial build configured with `-DENABLE_MPI=OFF`.
 It writes a **VTKHDF** UnstructuredGrid dataset containing a single tetrahedral
-cell with scalar point data. For MPI usage, see [ug_static.F90](example/ug_static.F90).
+cell with scalar point data. For MPI usage, see [unstructured_static.F90](example/unstructured_static.F90).
 More complete examples for all supported dataset types are provided in the
 [example directory](example/README.md).
 
@@ -144,12 +145,12 @@ More complete examples for all supported dataset types are provided in the
 program quick_start
 
   use,intrinsic :: iso_fortran_env, only: int8
-  use vtkhdf_ug_file_type
+  use vtkhdf_unstructured_file_type
   use vtkhdf_vtk_cell_types, only: VTK_TETRA
   implicit none
 
   ! 1. Declare the file object (Unstructured Grid)
-  type(vtkhdf_ug_file) :: myfile
+  type(vtkhdf_unstructured_file) :: myfile
 
   ! Data arrays
   real, allocatable :: points(:,:)
@@ -191,9 +192,8 @@ Planned and prospective features include:
   - Add support for [polyhedron cells](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#polyhedron-support)
 
 * Composite VTK datasets
-  - Add structured block types to MultiBlockDataSet.
-  - Replace the legacy MultiBlockDataSet with PartitionedDataSetCollection ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26))
-  - Implement a general `Assembly` tree for PartitionedDataSetCollection to replace the existing flat tree.
+  - Add a PartitionedDataSetCollection writer ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26)).
+  - Implement a general `Assembly` tree for PartitionedDataSetCollection.
 
 ### Additional Dataset Types
 

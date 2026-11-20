@@ -26,11 +26,20 @@ program vtkhdf_moving_grid_fail_test
   end if
   mode = VTKHDF_MOVING_MESH
   if (scenario == 'dynamic') mode = VTKHDF_DYNAMIC_MESH
+  select type (file)
+  type is (vtkhdf_rectilinear_file)
 #ifdef USE_MPI
   call file%create('moving_fail_'//trim(format)//'_'//trim(scenario)//'.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=mode)
 #else
   call file%create('moving_fail_'//trim(format)//'_'//trim(scenario)//'.vtkhdf',stat,errmsg,mode=mode)
 #endif
+  type is (vtkhdf_structured_file)
+#ifdef USE_MPI
+  call file%create('moving_fail_'//trim(format)//'_'//trim(scenario)//'.vtkhdf',MPI_COMM_WORLD,stat,errmsg,mode=mode)
+#else
+  call file%create('moving_fail_'//trim(format)//'_'//trim(scenario)//'.vtkhdf',stat,errmsg,mode=mode)
+#endif
+  end select
   if (stat /= 0) error stop errmsg
   if (scenario == 'dynamic') then
     call file%close

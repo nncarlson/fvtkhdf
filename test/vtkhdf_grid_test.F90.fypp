@@ -73,7 +73,7 @@ contains
       point_var = file%register_temporal_point_data('value',0.0_${kind}$,attribute='Scalars')
       field_var = file%register_temporal_field_data('energy',0.0_${kind}$)
     else
-      call file%write_field_data('energy',42.0_${kind}$)
+      call file%write_field_data('energy',data=42.0_${kind}$)
     end if
 #:if grid == 'structured'
     ! Geometry may be assembled during the first step, after registration.
@@ -147,7 +147,7 @@ contains
           deallocate(values)
         end do
       end if
-      if (temporal) call file%write_field_data(field_var,42.0_${kind}$+step)
+      if (temporal) call file%write_field_data(field_var,data=42.0_${kind}$+step)
     end do
     ! Close must finalize the last step and release all geometry/data resources.
     call file%flush()

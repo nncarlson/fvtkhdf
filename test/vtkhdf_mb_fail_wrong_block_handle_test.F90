@@ -10,7 +10,7 @@ program vtkhdf_mb_fail_wrong_block_handle_test
   implicit none
 
   type(vtkhdf_mb_file) :: vizfile
-  type(vtkhdf_block_handle) :: hblk_a, hblk_b
+  type(vtkhdf_unstructured_block), pointer :: hblk_a => null(), hblk_b => null()
   type(vtkhdf_point_data_handle) :: hpoint_radius
   integer :: rank, nproc, stat
   character(:), allocatable :: errmsg
@@ -30,19 +30,19 @@ program vtkhdf_mb_fail_wrong_block_handle_test
   call get_tet_cube_mesh_data(points, cnode, xcnode, types)
   call shift_points(points, dx=real(rank, r8))
 
-  hblk_a = vizfile%add_block('Block-A', mode=UG_FIXED_MESH)
-  call vizfile%write_mesh(hblk_a, points, cnode, xcnode, types)
+  call vizfile%add_block('Block-A', hblk_a, mode=VTKHDF_FIXED_MESH)
+  call hblk_a%write_mesh(points, cnode, xcnode, types)
 
-  hblk_b = vizfile%add_block('Block-B', mode=UG_FIXED_MESH)
-  call vizfile%write_mesh(hblk_b, points, cnode, xcnode, types)
+  call vizfile%add_block('Block-B', hblk_b, mode=VTKHDF_FIXED_MESH)
+  call hblk_b%write_mesh(points, cnode, xcnode, types)
 
-  hpoint_radius = vizfile%register_temporal_point_data(hblk_a, 'point-radius', 0.0_r8)
+  hpoint_radius = hblk_a%register_temporal_point_data('point-radius', 0.0_r8)
   call get_scalar_point_data(points, scalar_point_data)
 
   call vizfile%start_time_step(0.0_r8)
 
   ! Must fail: the temporal handle belongs to Block-A, not Block-B.
-  call vizfile%write_point_data(hblk_b, hpoint_radius, scalar_point_data)
+  call hblk_b%write_point_data(hpoint_radius, scalar_point_data)
 
   ! Return successfully if the expected assertion did not fire.
   call test_env_finalize()

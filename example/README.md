@@ -9,14 +9,14 @@ From the `build/example` directory:
 **Parallel Build**
 
 ```bash
-mpiexec -np 3 ./ug_fixed_mesh
+mpiexec -np 3 ./unstructured_fixed_mesh
 paraview example.vtkhdf
 ```
 
 **Serial Build**
 
 ```bash
-./ug_fixed_mesh
+./unstructured_fixed_mesh
 paraview example.vtkhdf
 ```
 
@@ -55,17 +55,20 @@ written as in the fixed-mesh example. It supports serial and MPI builds.
 
 ## HyperTreeGrid
 
-`htg_dynamic_mesh.F90` writes a 2D grid of quadtrees that are refined around a
+`hypertree_dynamic_mesh.F90` writes a 2D grid of quadtrees that are refined around a
 circle moving across the grid. It demonstrates `VTKHDF_DYNAMIC_MESH`, the
 breadth-first cell order of each tree, a new topology at every step, and
 temporal cell and field data. Root cells are dealt to the MPI ranks in turn.
-See the [HyperTreeGrid manual](../doc/sphinx/htg.rst). It supports serial and
+See the [HyperTreeGrid manual](../doc/sphinx/hypertree.rst). It supports serial and
 MPI builds.
 
 ## UnstructuredGrid and MultiBlockDataSet
 
-`ug_static.F90`, `ug_fixed_mesh.F90`, `ug_moving_mesh.F90`, and
-`ug_dynamic_mesh.F90` demonstrate the four UnstructuredGrid writer modes.
+`unstructured_static.F90`, `unstructured_fixed_mesh.F90`, `unstructured_moving_mesh.F90`, and
+`unstructured_dynamic_mesh.F90` demonstrate the four UnstructuredGrid writer modes.
 `mb_example1.F90` writes a collection of named UnstructuredGrid blocks with a
-shared timeline. These examples write `example.vtkhdf`, replacing any file
+shared timeline, using typed block pointers for mesh and data writes. The MB
+writer also accepts ImageData, RectilinearGrid, StructuredGrid, and HyperTreeGrid blocks;
+the [MultiBlock manual](../doc/sphinx/mb.rst) includes a heterogeneous example.
+These examples write `example.vtkhdf`, replacing any file
 with that name in the working directory.

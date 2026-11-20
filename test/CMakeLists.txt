@@ -28,46 +28,92 @@ endfunction()
 
 vtkhdf_add_test_target(vtkhdf_mb_test vtkhdf_mb_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_basic_blocks_test vtkhdf_mb_basic_blocks_test.F90)
+vtkhdf_add_test_target(vtkhdf_mb_typed_blocks_test vtkhdf_mb_typed_blocks_test.F90)
+vtkhdf_add_test_target(vtkhdf_mb_collections_test vtkhdf_mb_collections_test.F90)
+vtkhdf_add_test_target(vtkhdf_mb_hypertree_test vtkhdf_mb_hypertree_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_duplicate_block_name_test vtkhdf_mb_duplicate_block_name_test.F90)
-vtkhdf_add_test_target(vtkhdf_ug_test vtkhdf_ug_test.F90)
-vtkhdf_add_test_target(vtkhdf_ug_static_test vtkhdf_ug_static_test.F90)
-vtkhdf_add_test_target(vtkhdf_ug_fixed_file_test vtkhdf_ug_fixed_test.F90)
-vtkhdf_add_test_target(vtkhdf_ug_fail_late_register_test vtkhdf_ug_fail_late_register_test.F90)
-vtkhdf_add_test_target(vtkhdf_ug_fail_wrong_cell_count_test vtkhdf_ug_fail_wrong_cell_count_test.F90)
-vtkhdf_add_test_target(vtkhdf_ug_fail_data_before_mesh_test vtkhdf_ug_fail_data_before_mesh_test.F90)
+vtkhdf_add_test_target(vtkhdf_unstructured_test vtkhdf_unstructured_test.F90)
+vtkhdf_add_test_target(vtkhdf_unstructured_static_test vtkhdf_unstructured_static_test.F90)
+vtkhdf_add_test_target(vtkhdf_unstructured_fixed_file_test vtkhdf_unstructured_fixed_test.F90)
+vtkhdf_add_test_target(vtkhdf_unstructured_fail_late_register_test vtkhdf_unstructured_fail_late_register_test.F90)
+vtkhdf_add_test_target(vtkhdf_unstructured_fail_wrong_cell_count_test vtkhdf_unstructured_fail_wrong_cell_count_test.F90)
+vtkhdf_add_test_target(vtkhdf_unstructured_fail_data_before_mesh_test vtkhdf_unstructured_fail_data_before_mesh_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_fail_wrong_block_handle_test vtkhdf_mb_fail_wrong_block_handle_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_fail_late_block_test vtkhdf_mb_fail_late_block_test.F90)
-vtkhdf_add_test_target(vtkhdf_moving_ug_test vtkhdf_moving_ug_test.F90)
-vtkhdf_add_test_target(vtkhdf_dynamic_ug_test vtkhdf_dynamic_ug_test.F90)
+vtkhdf_add_test_target(vtkhdf_moving_unstructured_test vtkhdf_moving_unstructured_test.F90)
+vtkhdf_add_test_target(vtkhdf_dynamic_unstructured_test vtkhdf_dynamic_unstructured_test.F90)
 vtkhdf_add_test_target(vtkhdf_chunk_test vtkhdf_chunk_test.F90)
 vtkhdf_add_test_target(vtkhdf_fail_foreign_data_handle_test vtkhdf_fail_foreign_data_handle_test.F90)
 
 vtkhdf_add_runtime_test(vtkhdf_mb_fixture_file vtkhdf_mb_test)
 vtkhdf_add_runtime_test(vtkhdf_mb_basic_blocks_file_type vtkhdf_mb_basic_blocks_test)
+vtkhdf_add_runtime_test(vtkhdf_mb_typed_blocks vtkhdf_mb_typed_blocks_test)
+set_tests_properties(vtkhdf_mb_typed_blocks PROPERTIES FIXTURES_SETUP vtkhdf_mb_typed_files)
+foreach(check layout reader)
+  add_test(NAME vtkhdf_mb_typed_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_typed_blocks_check.py
+            ${check} ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties(vtkhdf_mb_typed_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_mb_typed_files SKIP_RETURN_CODE 77)
+endforeach()
+vtkhdf_add_runtime_test(vtkhdf_mb_collections vtkhdf_mb_collections_test)
+set_tests_properties(vtkhdf_mb_collections PROPERTIES FIXTURES_SETUP vtkhdf_mb_collection_files)
+foreach(check layout reader)
+  add_test(NAME vtkhdf_mb_collections_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_collections_check.py
+            ${check} ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties(vtkhdf_mb_collections_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_mb_collection_files SKIP_RETURN_CODE 77)
+endforeach()
+vtkhdf_add_runtime_test(vtkhdf_mb_hypertree vtkhdf_mb_hypertree_test)
+set_tests_properties(vtkhdf_mb_hypertree PROPERTIES FIXTURES_SETUP vtkhdf_mb_hypertree_files)
+foreach(check layout reader)
+  add_test(NAME vtkhdf_mb_hypertree_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_hypertree_check.py
+            ${check} ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties(vtkhdf_mb_hypertree_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_mb_hypertree_files SKIP_RETURN_CODE 77)
+endforeach()
+if(ENABLE_MPI)
+  set(MB_HYPERTREE_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/mb-hypertree-two-rank)
+  file(MAKE_DIRECTORY ${MB_HYPERTREE_TWO_RANK_DIR})
+  add_test(NAME vtkhdf_mb_hypertree_two_rank
+    COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
+            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_mb_hypertree_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_mb_hypertree_two_rank PROPERTIES PROCESSORS 2
+    WORKING_DIRECTORY ${MB_HYPERTREE_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_mb_hypertree_two_rank_files)
+  foreach(check layout reader)
+    add_test(NAME vtkhdf_mb_hypertree_two_rank_${check}
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_hypertree_check.py
+              ${check} ${MB_HYPERTREE_TWO_RANK_DIR})
+    set_tests_properties(vtkhdf_mb_hypertree_two_rank_${check} PROPERTIES
+      FIXTURES_REQUIRED vtkhdf_mb_hypertree_two_rank_files SKIP_RETURN_CODE 77)
+  endforeach()
+endif()
 vtkhdf_add_runtime_test(vtkhdf_mb_duplicate_block_name_file_type vtkhdf_mb_duplicate_block_name_test)
-vtkhdf_add_runtime_test(vtkhdf_ug_fixture_file vtkhdf_ug_test)
-vtkhdf_add_runtime_test(vtkhdf_ug_static_file_type vtkhdf_ug_static_test)
-vtkhdf_add_runtime_test(vtkhdf_ug_fixed_file_type vtkhdf_ug_fixed_file_test)
-vtkhdf_add_runtime_test(vtkhdf_ug_fail_late_register vtkhdf_ug_fail_late_register_test)
-vtkhdf_add_runtime_test(vtkhdf_ug_fail_wrong_cell_count vtkhdf_ug_fail_wrong_cell_count_test)
-vtkhdf_add_runtime_test(vtkhdf_ug_fail_data_before_mesh vtkhdf_ug_fail_data_before_mesh_test)
+vtkhdf_add_runtime_test(vtkhdf_unstructured_fixture_file vtkhdf_unstructured_test)
+vtkhdf_add_runtime_test(vtkhdf_unstructured_static_file_type vtkhdf_unstructured_static_test)
+vtkhdf_add_runtime_test(vtkhdf_unstructured_fixed_file_type vtkhdf_unstructured_fixed_file_test)
+vtkhdf_add_runtime_test(vtkhdf_unstructured_fail_late_register vtkhdf_unstructured_fail_late_register_test)
+vtkhdf_add_runtime_test(vtkhdf_unstructured_fail_wrong_cell_count vtkhdf_unstructured_fail_wrong_cell_count_test)
+vtkhdf_add_runtime_test(vtkhdf_unstructured_fail_data_before_mesh vtkhdf_unstructured_fail_data_before_mesh_test)
 vtkhdf_add_runtime_test(vtkhdf_mb_fail_wrong_block_handle vtkhdf_mb_fail_wrong_block_handle_test)
 vtkhdf_add_runtime_test(vtkhdf_mb_fail_late_block vtkhdf_mb_fail_late_block_test)
-vtkhdf_add_runtime_test(vtkhdf_moving_ug_file_type vtkhdf_moving_ug_test)
-vtkhdf_add_runtime_test(vtkhdf_dynamic_ug_file_type vtkhdf_dynamic_ug_test)
+vtkhdf_add_runtime_test(vtkhdf_moving_unstructured_file_type vtkhdf_moving_unstructured_test)
+vtkhdf_add_runtime_test(vtkhdf_dynamic_unstructured_file_type vtkhdf_dynamic_unstructured_test)
 vtkhdf_add_runtime_test(vtkhdf_chunk_settings vtkhdf_chunk_test)
 
 set_tests_properties(
-  vtkhdf_ug_fail_late_register
-  vtkhdf_ug_fail_wrong_cell_count
-  vtkhdf_ug_fail_data_before_mesh
+  vtkhdf_unstructured_fail_late_register
+  vtkhdf_unstructured_fail_wrong_cell_count
+  vtkhdf_unstructured_fail_data_before_mesh
   vtkhdf_mb_fail_wrong_block_handle
   vtkhdf_mb_fail_late_block
   PROPERTIES
   WILL_FAIL TRUE
 )
 
-foreach(format ug mb)
+foreach(format unstructured mb)
   foreach(association cell point field)
     set(test_name vtkhdf_${format}_fail_foreign_${association}_handle)
     vtkhdf_add_runtime_test(${test_name} vtkhdf_fail_foreign_data_handle_test ${format} ${association})
@@ -107,58 +153,58 @@ else()
 endif()
 
 if(ENABLE_MPI)
-  set(VTKHDF_DYNAMIC_UG_NUMBER_OF_POINTS_REGEX "\\(0\\): 4, 4, 4, 4, 5, 5, 5, 5")
-  set(VTKHDF_DYNAMIC_UG_NUMBER_OF_CELLS_REGEX "\\(0\\): 1, 1, 1, 1, 4, 4, 4, 4")
-  set(VTKHDF_DYNAMIC_UG_POINT_OFFSETS_REGEX "\\(0\\): 0, 0, 16, 36, 56")
-  set(VTKHDF_DYNAMIC_UG_CELL_OFFSETS_REGEX "\\(0\\): 0, 0, 4, 4, 4")
-  set(VTKHDF_DYNAMIC_UG_CONNECTIVITY_ID_OFFSETS_REGEX "\\(0\\): 0, 0, 16, 16, 16")
+  set(VTKHDF_DYNAMIC_UNSTRUCTURED_NUMBER_OF_POINTS_REGEX "\\(0\\): 4, 4, 4, 4, 5, 5, 5, 5")
+  set(VTKHDF_DYNAMIC_UNSTRUCTURED_NUMBER_OF_CELLS_REGEX "\\(0\\): 1, 1, 1, 1, 4, 4, 4, 4")
+  set(VTKHDF_DYNAMIC_UNSTRUCTURED_POINT_OFFSETS_REGEX "\\(0\\): 0, 0, 16, 36, 56")
+  set(VTKHDF_DYNAMIC_UNSTRUCTURED_CELL_OFFSETS_REGEX "\\(0\\): 0, 0, 4, 4, 4")
+  set(VTKHDF_DYNAMIC_UNSTRUCTURED_CONNECTIVITY_ID_OFFSETS_REGEX "\\(0\\): 0, 0, 16, 16, 16")
 else()
-  set(VTKHDF_DYNAMIC_UG_NUMBER_OF_POINTS_REGEX "\\(0\\): 4, 5")
-  set(VTKHDF_DYNAMIC_UG_NUMBER_OF_CELLS_REGEX "\\(0\\): 1, 4")
-  set(VTKHDF_DYNAMIC_UG_POINT_OFFSETS_REGEX "\\(0\\): 0, 0, 4, 9, 14")
-  set(VTKHDF_DYNAMIC_UG_CELL_OFFSETS_REGEX "\\(0\\): 0, 0, 1, 1, 1")
-  set(VTKHDF_DYNAMIC_UG_CONNECTIVITY_ID_OFFSETS_REGEX "\\(0\\): 0, 0, 4, 4, 4")
+  set(VTKHDF_DYNAMIC_UNSTRUCTURED_NUMBER_OF_POINTS_REGEX "\\(0\\): 4, 5")
+  set(VTKHDF_DYNAMIC_UNSTRUCTURED_NUMBER_OF_CELLS_REGEX "\\(0\\): 1, 4")
+  set(VTKHDF_DYNAMIC_UNSTRUCTURED_POINT_OFFSETS_REGEX "\\(0\\): 0, 0, 4, 9, 14")
+  set(VTKHDF_DYNAMIC_UNSTRUCTURED_CELL_OFFSETS_REGEX "\\(0\\): 0, 0, 1, 1, 1")
+  set(VTKHDF_DYNAMIC_UNSTRUCTURED_CONNECTIVITY_ID_OFFSETS_REGEX "\\(0\\): 0, 0, 4, 4, 4")
 endif()
 
 if(H5DUMP_EXECUTABLE)
 
   add_test(
-    NAME vtkhdf_ug_static_cell_attribute
+    NAME vtkhdf_unstructured_static_cell_attribute
     COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/CellData/static-cell-scalar/Attribute
-            ${CMAKE_CURRENT_BINARY_DIR}/ug_test.vtkhdf
+            ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
   )
-  set_tests_properties(vtkhdf_ug_static_cell_attribute PROPERTIES
-    DEPENDS vtkhdf_ug_fixture_file
+  set_tests_properties(vtkhdf_unstructured_static_cell_attribute PROPERTIES
+    DEPENDS vtkhdf_unstructured_fixture_file
     PASS_REGULAR_EXPRESSION "\"Scalars\""
   )
 
   add_test(
-    NAME vtkhdf_ug_static_point_attribute
+    NAME vtkhdf_unstructured_static_point_attribute
     COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/PointData/static-point-vector/Attribute
-            ${CMAKE_CURRENT_BINARY_DIR}/ug_test.vtkhdf
+            ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
   )
-  set_tests_properties(vtkhdf_ug_static_point_attribute PROPERTIES
-    DEPENDS vtkhdf_ug_fixture_file
+  set_tests_properties(vtkhdf_unstructured_static_point_attribute PROPERTIES
+    DEPENDS vtkhdf_unstructured_fixture_file
     PASS_REGULAR_EXPRESSION "\"Vectors\""
   )
 
   add_test(
-    NAME vtkhdf_ug_temporal_cell_attribute
+    NAME vtkhdf_unstructured_temporal_cell_attribute
     COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/CellData/cell-radius/Attribute
-            ${CMAKE_CURRENT_BINARY_DIR}/ug_test.vtkhdf
+            ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
   )
-  set_tests_properties(vtkhdf_ug_temporal_cell_attribute PROPERTIES
-    DEPENDS vtkhdf_ug_fixture_file
+  set_tests_properties(vtkhdf_unstructured_temporal_cell_attribute PROPERTIES
+    DEPENDS vtkhdf_unstructured_fixture_file
     PASS_REGULAR_EXPRESSION "\"Scalars\""
   )
 
   add_test(
-    NAME vtkhdf_ug_temporal_point_attribute
+    NAME vtkhdf_unstructured_temporal_point_attribute
     COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/PointData/point-velocity/Attribute
-            ${CMAKE_CURRENT_BINARY_DIR}/ug_test.vtkhdf
+            ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
   )
-  set_tests_properties(vtkhdf_ug_temporal_point_attribute PROPERTIES
-    DEPENDS vtkhdf_ug_fixture_file
+  set_tests_properties(vtkhdf_unstructured_temporal_point_attribute PROPERTIES
+    DEPENDS vtkhdf_unstructured_fixture_file
     PASS_REGULAR_EXPRESSION "\"Vectors\""
   )
 
@@ -271,53 +317,53 @@ if(H5DUMP_EXECUTABLE)
   endif()
 
   add_test(
-    NAME vtkhdf_dynamic_ug_number_of_points
+    NAME vtkhdf_dynamic_unstructured_number_of_points
     COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/NumberOfPoints
-            ${CMAKE_CURRENT_BINARY_DIR}/dyn_ug_test.vtkhdf
+            ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
   )
-  set_tests_properties(vtkhdf_dynamic_ug_number_of_points PROPERTIES
-    DEPENDS vtkhdf_dynamic_ug_file_type
-    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UG_NUMBER_OF_POINTS_REGEX}"
+  set_tests_properties(vtkhdf_dynamic_unstructured_number_of_points PROPERTIES
+    DEPENDS vtkhdf_dynamic_unstructured_file_type
+    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_NUMBER_OF_POINTS_REGEX}"
   )
 
   add_test(
-    NAME vtkhdf_dynamic_ug_number_of_cells
+    NAME vtkhdf_dynamic_unstructured_number_of_cells
     COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/NumberOfCells
-            ${CMAKE_CURRENT_BINARY_DIR}/dyn_ug_test.vtkhdf
+            ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
   )
-  set_tests_properties(vtkhdf_dynamic_ug_number_of_cells PROPERTIES
-    DEPENDS vtkhdf_dynamic_ug_file_type
-    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UG_NUMBER_OF_CELLS_REGEX}"
+  set_tests_properties(vtkhdf_dynamic_unstructured_number_of_cells PROPERTIES
+    DEPENDS vtkhdf_dynamic_unstructured_file_type
+    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_NUMBER_OF_CELLS_REGEX}"
   )
 
   add_test(
-    NAME vtkhdf_dynamic_ug_point_offsets
+    NAME vtkhdf_dynamic_unstructured_point_offsets
     COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/Steps/PointOffsets
-            ${CMAKE_CURRENT_BINARY_DIR}/dyn_ug_test.vtkhdf
+            ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
   )
-  set_tests_properties(vtkhdf_dynamic_ug_point_offsets PROPERTIES
-    DEPENDS vtkhdf_dynamic_ug_file_type
-    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UG_POINT_OFFSETS_REGEX}"
+  set_tests_properties(vtkhdf_dynamic_unstructured_point_offsets PROPERTIES
+    DEPENDS vtkhdf_dynamic_unstructured_file_type
+    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_POINT_OFFSETS_REGEX}"
   )
 
   add_test(
-    NAME vtkhdf_dynamic_ug_cell_offsets
+    NAME vtkhdf_dynamic_unstructured_cell_offsets
     COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/Steps/CellOffsets
-            ${CMAKE_CURRENT_BINARY_DIR}/dyn_ug_test.vtkhdf
+            ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
   )
-  set_tests_properties(vtkhdf_dynamic_ug_cell_offsets PROPERTIES
-    DEPENDS vtkhdf_dynamic_ug_file_type
-    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UG_CELL_OFFSETS_REGEX}"
+  set_tests_properties(vtkhdf_dynamic_unstructured_cell_offsets PROPERTIES
+    DEPENDS vtkhdf_dynamic_unstructured_file_type
+    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_CELL_OFFSETS_REGEX}"
   )
 
   add_test(
-    NAME vtkhdf_dynamic_ug_connectivity_id_offsets
+    NAME vtkhdf_dynamic_unstructured_connectivity_id_offsets
     COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/Steps/ConnectivityIdOffsets
-            ${CMAKE_CURRENT_BINARY_DIR}/dyn_ug_test.vtkhdf
+            ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
   )
-  set_tests_properties(vtkhdf_dynamic_ug_connectivity_id_offsets PROPERTIES
-    DEPENDS vtkhdf_dynamic_ug_file_type
-    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UG_CONNECTIVITY_ID_OFFSETS_REGEX}"
+  set_tests_properties(vtkhdf_dynamic_unstructured_connectivity_id_offsets PROPERTIES
+    DEPENDS vtkhdf_dynamic_unstructured_file_type
+    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_CONNECTIVITY_ID_OFFSETS_REGEX}"
   )
 
   add_test(
@@ -342,12 +388,12 @@ if(H5DUMP_EXECUTABLE)
 endif()
 
 add_test(
-  NAME vtkhdf_ug_reader_smoke
+  NAME vtkhdf_unstructured_reader_smoke
   COMMAND ${Python3_EXECUTABLE} ${VTKHDF_READER_SMOKE_SCRIPT}
-          ug ${CMAKE_CURRENT_BINARY_DIR}/ug_test.vtkhdf
+          unstructured ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
 )
-set_tests_properties(vtkhdf_ug_reader_smoke PROPERTIES
-  DEPENDS vtkhdf_ug_fixture_file
+set_tests_properties(vtkhdf_unstructured_reader_smoke PROPERTIES
+  DEPENDS vtkhdf_unstructured_fixture_file
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   SKIP_RETURN_CODE 77
 )
@@ -358,6 +404,17 @@ add_test(
           mb ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
 )
 set_tests_properties(vtkhdf_mb_reader_smoke PROPERTIES
+  DEPENDS vtkhdf_mb_fixture_file
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  SKIP_RETURN_CODE 77
+)
+
+add_test(
+  NAME vtkhdf_mb_reader_temporal_state
+  COMMAND ${Python3_EXECUTABLE} ${VTKHDF_READER_SMOKE_SCRIPT}
+          mb ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf --check-temporal-state
+)
+set_tests_properties(vtkhdf_mb_reader_temporal_state PROPERTIES
   DEPENDS vtkhdf_mb_fixture_file
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   SKIP_RETURN_CODE 77
@@ -394,21 +451,21 @@ foreach(case bounds source type components late outside_step missing field_dupli
   set_tests_properties(vtkhdf_image_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
 endforeach()
 # Require the duplicate-write assertion, rather than accepting a setup failure.
-set(ug_duplicate_command $<TARGET_FILE:vtkhdf_image_fail_test>)
-set(ug_duplicate_processors 1)
+set(unstructured_duplicate_command $<TARGET_FILE:vtkhdf_image_fail_test>)
+set(unstructured_duplicate_processors 1)
 if(ENABLE_MPI)
-  list(PREPEND ug_duplicate_command ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4)
-  list(APPEND ug_duplicate_command ${MPIEXEC_POSTFLAGS})
-  set(ug_duplicate_processors 4)
+  list(PREPEND unstructured_duplicate_command ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4)
+  list(APPEND unstructured_duplicate_command ${MPIEXEC_POSTFLAGS})
+  set(unstructured_duplicate_processors 4)
 endif()
-list(APPEND ug_duplicate_command ug_duplicate)
-add_test(NAME vtkhdf_image_fail_ug_duplicate
+list(APPEND unstructured_duplicate_command unstructured_duplicate)
+add_test(NAME vtkhdf_image_fail_unstructured_duplicate
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_expect_assertion.py
-          --source ${PROJECT_SOURCE_DIR}/src/vtkhdf_ug_file_type.F90.fypp
+          --source ${PROJECT_SOURCE_DIR}/src/vtkhdf_unstructured_writer_type.F90.fypp
           --assertion "no double writing in a single step"
-          -- ${ug_duplicate_command})
-set_tests_properties(vtkhdf_image_fail_ug_duplicate PROPERTIES
-  PROCESSORS ${ug_duplicate_processors}
+          -- ${unstructured_duplicate_command})
+set_tests_properties(vtkhdf_image_fail_unstructured_duplicate PROPERTIES
+  PROCESSORS ${unstructured_duplicate_processors}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   TIMEOUT 30)
 # Rank-disagreement checks use ASSERT and are absent with NDEBUG.
@@ -489,6 +546,25 @@ endforeach()
 vtkhdf_add_test_target(vtkhdf_simple_dataset_test vtkhdf_simple_dataset_test.F90)
 vtkhdf_add_runtime_test(vtkhdf_simple_dataset_lifecycle vtkhdf_simple_dataset_test)
 
+add_fypp_sources(UNSTRUCTURED_CONSTANT_DATA_TEST_SRC
+  SOURCES vtkhdf_unstructured_constant_data_test.F90.fypp FLAGS --line-numbering)
+vtkhdf_add_test_target(vtkhdf_unstructured_constant_data_test "${UNSTRUCTURED_CONSTANT_DATA_TEST_SRC}")
+vtkhdf_add_runtime_test(vtkhdf_unstructured_constant_data_files vtkhdf_unstructured_constant_data_test)
+set_tests_properties(vtkhdf_unstructured_constant_data_files PROPERTIES FIXTURES_SETUP vtkhdf_unstructured_constant_files)
+foreach(check layout reader)
+  add_test(NAME vtkhdf_unstructured_constant_data_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_unstructured_constant_data_check.py
+            ${check} ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties(vtkhdf_unstructured_constant_data_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_unstructured_constant_files SKIP_RETURN_CODE 77)
+endforeach()
+vtkhdf_add_test_target(vtkhdf_unstructured_constant_data_fail_test vtkhdf_unstructured_constant_data_fail_test.F90)
+foreach(case dynamic_point dynamic_cell wrong_point_count wrong_cell_count missing_point missing_cell)
+  vtkhdf_add_runtime_test(vtkhdf_unstructured_constant_data_fail_${case}
+    vtkhdf_unstructured_constant_data_fail_test ${case})
+  set_tests_properties(vtkhdf_unstructured_constant_data_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+endforeach()
+
 add_fypp_sources(CONSTANT_FIELD_TEST_SRC SOURCES vtkhdf_constant_field_test.F90.fypp FLAGS --line-numbering)
 vtkhdf_add_test_target(vtkhdf_constant_field_test "${CONSTANT_FIELD_TEST_SRC}")
 vtkhdf_add_runtime_test(vtkhdf_constant_field_files vtkhdf_constant_field_test)
@@ -547,37 +623,96 @@ foreach(case duplicate axis_length)
 endforeach()
 
 # HyperTreeGrid: breadth-first tree descriptors, per-part coordinates, and a mask.
-vtkhdf_add_test_target(vtkhdf_htg_test vtkhdf_htg_test.F90)
-vtkhdf_add_runtime_test(vtkhdf_htg_file_types vtkhdf_htg_test)
-set_tests_properties(vtkhdf_htg_file_types PROPERTIES FIXTURES_SETUP vtkhdf_htg_files)
+vtkhdf_add_test_target(vtkhdf_hypertree_test vtkhdf_hypertree_test.F90)
+vtkhdf_add_runtime_test(vtkhdf_hypertree_file_types vtkhdf_hypertree_test)
+set_tests_properties(vtkhdf_hypertree_file_types PROPERTIES FIXTURES_SETUP vtkhdf_hypertree_files)
 foreach(check layout reader)
-  add_test(NAME vtkhdf_htg_${check}
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_htg_check.py
+  add_test(NAME vtkhdf_hypertree_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_hypertree_check.py
             ${check} ${CMAKE_CURRENT_BINARY_DIR})
-  set_tests_properties(vtkhdf_htg_${check} PROPERTIES
-    FIXTURES_REQUIRED vtkhdf_htg_files SKIP_RETURN_CODE 77)
+  set_tests_properties(vtkhdf_hypertree_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_hypertree_files SKIP_RETURN_CODE 77)
 endforeach()
 if(ENABLE_MPI)
-  set(HTG_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/htg-two-rank)
-  file(MAKE_DIRECTORY ${HTG_TWO_RANK_DIR})
-  add_test(NAME vtkhdf_htg_two_rank
+  set(HYPERTREE_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/hypertree-two-rank)
+  file(MAKE_DIRECTORY ${HYPERTREE_TWO_RANK_DIR})
+  add_test(NAME vtkhdf_hypertree_two_rank
     COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
-            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_htg_test ${MPIEXEC_POSTFLAGS})
-  set_tests_properties(vtkhdf_htg_two_rank PROPERTIES PROCESSORS 2
-    WORKING_DIRECTORY ${HTG_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_htg_two_rank_files)
+            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_hypertree_test ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_hypertree_two_rank PROPERTIES PROCESSORS 2
+    WORKING_DIRECTORY ${HYPERTREE_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_hypertree_two_rank_files)
   foreach(check layout reader)
-    add_test(NAME vtkhdf_htg_two_rank_${check}
-      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_htg_check.py
-              ${check} ${HTG_TWO_RANK_DIR})
-    set_tests_properties(vtkhdf_htg_two_rank_${check} PROPERTIES
-      FIXTURES_REQUIRED vtkhdf_htg_two_rank_files SKIP_RETURN_CODE 77)
+    add_test(NAME vtkhdf_hypertree_two_rank_${check}
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_hypertree_check.py
+              ${check} ${HYPERTREE_TWO_RANK_DIR})
+    set_tests_properties(vtkhdf_hypertree_two_rank_${check} PROPERTIES
+      FIXTURES_REQUIRED vtkhdf_hypertree_two_rank_files SKIP_RETURN_CODE 77)
   endforeach()
 endif()
-vtkhdf_add_test_target(vtkhdf_htg_fail_test vtkhdf_htg_fail_test.F90)
+vtkhdf_add_test_target(vtkhdf_hypertree_fail_test vtkhdf_hypertree_fail_test.F90)
 foreach(case no_grid bad_dims bad_branch_factor grid_twice axis_length tree_id_range missing_cells extra_cells
              masked_refined topology_twice data_before_topology data_before_geometry wrong_cell_count
              geometry_change late_register mesh_after_data static_data missing_data
-             interface_one_name interface_bad_name)
-  vtkhdf_add_runtime_test(vtkhdf_htg_fail_${case} vtkhdf_htg_fail_test ${case})
-  set_tests_properties(vtkhdf_htg_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+             interface_one_name interface_bad_name invalid_mode cell_outside_step temporal_count missing_initial
+             field_outside_step field_late_register)
+  vtkhdf_add_runtime_test(vtkhdf_hypertree_fail_${case} vtkhdf_hypertree_fail_test ${case})
+  set_tests_properties(vtkhdf_hypertree_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
 endforeach()
+
+# Numeric overloads, cell-name/handle isolation, and HTG field lifecycle wiring.
+add_fypp_sources(HYPERTREE_API_TEST_SRC SOURCES vtkhdf_hypertree_api_test.F90.fypp FLAGS --line-numbering)
+vtkhdf_add_test_target(vtkhdf_hypertree_api_test "${HYPERTREE_API_TEST_SRC}")
+vtkhdf_add_runtime_test(vtkhdf_hypertree_api_files vtkhdf_hypertree_api_test)
+set_tests_properties(vtkhdf_hypertree_api_files PROPERTIES FIXTURES_SETUP vtkhdf_hypertree_api_files)
+foreach(check layout reader)
+  add_test(NAME vtkhdf_hypertree_api_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_hypertree_api_check.py
+            ${check} ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties(vtkhdf_hypertree_api_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_hypertree_api_files SKIP_RETURN_CODE 77)
+endforeach()
+
+# These checks require the intended diagnostic, not merely a failing setup.
+foreach(case cell_foreign field_foreign cell_duplicate)
+  set(hypertree_fail_command $<TARGET_FILE:vtkhdf_hypertree_fail_test>)
+  set(hypertree_fail_processors 1)
+  if(ENABLE_MPI)
+    list(PREPEND hypertree_fail_command ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4)
+    list(APPEND hypertree_fail_command ${MPIEXEC_POSTFLAGS})
+    set(hypertree_fail_processors 4)
+  endif()
+  list(APPEND hypertree_fail_command ${case})
+  set(hypertree_fail_source ${PROJECT_SOURCE_DIR}/src/vtkhdf_hypertree_writer_type.F90.fypp)
+  if(case STREQUAL "cell_duplicate")
+    set(hypertree_fail_assertion "no double writing in a single step")
+  elseif(case STREQUAL "cell_foreign")
+    set(hypertree_fail_assertion "INSIST(index >= 1)")
+  else()
+    set(hypertree_fail_source ${PROJECT_SOURCE_DIR}/src/vtkhdf_field_data_type.F90.fypp)
+    set(hypertree_fail_assertion "INSIST(index >= 1 .and. index <= size(this%vars))")
+  endif()
+  add_test(NAME vtkhdf_hypertree_fail_${case}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_expect_assertion.py
+            --source ${hypertree_fail_source} --assertion "${hypertree_fail_assertion}" -- ${hypertree_fail_command})
+  set_tests_properties(vtkhdf_hypertree_fail_${case} PROPERTIES
+    PROCESSORS ${hypertree_fail_processors} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} TIMEOUT 30)
+endforeach()
+# Agreement diagnostics are compiled out with NDEBUG.
+if(ENABLE_MPI)
+  foreach(case mode_mismatch dims_mismatch branch_mismatch)
+    set(test_name vtkhdf_hypertree_fail_${case})
+    if(CMAKE_CONFIGURATION_TYPES)
+      add_test(NAME ${test_name}
+        COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
+                ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_hypertree_fail_test ${MPIEXEC_POSTFLAGS} ${case}
+        CONFIGURATIONS Debug)
+      set_tests_properties(${test_name} PROPERTIES
+        PROCESSORS 4 WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+      vtkhdf_add_runtime_test(${test_name} vtkhdf_hypertree_fail_test ${case})
+    else()
+      continue()
+    endif()
+    set_tests_properties(${test_name} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
+  endforeach()
+endif()

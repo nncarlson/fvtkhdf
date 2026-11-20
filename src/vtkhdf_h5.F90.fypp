@@ -165,11 +165,11 @@ contains
 #:for s in num_specs
   !! Only rank zero's values are referenced. Raw Fortran component-first
   !! arrays have the same memory order as tuple-by-component file selections.
-  subroutine append_field_data_${s["kind"]}$(ctx, loc_id, name, array, ncomp, ntuples)
+  subroutine append_field_data_${s["kind"]}$(ctx, loc_id, name, data, ncomp, ntuples)
     type(vtkhdf_context), intent(in) :: ctx
     integer(hid_t), intent(in) :: loc_id
     character(*), intent(in) :: name
-    ${s["decl"]}$, intent(in) :: array(..)
+    ${s["decl"]}$, intent(in) :: data(..)
     integer, intent(in) :: ncomp, ntuples
     ${s["decl"]}$ :: dummy
     integer(hid_t) :: dset_id, mem_space, file_space, dxpl
@@ -178,20 +178,20 @@ contains
         dset_id, mem_space, file_space)
     call ctx%get_dxpl(dxpl)
     if (ctx%rank == 0 .and. ncomp > 0 .and. ntuples > 0) then
-      select rank (array)
+      select rank (data)
       rank (0)
-        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, [array], mem_space, file_space, dxpl)
+        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, [data], mem_space, file_space, dxpl)
       rank (1)
 #ifdef GNU_BUG20261103
-        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, [array], mem_space, file_space, dxpl)
+        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, [data], mem_space, file_space, dxpl)
 #else
-        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, array, mem_space, file_space, dxpl)
+        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, data, mem_space, file_space, dxpl)
 #endif
       rank (2)
 #ifdef GNU_BUG20261103
-        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, [array], mem_space, file_space, dxpl)
+        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, [data], mem_space, file_space, dxpl)
 #else
-        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, array, mem_space, file_space, dxpl)
+        ierr = H5Dwrite(dset_id, ${s["h5type"]}$, data, mem_space, file_space, dxpl)
 #endif
       rank default
         INSIST(.false.)
