@@ -89,8 +89,7 @@ its topology, the trees.
 
 .. method-doc::
 
-   call file%write_mesh(dims [, branch_factor] [, transposed_root_indexing] &
-                        [, interface_normals_name, interface_intercepts_name])
+   call file%write_mesh(dims [, branch_factor] [, transposed_root_indexing])
 
    Define the grid of root cells. Call exactly once, before writing geometry
    or topology. All ranks supply identical values.
@@ -103,15 +102,6 @@ its topology, the trees.
      refined cell is divided along each nonsingleton axis.
    * ``transposed_root_indexing``: root cells are numbered with x varying
      fastest by default, and with z varying fastest when this is ``.true.``.
-   * ``interface_normals_name``, ``interface_intercepts_name``: the names of
-     the 3-component cell arrays that describe material interfaces, given
-     together or not at all. They are stored as the ``InterfaceNormalsName``
-     and ``InterfaceInterceptsName`` attributes, which make the VTK reader
-     enable the grid's interface. Write the two arrays as ordinary cell data
-     under exactly these names. Because the reader matches the names against
-     cell arrays as stored, they may not contain the characters that cell
-     data names replace (``/``, ``.``, and space).
-
 .. method-doc::
 
    call file%write_mesh_geometry(x, y, z)
@@ -264,6 +254,70 @@ and handle conventions.
    names. A ``name`` containing ``/``, ``.``, or a space therefore appears
    with those characters replaced by underscores; see :doc:`common`.
 
+Material Interface
+------------------
+Use these paired methods to write the normals and intercepts describing a
+material interface. An open writer permits one interface definition, either
+a static write or a temporal registration. No public handle is returned.
+
+.. method-doc::
+
+   call file%write_interface_data(normals, intercepts)
+
+   Both arguments are input rank-2 arrays of shape ``(3,ncell)``, with the
+   same real kind, either ``real32`` or ``real64`` from ``iso_fortran_env``.
+   The second dimension indexes every local cell, including refined cells,
+   in the same tree-by-tree, breadth-first order as ordinary cell data.
+   Empty ranks supply ``(3,0)`` arrays.
+   Values follow VTK's HTG interface-array conventions: the writer stores
+   them without computing intercepts or normalizing normals.
+
+   Without registration, this defines a static pair. The complete mesh must
+   already be written. Static definition is allowed in ``VTKHDF_STATIC``,
+   ``VTKHDF_FIXED_MESH``, and ``VTKHDF_MOVING_MESH`` modes, including during
+   or between steps as for ordinary static cell data. It applies to all
+   steps, including earlier ones. A second static definition is an error.
+
+   After registration, this writes both arrays to the registered temporal
+   datasets. Their kind must match the mold used at registration. A complete
+   current mesh and an open time step are required. Both arrays must be
+   written in the first step and at most once per step. Later omission reuses both
+   arrays together, provided every rank's local cell count remains
+   compatible with the previous write. Incompatible counts require a paired
+   replacement before finalizing the step. Equal counts alone do not imply
+   that values still describe the same cells: after migration, refinement,
+   or reordering, the caller must rewrite the pair when needed.
+
+   Both static and temporal writes establish the usual cell-data barrier:
+   mesh components cannot be changed again until the next step.
+
+.. method-doc::
+
+   call file%register_temporal_interface_data(mold)
+
+   Register a temporal pair before the first ``start_time_step`` call, in
+   any temporal writer mode. The input ``mold`` is a scalar ``real32`` or
+   ``real64`` whose value is ignored. For example,
+   ``call file%register_temporal_interface_data(0.0_real32)`` registers
+   both arrays with kind ``real32``. Registration needs no mesh
+   and does not prevent subsequent mesh writes.
+
+   Only one definition is permitted across static writing and registration
+   combined. Repeated registration and registration after a static write
+   are errors. After registration every interface write takes the temporal
+   path.
+
+These calls are collective over the writer's communicator. All ranks must
+make the same calls in the same order and choose the same kind; values,
+local cell counts, and ignored mold values may differ.
+
+.. note::
+
+   The writer automatically names the interface arrays and sets the VTKHDF
+   ``InterfaceNormalsName`` and ``InterfaceInterceptsName`` attributes to
+   reference them. The default array names are ``vtkInterfaceNormals`` and
+   ``vtkInterfaceIntercepts``; the usual cell-data naming rules resolve collisions.
+
 Field Data
 ----------
 See :doc:`field_data` for the shared static and temporal field data interface,
@@ -298,5 +352,12 @@ Examples
 
 :repo:`example/hypertree_dynamic_mesh.F90` refines a two-dimensional grid of
 quadtrees around a circle that moves across the grid, writing a new topology
-and temporal cell and field data at every step. It shows how to generate the
-breadth-first cell order, and supports serial and MPI builds.
+and temporal cell, field, and material-interface data at every step. The
+interface approximates the circle by straight segments in boundary cells;
+the full grid on both sides is retained, with no masked cells. It shows how
+to generate the breadth-first cell order, and supports serial and MPI builds.
+:repo:`example/hypertree_dynamic_mesh_view.py` creates a ParaView state showing
+the full grid with cell edges, colored by ``level``, and the interface overlaid
+in red. See :repo:`example/README.md` for instructions. The usual HTG material
+surface clips boundary cells to one side; the supplied view uses separate
+filters for the full cells and the interface lines.

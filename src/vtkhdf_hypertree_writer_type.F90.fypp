@@ -73,6 +73,8 @@ module vtkhdf_hypertree_writer_type
 #:endfor
   end interface
 
+  integer, parameter :: INTERFACE_UNDEFINED = 0, INTERFACE_STATIC = 1, INTERFACE_TEMPORAL = 2
+
   ! Adds information for validating data reuse with dynamic meshes.
   type, extends(dataset_record) :: cell_dataset
     integer(int64) :: last_entity_count = 0
@@ -107,6 +109,8 @@ module vtkhdf_hypertree_writer_type
     integer(int64) :: desc_offset = 0, desc_next_offset = 0
     integer(int64) :: mask_offset = 0, mask_next_offset = 0
     integer(int64) :: part_offset = 0, part_next_offset = 0
+    integer :: interface_state = INTERFACE_UNDEFINED, interface_kind = 0
+    type(vtkhdf_cell_data_handle) :: interface_handles(2)
     type(cell_dataset_list) :: cell_data
     type(field_data_list) :: field_data
   contains
@@ -114,6 +118,12 @@ module vtkhdf_hypertree_writer_type
     ! START_TIME_STEP is inherited from vtkhdf_simple_dataset.
     procedure :: close
     procedure :: write_mesh
+#:for kind, decl, h5type in reals
+    generic :: write_interface_data => write_interface_data_${kind}$
+    procedure, private :: write_interface_data_${kind}$
+    generic :: register_temporal_interface_data => register_temporal_interface_data_${kind}$
+    procedure, private :: register_temporal_interface_data_${kind}$
+#:endfor
 #:for rkind, rdecl, rh5type in reals
     generic :: write_mesh_geometry => write_mesh_geometry_${rkind}$
     procedure, private :: write_mesh_geometry_${rkind}$
@@ -334,21 +344,13 @@ contains
 
   !! Define the grid of root cells. DIMS holds the number of grid points along
   !! each axis, as for a RectilinearGrid; a singleton axis has one point.
-  !! INTERFACE_NORMALS_NAME and INTERFACE_INTERCEPTS_NAME, given together,
-  !! name the 3-component cell arrays that describe material interfaces. They
-  !! are stored as root attributes, which the VTK reader uses to enable the
-  !! grid's interface. The reader resolves them against cell array names as
-  !! stored, so they may not contain characters that cell data names have
-  !! replaced ('/', '.', or space).
 
-  subroutine write_mesh(this, dims, branch_factor, transposed_root_indexing, &
-      interface_normals_name, interface_intercepts_name)
+  subroutine write_mesh(this, dims, branch_factor, transposed_root_indexing)
 
     class(vtkhdf_hypertree_writer), intent(inout) :: this
     integer, intent(in) :: dims(:)
     integer, intent(in), optional :: branch_factor
     logical, intent(in), optional :: transposed_root_indexing
-    character(*), intent(in), optional :: interface_normals_name, interface_intercepts_name
 
     integer :: branch_factor_, j
     logical :: transposed
@@ -369,14 +371,6 @@ contains
 
     ASSERT(this%ctx%identical([dims, branch_factor_, merge(1,0,transposed)]))
 
-    INSIST(present(interface_normals_name) .eqv. present(interface_intercepts_name))
-    if (present(interface_normals_name)) then
-      INSIST(valid_interface_name(interface_normals_name))
-      INSIST(valid_interface_name(interface_intercepts_name))
-      ASSERT(this%ctx%identical(trim(interface_normals_name)))
-      ASSERT(this%ctx%identical(trim(interface_intercepts_name)))
-    end if
-
     call err_ctx%capture
 
     this%dims = int(dims, int32)
@@ -392,22 +386,11 @@ contains
     call h5_write_attr(this%ctx, this%root_id, 'Dimensions', this%dims)
     call h5_write_attr(this%ctx, this%root_id, 'BranchFactor', int(branch_factor_,int32))
     call h5_write_attr(this%ctx, this%root_id, 'TransposedRootIndexing', merge(1_int32, 0_int32, transposed))
-    if (present(interface_normals_name)) then
-      call h5_write_attr(this%ctx, this%root_id, 'InterfaceNormalsName', trim(interface_normals_name))
-      call h5_write_attr(this%ctx, this%root_id, 'InterfaceInterceptsName', trim(interface_intercepts_name))
-    end if
-
     this%grid_defined = .true.
 
     call err_ctx%restore(0)
 
   end subroutine write_mesh
-
-  !! An interface array name must be stored unchanged as a cell data name.
-  pure logical function valid_interface_name(name)
-    character(*), intent(in) :: name
-    valid_interface_name = (len_trim(name) > 0) .and. (scan(trim(name), '/. ') == 0)
-  end function
 
   !! Rank zero supplies the coordinate vectors and writes one copy per part.
 
@@ -423,7 +406,7 @@ contains
 
     INSIST(this%root_id >= 0)
     INSIST(this%grid_defined)
-    INSIST(.not.this%mesh_locked)
+    INSIST(.not.this%mesh_locked) ! geometry cannot follow cell data
 
     if (this%geometry_defined) then ! geometry was previously written
       INSIST(this%allow_geometry_change)  ! it is allowed to change
@@ -493,7 +476,7 @@ contains
 
     INSIST(this%root_id >= 0)
     INSIST(this%grid_defined)
-    INSIST(.not.this%mesh_locked)
+    INSIST(.not.this%mesh_locked) ! topology cannot follow cell data
 
     first_write = (this%ncell_tot <= 0)
     if (.not.first_write) then ! topology was previously written
@@ -611,6 +594,90 @@ contains
 #:endfor
 
   end subroutine write_topology
+
+!!!! MATERIAL INTERFACE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  !! Define one static pair, or update the privately registered temporal pair.
+  !! Validate both structural arguments before writing either payload. The
+  !! ordinary registry owns their names, temporal bookkeeping, and cleanup.
+#:for kind, decl, h5type in reals
+  subroutine write_interface_data_${kind}$(this, normals, intercepts)
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
+    ${decl}$, intent(in) :: normals(:,:), intercepts(:,:)
+    integer :: indices(2), j
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    INSIST(this%root_id >= 0) ! interface write requires an open writer
+    ASSERT(this%ctx%identical([2, this%interface_state, ${kind}$])) ! interface write collective agreement
+    INSIST(this%interface_state /= INTERFACE_STATIC)
+    INSIST(this%grid_defined .and. this%geometry_defined .and. this%topology_defined)
+    INSIST(size(normals,1) == 3)
+    INSIST(size(intercepts,1) == 3)
+    INSIST(size(normals,2,kind=int64) == this%ncell)
+    INSIST(size(intercepts,2,kind=int64) == this%ncell)
+    if (this%interface_state == INTERFACE_TEMPORAL) then
+      INSIST(this%step_open) ! temporal interface requires an open step
+      INSIST(this%interface_kind == ${kind}$)
+      do j = 1, 2
+        indices(j) = this%interface_handles(j)%index(this%root_id)
+        INSIST(.not.this%cell_data%vars(indices(j))%wrote_this_step) ! interface pair already written
+      end do
+    else
+      INSIST(this%allow_static_cell_data) ! static interface mode
+    end if
+
+    call err_ctx%capture
+    if (this%interface_state == INTERFACE_TEMPORAL) then
+      call this%write_cell_data(this%interface_handles(1), normals)
+      call this%write_cell_data(this%interface_handles(2), intercepts)
+    else
+      call this%write_cell_data('vtkInterfaceNormals', normals)
+      indices(1) = size(this%cell_data%vars)
+      call this%write_cell_data('vtkInterfaceIntercepts', intercepts)
+      indices(2) = size(this%cell_data%vars)
+      call write_interface_names(this, indices)
+      this%interface_state = INTERFACE_STATIC
+    end if
+    call err_ctx%restore(0)
+  end subroutine write_interface_data_${kind}$
+
+  !! MOLD selects only the kind; its value is never referenced. Registration
+  !! may precede the mesh and leaves the ordinary mesh-change barrier unset.
+  subroutine register_temporal_interface_data_${kind}$(this, mold)
+    class(vtkhdf_hypertree_writer), intent(inout) :: this
+    ${decl}$, intent(in) :: mold
+    integer :: indices(2), j
+    type(vtkhdf_h5e_context) :: err_ctx
+
+    INSIST(this%root_id >= 0) ! interface registration requires an open writer
+    ASSERT(this%ctx%identical([1, this%interface_state, ${kind}$])) ! interface registration collective agreement
+    INSIST(this%interface_state == INTERFACE_UNDEFINED)
+    INSIST(this%is_temporal)
+    INSIST(this%nsteps == 0) ! interface registration precedes time stepping
+
+    call err_ctx%capture
+    this%interface_handles(1) = this%register_temporal_cell_data('vtkInterfaceNormals', &
+        [0.0_${kind}$, 0.0_${kind}$, 0.0_${kind}$])
+    this%interface_handles(2) = this%register_temporal_cell_data('vtkInterfaceIntercepts', &
+        [0.0_${kind}$, 0.0_${kind}$, 0.0_${kind}$])
+    do j = 1, 2
+      indices(j) = this%interface_handles(j)%index(this%root_id)
+    end do
+    call write_interface_names(this, indices)
+    this%interface_state = INTERFACE_TEMPORAL
+    this%interface_kind = ${kind}$
+    call err_ctx%restore(0)
+  end subroutine register_temporal_interface_data_${kind}$
+#:endfor
+
+  subroutine write_interface_names(this, indices)
+    class(vtkhdf_hypertree_writer), intent(in) :: this
+    integer, intent(in) :: indices(2)
+    call h5_write_attr(this%ctx, this%root_id, 'InterfaceNormalsName', &
+        this%cell_data%vars(indices(1))%internal_name)
+    call h5_write_attr(this%ctx, this%root_id, 'InterfaceInterceptsName', &
+        this%cell_data%vars(indices(2))%internal_name)
+  end subroutine
 
 !!!! STATIC DATA !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -807,13 +874,20 @@ contains
 
     class(vtkhdf_hypertree_writer), intent(inout) :: this
 
-    integer :: j
+    integer :: j, index
     type(vtkhdf_h5e_context) :: err_ctx
 
     INSIST(this%step_open)
     INSIST(this%geometry_defined .and. this%topology_defined)
 
     call err_ctx%capture
+
+    if (this%interface_state == INTERFACE_TEMPORAL .and. this%nsteps == 1) then
+      do j = 1, 2
+        index = this%interface_handles(j)%index(this%root_id)
+        INSIST(this%cell_data%vars(index)%wrote_this_step) ! initial interface pair required, even with no cells
+      end do
+    end if
 
     if (allocated(this%cell_data%vars)) then
       do j = 1, size(this%cell_data%vars)

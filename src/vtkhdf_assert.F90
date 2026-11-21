@@ -26,6 +26,7 @@ subroutine vtkhdf_assert(file, line)
 
   ierr = H5Eprint2(H5E_DEFAULT, c_null_ptr)
   write(error_unit,'(/,4a,i0,a)') trim(rank_str), 'Panic! Assertion failed at ', file, ':', line
+  flush(error_unit)
 
 #ifdef USE_MPI
   block

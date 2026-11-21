@@ -1,0 +1,153 @@
+! Paired interfaces: kinds, modes, collisions, strided arrays, and mesh changes.
+#:set reals = ['real32', 'real64']
+program vtkhdf_hypertree_interface_test
+  use,intrinsic :: iso_fortran_env
+  use vtkhdf_hypertree_file_type
+  use vtkhdf_test_env
+#ifdef USE_MPI
+  use mpi
+#endif
+  implicit none
+  integer :: rank, nproc, mode
+  call test_env_init(rank,nproc)
+#:for kind in reals
+  do mode = VTKHDF_STATIC, VTKHDF_MOVING_MESH
+    call fixture_${kind}$(mode,.false.)
+  end do
+  do mode = VTKHDF_FIXED_MESH, VTKHDF_DYNAMIC_MESH
+    call fixture_${kind}$(mode,.true.)
+  end do
+#:endfor
+  call test_env_finalize()
+contains
+  subroutine open_file(file,filename,mode)
+    type(vtkhdf_hypertree_file), intent(out) :: file
+    character(*), intent(in) :: filename
+    integer, intent(in) :: mode
+    integer :: stat
+    character(:), allocatable :: errmsg
+#ifdef USE_MPI
+    call file%create(filename,MPI_COMM_WORLD,stat,errmsg,mode=mode,data_chunk_bytes=64_int64)
+#else
+    call file%create(filename,stat,errmsg,mode=mode,data_chunk_bytes=64_int64)
+#endif
+    if (stat /= 0) error stop errmsg
+  end subroutine
+
+  subroutine mesh(file,phase,values,initial)
+    type(vtkhdf_hypertree_file), intent(inout) :: file
+    integer, intent(in) :: phase
+    logical, intent(in) :: initial
+    real(real64), allocatable, intent(out) :: values(:)
+    integer, allocatable :: ids(:), xtree(:)
+    logical, allocatable :: refined(:)
+    integer :: t, nc, j
+    ids = [integer::]
+    xtree = [1]
+    refined = [logical::]
+    values = [real(real64)::]
+    do t = 1, 3
+      if (modulo(t+phase,nproc) /= rank) cycle
+      nc = merge(3,1,modulo(t+phase,2)==0)
+      ids = [ids,t]
+      xtree = [xtree,xtree(size(xtree))+nc]
+      refined = [refined,nc==3,(.false.,j=2,nc)]
+      values = [values,(real(10*t+j+100*phase,real64),j=1,nc)]
+    end do
+    if (initial) call file%write_mesh_geometry([0.,1.,2.,3.],[0.],[0.])
+    call file%write_mesh_topology(ids,xtree,refined)
+  end subroutine
+
+#:for kind in reals
+  subroutine fixture_${kind}$(mode,temporal)
+    integer, intent(in) :: mode
+    logical, intent(in) :: temporal
+    type(vtkhdf_hypertree_file) :: file
+    type(vtkhdf_cell_data_handle) :: before(3), after(2)
+    real(real64), allocatable :: values(:)
+    real(${kind}$), allocatable :: scalar(:)
+    character(96) :: filename
+    integer :: step, j, phase
+    write(filename,'(a,i0,a,l1,a)') 'hypertree_interface_${kind}$_',mode,'_',temporal,'.vtkhdf'
+    call open_file(file,trim(filename),mode)
+    if (temporal) then
+      ! An asymmetric set of pre-existing names forces independent suffixes.
+      before(1) = file%register_temporal_cell_data('vtkInterfaceNormals',0.0_${kind}$)
+      before(2) = file%register_temporal_cell_data('vtkInterfaceIntercepts',0.0_${kind}$)
+      before(3) = file%register_temporal_cell_data('vtkInterfaceIntercepts',0.0_${kind}$)
+      call file%register_temporal_interface_data(real(rank,${kind}$))
+      after(1) = file%register_temporal_cell_data('vtkInterfaceNormals',0.0_${kind}$)
+      after(2) = file%register_temporal_cell_data('vtkInterfaceIntercepts',0.0_${kind}$)
+    end if
+    call file%write_mesh([4,1,1])
+    call mesh(file,0,values,.true.)
+    ! Materialize collision payloads: GCC can misdescribe an empty REAL(array)
+    ! expression when it is passed directly to an assumed-rank dummy.
+    allocate(scalar(size(values)))
+    scalar = real(values,${kind}$)
+    if (.not.temporal) then
+      if (mode /= VTKHDF_STATIC) then
+        call file%start_time_step(0.)
+        call file%finalize_time_step()
+      end if
+      ! Define between steps, including after earlier steps have been finalized.
+      call file%write_cell_data('vtkInterfaceNormals',scalar)
+      call file%write_cell_data('vtkInterfaceIntercepts',scalar)
+      call file%write_cell_data('vtkInterfaceIntercepts',scalar)
+      call payload_${kind}$(file,values,0)
+      scalar = scalar+1
+      call file%write_cell_data('vtkInterfaceNormals',scalar)
+      call file%write_cell_data('vtkInterfaceIntercepts',scalar)
+      if (mode /= VTKHDF_STATIC) call file%start_time_step(1.)
+    else
+      do step = 0,3
+        call file%start_time_step(real(step))
+        phase = 0
+        if (step >= 2 .and. mode == VTKHDF_DYNAMIC_MESH) phase = 1
+        if (step == 2 .and. mode == VTKHDF_DYNAMIC_MESH) call mesh(file,phase,values,.false.)
+        if (step == 2 .and. mode == VTKHDF_MOVING_MESH) &
+            call file%write_mesh_geometry([1.,2.,3.,4.],[0.],[0.])
+        if (modulo(step,2) == 0) then
+          call payload_${kind}$(file,values,step)
+          deallocate(scalar)
+          allocate(scalar(size(values)))
+          scalar = real(values,${kind}$)
+          do j = 1,3
+            call file%write_cell_data(before(j),scalar)
+          end do
+          scalar = scalar+1
+          do j = 1,2
+            call file%write_cell_data(after(j),scalar)
+          end do
+        end if
+        ! CLOSE exercises ordinary finalization of the last open step.
+        if (step < 3) call file%finalize_time_step()
+      end do
+    end if
+    call file%close()
+    ! Reuse the very same Fortran object after both kinds of definition.
+    call open_file(file,trim(filename)//'.reset',VTKHDF_STATIC)
+    call file%write_mesh([4,1,1])
+    call mesh(file,0,values,.true.)
+    call payload_${kind}$(file,values,0)
+    call file%close()
+  end subroutine
+
+  subroutine payload_${kind}$(file,values,step)
+    type(vtkhdf_hypertree_file), intent(inout) :: file
+    real(real64), intent(in) :: values(:)
+    integer, intent(in) :: step
+    real(${kind}$), allocatable :: normals(:,:), intercepts(:,:)
+    integer :: c, n
+    n = size(values)
+    allocate(normals(6,2*n),intercepts(6,2*n))
+    normals = -999
+    intercepts = -999
+    do c = 1,3
+      normals(2*c-1,1::2) = real(values+10*step+c*.125_real64,${kind}$)
+      intercepts(2*c-1,1::2) = real(-2*values+10*step-c*.25_real64,${kind}$)
+    end do
+    call file%write_interface_data(normals(1::2,1::2),intercepts(1::2,1::2))
+  end subroutine
+#:endfor
+end program

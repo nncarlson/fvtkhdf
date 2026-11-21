@@ -157,10 +157,6 @@ program vtkhdf_hypertree_fail_test
   case ('static_data') ! a changing topology precludes static cell data
     call write_complete_mesh
     call file%write_cell_data('value', [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
-  case ('interface_one_name') ! interface names are given together
-    call file%write_mesh([3,2,1], interface_normals_name='normals')
-  case ('interface_bad_name') ! the name would not survive cell data naming
-    call file%write_mesh([3,2,1], interface_normals_name='normals', interface_intercepts_name='inter.cepts')
   case ('missing_data') ! reuse requires an unchanged cell count
     call write_complete_mesh
     var = file%register_temporal_cell_data('value', 0.0)

@@ -321,3 +321,12 @@ all layout checks run.
 `vtkhdf_moving_grid_fail_test.F90` checks mode, geometry ordering, immutable
 bounds, coordinate kind/size consistency, and the required initial temporal-data
 write before reuse.
+
+The `vtkhdf_hypertree_interface_*` tests check paired material-interface
+writes and registration with both real kinds. Independent HDF5 checks and
+VTK readback verify actual names, every component, storage kinds, paired
+offsets, replacement and reuse, and singleton reset on close. MPI fixtures
+run with two and four ranks, including empty parts, uneven ownership,
+noncontiguous inputs, and topology changes. Contract failures check the
+intended assertion diagnostic, including first-step data on empty ranks,
+kind mismatches, lifecycle rules, and Debug collective agreement.

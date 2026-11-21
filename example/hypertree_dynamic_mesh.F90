@@ -19,6 +19,7 @@ program hypertree_dynamic_mesh_example
   logical, allocatable :: refined(:)
   integer(int8), allocatable :: level(:)
   real, allocatable :: dist(:), x(:), y(:), z(:)
+  real, allocatable :: normals(:,:), intercepts(:,:)
   character(:), allocatable :: errmsg
   integer :: stat, nproc, rank, step, i, j, tree
   real :: center(2), t
@@ -62,6 +63,7 @@ program hypertree_dynamic_mesh_example
   level_var = file%register_temporal_cell_data('level', 0_int8)
   dist_var  = file%register_temporal_cell_data('distance', 0.0, attribute='Scalars')
   center_var = file%register_temporal_field_data('center', 0.0)
+  call file%register_temporal_interface_data(0.0)
 
   do step = 0, 8
     t = step / 8.0
@@ -75,6 +77,7 @@ program hypertree_dynamic_mesh_example
     ! x varying fastest; here they are dealt to the ranks in turn. The cells
     ! of each tree are listed level by level, starting with its root cell.
     allocate(tree_ids(0), refined(0), level(0), dist(0))
+    allocate(normals(3,0), intercepts(3,0))
     xtree = [1]
     do j = 1, ny
       do i = 1, nx
@@ -88,13 +91,14 @@ program hypertree_dynamic_mesh_example
 
     ! Write the new topology before the cell data for this step.
     call file%write_mesh_topology(tree_ids, xtree, refined)
+    call file%write_interface_data(normals, intercepts)
     call file%write_cell_data(level_var, level)
     call file%write_cell_data(dist_var, dist)
 
     ! Return file to a complete, readable state until start of next step.
     call file%finalize_time_step
     call file%flush
-    deallocate(tree_ids, xtree, refined, level, dist)
+    deallocate(tree_ids, xtree, refined, level, dist, normals, intercepts)
   end do
 
   call file%close
@@ -113,7 +117,7 @@ contains
     real, intent(in) :: x0, y0
     real, allocatable :: xlo(:), ylo(:), xnext(:), ynext(:)
     logical, allocatable :: split(:)
-    real :: h, d
+    real :: h, d, point(2), normal(3), intercept(3)
     integer :: l, n, c
     xlo = [x0]
     ylo = [y0]
@@ -121,9 +125,13 @@ contains
     do l = 0, max_level
       allocate(split(size(xlo)), xnext(0), ynext(0))
       do n = 1, size(xlo)
-        d = norm2([xlo(n), ylo(n)] + 0.5*h - center) - radius ! signed distance at the cell center
+        point = [xlo(n), ylo(n)] + 0.5*h
+        d = norm2(point - center) - radius ! signed distance at the cell center
         split(n) = (l < max_level) .and. (abs(d) < 0.75*h)
         dist = [dist, d]
+        call circle_interface(point, h, normal, intercept)
+        normals = reshape([reshape(normals, [size(normals)]), normal], [3,size(dist)])
+        intercepts = reshape([reshape(intercepts, [size(intercepts)]), intercept], [3,size(dist)])
         if (split(n)) then
           xnext = [xnext, (xlo(n) + 0.5*h*modulo(c,2), c = 0, 3)]
           ynext = [ynext, (ylo(n) + 0.5*h*(c/2), c = 0, 3)]
@@ -137,6 +145,29 @@ contains
       call move_alloc(ynext, ylo)
       h = 0.5*h
     end do
+  end subroutine
+
+  !! Approximate the circle by linearly interpolating its implicit function
+  !! f(x,y) = (x-cx)**2 + (y-cy)**2 - radius**2 from each cell's corners.
+  !! For a square this interpolant is a plane with the following center
+  !! value and gradient. Neighboring cells agree along their shared edges.
+  subroutine circle_interface(point, h, normal, intercept)
+    real, intent(in) :: point(2), h
+    real, intent(out) :: normal(3), intercept(3)
+    real :: q(2), gradient(2), value, variation, magnitude
+
+    q = point - center
+    gradient = 2*q
+    value = dot_product(q,q) + 0.5*h*h - radius*radius
+    variation = 0.5*h*sum(abs(gradient))
+    normal = 0
+    intercept = [0.0, 0.0, 2.0] ! pure cell: no interface
+    if (abs(value) >= variation) return
+
+    magnitude = norm2(gradient)
+    normal(:2) = gradient/magnitude ! outward normal, with zero z component
+    ! VTK type 1 retains n.x + b <= 0, using the SECOND intercept as b.
+    intercept = [0.0, (value-dot_product(gradient,point))/magnitude, 1.0]
   end subroutine
 
 end program

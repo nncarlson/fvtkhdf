@@ -332,8 +332,7 @@ contains
     if (vtkhdf_hypertree_valid_topology([1,7,2], quad, 4)) error stop 'decreasing xtree accepted'
   end subroutine
 
-  !! Material interface: the names of the normals and intercepts arrays are
-  !! stored as root attributes; the arrays are ordinary 3-component cell data.
+  !! Material interface: write the pair with writer-managed names and attributes.
   subroutine write_interface
     type(vtkhdf_hypertree_file) :: file
     integer, parameter :: dims(3) = [3,3,1]
@@ -342,7 +341,7 @@ contains
     real(real64), allocatable :: normals(:,:), intercepts(:,:)
     integer :: j
     call open_file(file, 'hypertree_interface.vtkhdf', VTKHDF_STATIC)
-    call file%write_mesh(dims, interface_normals_name='normals', interface_intercepts_name='intercepts')
+    call file%write_mesh(dims)
     call file%write_mesh_geometry(axis_coordinates(1,dims(1),0), &
         axis_coordinates(2,dims(2),0), axis_coordinates(3,dims(3),0))
     call local_trees(dims, 2, 0, tree_ids, xtree, refined, mask, gid, lid)
@@ -352,8 +351,7 @@ contains
       normals(:,j) = [1.0_real64, 0.0_real64, 0.0_real64]
       intercepts(:,j) = [0.25_real64, 0.0_real64, real(merge(2, 1, refined(j)), real64)]
     end do
-    call file%write_cell_data('normals', normals)
-    call file%write_cell_data('intercepts', intercepts)
+    call file%write_interface_data(normals, intercepts)
     call file%close
   end subroutine
 
