@@ -53,8 +53,10 @@ constants, and ``vtkhdf_version``.
 
 The file owns its blocks. ``add_block`` returns a typed pointer through which
 you write the block's mesh and data directly. The owning composite file manages
-file creation, time stepping, flushing, and closing. Both representations
-currently use a flat Assembly; hierarchical construction is not yet supported.
+file creation, time stepping, flushing, and closing.
+
+By default, a flat assembly is created; see :ref:`composite-assembly-construction`
+for optional hierarchical organization.
 
 Supported Blocks and Modes
 --------------------------
@@ -126,7 +128,7 @@ File Creation and Management
    perform collective cleanup. It releases local heap storage only; explicit
    ``close`` is required to release MPI/HDF5 resources.
 
-In MPI builds, file and block operations are collective over the communicator
+In MPI builds, file and block I/O operations are collective over the communicator
 passed to ``create``. All ranks must create the same blocks, with the same
 types, names, and modes, and make calls in the same order. Distributed mesh
 and point/cell data follow the corresponding simple writer's rules. Field
@@ -291,6 +293,111 @@ mesh partitions, and temporal point/cell data in serial and MPI builds.
 :repo:`example/pdc_example1.F90` demonstrates UnstructuredGrid and ImageData
 blocks with a shared timeline in serial and MPI builds. Both use the composite
 API described here.
+
+.. _composite-assembly-construction:
+
+Assembly Construction
+---------------------
+
+An assembly organizes blocks into a hierarchy of nodes and block references.
+Its root node is created automatically and has index 0. In the default flat
+assembly, all block references are direct children of the root.
+
+The optional assembly construction methods group blocks under additional nodes.
+A block may appear under more than one node while retaining one mesh, one set
+of data, and one writer object. Construction changes how the blocks are
+organized; it does not affect their mesh or data-writing interfaces.
+
+For MB output, VTK's reader represents ordinary assembly nodes as
+``vtkMultiBlockDataSet`` objects, nested according to the hierarchy. For PDC
+output, it represents the hierarchy as a ``vtkDataAssembly`` associated with
+the ``vtkPartitionedDataSetCollection`` object created by the reader.
+
+.. method-doc::
+
+   node = file%add_node(name [, parent])
+
+   Add an ordinary hierarchy node and return its stable positive integer index.
+   ``parent`` is the index of a previously added ordinary node; omitted or zero
+   means the root. Node indices are local to the owning file.
+
+   ``name`` follows the normalization and disambiguation rules in :doc:`common`.
+   A blank name defaults to ``Unnamed_Node``. Names are resolved when the
+   assembly is committed; disambiguation does not change node indices.
+
+.. method-doc::
+
+   call file%add_block_ref(dataset [, parent])
+
+   Add an explicit reference to an existing block under ``parent``. Omitted or
+   zero ``parent`` means the root. ``dataset`` is a typed block pointer returned
+   by this file's ``add_block``. Standalone writers and blocks belonging to
+   another file are invalid.
+
+   Adding the same block under the same parent again is a no-op and retains
+   the first reference's position. References under different parents are
+   allowed, including an explicit root reference alongside deeper placements.
+
+An explicit reference suppresses that block's automatic root placement. Blocks
+without explicit references remain at the root, so no stored block is omitted.
+Explicit children appear in insertion order, including interleaved ordinary
+nodes and block references. Implicit root references follow all explicit root
+children in block-creation order.
+
+Every reference uses its block's established, globally disambiguated name.
+Ordinary node names need uniqueness only among siblings. Block-reference names
+have priority within each parent; colliding ordinary node names are disambiguated
+automatically. This includes collisions with blocks implicitly retained at the
+root. Identical ordinary node names under different parents are allowed.
+
+Block creation, mesh/data writes, and assembly construction may be interleaved.
+Construction changes only the pending description: the automatic flat assembly
+remains in the output until commitment. ``flush`` does not commit a custom
+assembly.
+
+.. method-doc::
+
+   call file%set_assembly()
+
+   Commit the assembly once while the file is open. This operation is collective
+   in MPI builds. Calling it without custom construction is valid and preserves
+   the default flat organization, with all blocks at the assembly root.
+
+   Successful commitment freezes block creation, node creation, and explicit
+   reference creation. A second ``set_assembly`` call is invalid. Existing block
+   pointers and data handles remain valid for their usual mesh, data, and time
+   operations; ``flush`` and ``close`` remain available.
+
+Normal ``close`` implicitly commits pending construction before closing block
+resources. With no custom construction, it preserves the automatic flat
+organization. Automatic Fortran finalization does not commit an assembly;
+explicit collective cleanup still requires ``close``.
+
+Commitment may occur before or after time stepping starts, including during an
+open step. The usual restriction on adding temporal blocks after the first step
+still applies. The construction API provides no deletion or move operations.
+
+In MPI builds, ``add_node`` and ``add_block_ref`` perform no communication, but
+all ranks must make matching construction calls with the same names, parent
+indices, and corresponding block objects. Rank-zero-only construction is not
+supported.
+
+Invalid parents, foreign block objects, and operations forbidden after
+commitment are errors.
+
+For example, reference a block in two groups and explicitly commit:
+
+.. code-block:: fortran
+
+   regions = file%add_node('Regions')
+   call file%add_block_ref(fluid,parent=regions)
+   call file%add_block_ref(solid,parent=regions)
+   materials = file%add_node('Materials')
+   call file%add_block_ref(fluid,parent=materials)
+   call file%set_assembly()
+
+:repo:`example/composite_assembly.F90` provides a complete serial/MPI example
+with two placements of the fluid block.
 
 VTK Reader Compatibility
 ------------------------

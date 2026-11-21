@@ -26,6 +26,58 @@ function(vtkhdf_add_runtime_test test_name target)
   endif()
 endfunction()
 
+if(ENABLE_MPI)
+  set(ASSEMBLY_READER_RANKS 4)
+else()
+  set(ASSEMBLY_READER_RANKS 1)
+endif()
+
+# Both concrete file types exercise the same Assembly implementation.
+foreach(format mb pdc)
+  vtkhdf_add_test_target(vtkhdf_${format}_assembly_test vtkhdf_assembly_test.F90)
+  vtkhdf_add_test_target(vtkhdf_${format}_assembly_fail_test vtkhdf_assembly_fail_test.F90)
+  vtkhdf_add_test_target(vtkhdf_${format}_assembly_types_test vtkhdf_mb_collections_test.F90)
+  target_compile_definitions(vtkhdf_${format}_assembly_types_test PRIVATE ASSEMBLY_COLLECTION)
+  vtkhdf_add_runtime_test(vtkhdf_${format}_assembly_types vtkhdf_${format}_assembly_types_test)
+  set_tests_properties(vtkhdf_${format}_assembly_types PROPERTIES FIXTURES_SETUP vtkhdf_${format}_assembly_type_files)
+  add_test(NAME vtkhdf_${format}_assembly_types_layout
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_collections_check.py
+            layout ${CMAKE_CURRENT_BINARY_DIR} ${format}_assembly_types)
+  set_tests_properties(vtkhdf_${format}_assembly_types_layout PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_${format}_assembly_type_files SKIP_RETURN_CODE 77)
+
+  if(format STREQUAL "pdc")
+    target_compile_definitions(vtkhdf_${format}_assembly_types_test PRIVATE PDC_COLLECTION)
+    target_compile_definitions(vtkhdf_${format}_assembly_test PRIVATE PDC_COLLECTION)
+    target_compile_definitions(vtkhdf_${format}_assembly_fail_test PRIVATE PDC_COLLECTION)
+  endif()
+  vtkhdf_add_runtime_test(vtkhdf_${format}_assembly vtkhdf_${format}_assembly_test)
+  set_tests_properties(vtkhdf_${format}_assembly PROPERTIES FIXTURES_SETUP vtkhdf_${format}_assembly_files)
+  add_test(NAME vtkhdf_${format}_assembly_layout
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_assembly_check.py
+            ${CMAKE_CURRENT_BINARY_DIR} ${format})
+  set_tests_properties(vtkhdf_${format}_assembly_layout PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_${format}_assembly_files SKIP_RETURN_CODE 77)
+  add_test(NAME vtkhdf_${format}_assembly_reader_compatibility
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_assembly_reader_probe.py
+            ${CMAKE_CURRENT_BINARY_DIR} ${format} ${ASSEMBLY_READER_RANKS})
+  set_tests_properties(vtkhdf_${format}_assembly_reader_compatibility PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_${format}_assembly_files SKIP_RETURN_CODE 77 LABELS reader-compatibility)
+
+  set(assembly_errors negative_parent future_parent foreign standalone closed_node closed_ref closed_commit
+      repeat_commit block_after node_after ref_after duplicate_after)
+  if(ENABLE_MPI AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+    list(APPEND assembly_errors mismatch_name mismatch_parent mismatch_reference mismatch_custom mismatch_count)
+  endif()
+  foreach(error IN LISTS assembly_errors)
+    set(name vtkhdf_${format}_assembly_fail_${error})
+    vtkhdf_add_runtime_test(${name} vtkhdf_${format}_assembly_fail_test ${error})
+    set(dir ${CMAKE_CURRENT_BINARY_DIR}/assembly-fail-${format}-${error})
+    file(MAKE_DIRECTORY ${dir})
+    set_tests_properties(${name} PROPERTIES WILL_FAIL TRUE WORKING_DIRECTORY ${dir} TIMEOUT 30)
+  endforeach()
+endforeach()
+
 vtkhdf_add_test_target(vtkhdf_mb_test vtkhdf_mb_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_basic_blocks_test vtkhdf_mb_basic_blocks_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_typed_blocks_test vtkhdf_mb_typed_blocks_test.F90)

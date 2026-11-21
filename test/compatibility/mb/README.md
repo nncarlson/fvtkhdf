@@ -208,3 +208,15 @@ The [selective expansion results](results-expanded-6.2.1.md) record the
 additional dimensionality, MPI-writing, and cache-enabled checks.
 The [extended five-type results](results-hypertree-6.2.1.md) include HyperTreeGrid
 in all four suites and supersede those historical four-type summaries.
+
+## Shared Assembly probes
+
+The main CTest suite also generates nested MB and PDC assembly fixtures,
+including repeated placements, empty groups, default root references, and
+commitment during an open time step. Independent h5py layout checks determine
+VTKHDF 2.8 conformance. Reader probes use only VTK's Python module and record
+results in `test/mb-assembly-reader-compatibility.json` and
+`test/pdc-assembly-reader-compatibility.json` under the build directory.
+Reader crashes and timeouts are captured in isolated workers and do not fail
+writer acceptance. Both unchanged-reader and selection-changing sequences
+exercise the nested temporal fixtures.

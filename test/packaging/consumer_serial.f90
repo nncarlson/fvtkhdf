@@ -24,7 +24,7 @@ program consumer_serial
   type(vtkhdf_hypertree_block), pointer :: hypertree_block
   real :: points(3,2,2,1)
   type(vtkhdf_cell_data_handle) :: variable
-  integer :: selected(3,2), rank
+  integer :: selected(3,2), rank, node
   real :: values(1,1,1)
   call file%create('dummy.vtkhdf', ierr, errmsg)
   call file%close
@@ -72,12 +72,19 @@ program consumer_serial
   else
     call hypertree_block%write_mesh_topology([integer::],[1],[logical::])
   end if
+  node = mb%add_node('Datasets')
+  call mb%add_block_ref(block,parent=node)
+  call mb%add_block_ref(hypertree_block,parent=node)
+  call mb%set_assembly()
   call mb%close()
 
   call pdc%create('consumer_pdc.vtkhdf',ierr,errmsg)
   if (ierr /= 0) error stop errmsg
   call pdc%add_block('mesh',block)
   call block%write_mesh(reshape(points,[3,4]),[1,2,4,3],[1,5],[9_int8])
+  node = pdc%add_node('Datasets')
+  call pdc%add_block_ref(block,parent=node)
+  call pdc%set_assembly()
   call block%write_cell_data('value',[2.])
   call pdc%flush()
   call pdc%close()

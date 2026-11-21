@@ -28,3 +28,6 @@ endforeach()
 
 add_executable(hypertree_dynamic_mesh hypertree_dynamic_mesh.F90)
 target_link_libraries(hypertree_dynamic_mesh PRIVATE fvtkhdf)
+
+add_executable(composite_assembly composite_assembly.F90)
+target_link_libraries(composite_assembly PRIVATE fvtkhdf)

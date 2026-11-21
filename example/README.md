@@ -79,8 +79,17 @@ with that name in the working directory.
 block and an ImageData solid block. Both use fixed-mesh mode and share a
 three-step timeline. Each rank supplies one fluid quad and one solid cell.
 The [composite dataset manual](../doc/sphinx/composite.rst) describes the shared composite API,
-flat Assembly, borrowed block pointers, and reader limitations.
+flat assembly, borrowed block pointers, and reader limitations.
 
 The MB and PDC examples use the same composite API. Changing the imported
 module and file type selects which composite representation VTK's
 `vtkHDFReader` (also used by ParaView) should produce; the block and data-writing calls remain the same.
+
+## Composite Assembly
+
+`composite_assembly.F90` uses the shared assembly API to place fluid and solid
+blocks under `Regions`, and reference the same fluid block under `Materials`.
+It interleaves block and node creation, commits the hierarchy, and then writes
+a time series through the original block pointers. It writes
+`composite_assembly.vtkhdf` and supports serial and MPI builds. The example
+selects PDC; substitute the MB module and file type for MB output.

@@ -11,7 +11,7 @@ except ImportError as exc:
 
 mode, directory = sys.argv[1:3]
 prefix = sys.argv[3] if len(sys.argv) > 3 else "mb"
-composite_type = b"PartitionedDataSetCollection" if prefix == "pdc" else b"MultiBlockDataSet"
+composite_type = b"PartitionedDataSetCollection" if prefix.startswith("pdc") else b"MultiBlockDataSet"
 types = ("ImageData", "RectilinearGrid", "StructuredGrid", "UnstructuredGrid", "HyperTreeGrid")
 names = ("Repeated_Block", "Repeated_Block_1", "Repeated_Block_2", "Repeated_Block_3", "Repeated_Block_4")
 
@@ -21,15 +21,19 @@ if mode == "layout":
             root = file["VTKHDF"]
             assert root.attrs["Type"] == composite_type
             np.testing.assert_array_equal(root.attrs["Version"], [2, 8])
-            assert list(root["Assembly"]) == list(names)
+            if prefix.endswith("_assembly_types"):
+                assert list(root["Assembly"]) == ["Datasets"]
+                assembly = root["Assembly/Datasets"]
+            else:
+                assembly = root["Assembly"]
+            assert list(assembly) == list(names)
             assert list(root) == ["Assembly"] + [f"Group_{i}" for i in range(5)]
-            assert set(root["Assembly"]) == set(names)
             for i, (kind, name) in enumerate(zip(types, names)):
                 block = root[f"Group_{i}"]
                 assert block.attrs["Type"] == kind.encode()
                 assert int(np.asarray(block.attrs["Index"]).flat[0]) == i
                 assert block.attrs["Name"] == b"Repeated Block"
-                link = root["Assembly"].get(name, getlink=True)
+                link = assembly.get(name, getlink=True)
                 assert isinstance(link, h5py.SoftLink)
                 assert link.path == f"/VTKHDF/Group_{i}"
                 np.testing.assert_array_equal(block["FieldData/id"][...].flat[:], [i + 1])

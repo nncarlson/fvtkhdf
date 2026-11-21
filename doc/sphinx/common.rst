@@ -61,8 +61,11 @@ or composite block that created it.
 Collective Calls
 ----------------
 
-In MPI builds, all writer methods are collective over the communicator passed
-to ``create``. All ranks must call the same methods in the same order.
+In MPI builds, writer methods are collective over the communicator passed
+to ``create``. The in-memory ``add_node`` and ``add_block_ref`` methods of
+:doc:`composite files <composite>` perform no communication, but still require
+matching construction calls on all ranks. All ranks must call the same methods
+in the same order.
 Non-distributed arguments, including filenames, modes, names, and attribute
 designations, must have identical values on all ranks. Distributed arrays and
 placement arguments may differ as specified by the writer interface.

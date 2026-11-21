@@ -23,9 +23,15 @@ program vtkhdf_mb_collections_test
     class(vtkhdf_simple_dataset), pointer :: p => null()
   end type
 #ifdef PDC_COLLECTION
-  character(*), parameter :: prefix = 'pdc'
+  character(*), parameter :: base_prefix = 'pdc'
 #else
-  character(*), parameter :: prefix = 'mb'
+  character(*), parameter :: base_prefix = 'mb'
+#endif
+#ifdef ASSEMBLY_COLLECTION
+  character(*), parameter :: prefix = base_prefix//'_assembly_types'
+  integer :: collection_node
+#else
+  character(*), parameter :: prefix = base_prefix
 #endif
   type(vtkhdf_mb_file) :: mb
   type(vtkhdf_unstructured_block), pointer :: unstructured
@@ -86,6 +92,15 @@ program vtkhdf_mb_collections_test
     call mb%add_block('Repeated Block',hypertree,mode=mode)
     blocks(5)%p => hypertree
     roots(5) = hypertree%root()
+
+#ifdef ASSEMBLY_COLLECTION
+    collection_node = mb%add_node('Datasets')
+    do j = 1, size(blocks)
+      call mb%add_block_ref(blocks(j)%p,parent=collection_node)
+    end do
+    call mb%set_assembly()
+    ! Every simple writer must remain usable after commitment.
+#endif
 
     ! Use all saved pointers after collection growth, both directly and through
     ! their common base. MB must own exactly the same targets.

@@ -18,7 +18,7 @@ Dataset Types and Writers
 
 The VTKHDF format distinguishes *simple* VTK dataset types, such as ImageData
 and UnstructuredGrid, from *composite* types, such as MultiBlockDataSet and
-PartitionedDataSetCollection. Composite types are containers for simple VTK
+PartitionedDataSetCollection. Composite types contain collections of simple VTK
 datasets. Each simple VTK dataset has its own mesh and associated point, cell,
 and field data.
 
@@ -38,8 +38,10 @@ Currently supported VTK dataset types:
   refinement.
 
 * **MultiBlockDataSet (MB) and PartitionedDataSetCollection (PDC)**:
-  two representations of a flat composite dataset containing simple blocks.
-  Each block selects its own mode; temporal blocks share a common timeline.
+  two representations of a composite dataset containing simple blocks. Blocks
+  form a flat collection by default and can be organized into a hierarchy with
+  the shared assembly API. Each block selects its own mode; temporal blocks
+  share a common timeline.
 
 fVTKHDF provides a file writer for each supported VTK dataset type. Each
 writer is a Fortran derived type exported by its corresponding module.

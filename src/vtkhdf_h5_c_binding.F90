@@ -410,7 +410,7 @@ module vtkhdf_h5_c_binding
 
   !!!! H5L functions
 
-  public :: H5Lexists, H5Lcreate_soft, H5Lcreate_hard ! module procedures
+  public :: H5Lexists, H5Lcreate_soft, H5Lcreate_hard, H5Ldelete ! module procedures
 
   !!!! H5E functions
 
@@ -804,6 +804,24 @@ contains
     integer(hid_t) :: lapl_id_
     lapl_id_ = H5P_DEFAULT; if (present(lapl_id)) lapl_id_ = lapl_id
     exists = H5Lexists_c(loc_id, name//c_null_char, lapl_id_)
+  end function
+
+  function H5Ldelete(loc_id, name, lapl_id) result(h5err)
+    integer(hid_t), intent(in) :: loc_id
+    character(*), intent(in) :: name
+    integer(hid_t), intent(in), optional :: lapl_id
+    integer(c_int) :: h5err
+    interface
+      function H5Ldelete_c(loc_id, name, lapl_id) result(h5err) bind(c,name='H5Ldelete')
+        import :: hid_t, c_int
+        integer(hid_t), value :: loc_id, lapl_id
+        character, intent(in) :: name(*)
+        integer(c_int) :: h5err
+      end function
+    end interface
+    integer(hid_t) :: lapl_id_
+    lapl_id_ = H5P_DEFAULT; if (present(lapl_id)) lapl_id_ = lapl_id
+    h5err = H5Ldelete_c(loc_id, name//c_null_char, lapl_id_)
   end function
 
   function H5Lcreate_soft(link_target, link_loc_id, link_name, lcpl_id, lapl_id) result(h5err)
