@@ -1,8 +1,8 @@
 # Examples
 
 These programs demonstrate the ImageData, RectilinearGrid, StructuredGrid,
-UnstructuredGrid, HyperTreeGrid, and MultiBlockDataSet writers. All support serial and MPI
-builds. Configure CMake with `-DBUILD_EXAMPLES=ON` to compile them.
+UnstructuredGrid, HyperTreeGrid, MultiBlockDataSet, and PartitionedDataSetCollection
+writers. All support serial and MPI builds. Configure CMake with `-DBUILD_EXAMPLES=ON` to compile them.
 
 From the `build/example` directory:
 
@@ -69,6 +69,27 @@ MPI builds.
 `mb_example1.F90` writes a collection of named UnstructuredGrid blocks with a
 shared timeline, using typed block pointers for mesh and data writes. The MB
 writer also accepts ImageData, RectilinearGrid, StructuredGrid, and HyperTreeGrid blocks;
-the [MultiBlock manual](../doc/sphinx/mb.rst) includes a heterogeneous example.
+the [composite dataset manual](../doc/sphinx/composite.rst) includes a heterogeneous example.
 These examples write `example.vtkhdf`, replacing any file
 with that name in the working directory.
+
+## PartitionedDataSetCollection
+
+`pdc_example1.F90` writes `pdc_example1.vtkhdf` with an UnstructuredGrid fluid
+block and an ImageData solid block. Both use fixed-mesh mode and share a
+three-step timeline. Each rank supplies one fluid quad and one solid cell.
+The [composite dataset manual](../doc/sphinx/composite.rst) describes the shared composite API,
+flat assembly, borrowed block pointers, and reader limitations.
+
+The MB and PDC examples use the same composite API. Changing the imported
+module and file type selects which composite representation VTK's
+`vtkHDFReader` (also used by ParaView) should produce; the block and data-writing calls remain the same.
+
+## Composite Assembly
+
+`composite_assembly.F90` uses the shared assembly API to place fluid and solid
+blocks under `Regions`, and reference the same fluid block under `Materials`.
+It interleaves block and node creation, commits the hierarchy, and then writes
+a time series through the original block pointers. It writes
+`composite_assembly.vtkhdf` and supports serial and MPI builds. The example
+selects PDC; substitute the MB module and file type for MB output.

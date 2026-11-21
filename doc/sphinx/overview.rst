@@ -7,6 +7,8 @@ fVTKHDF is a modern Fortran library for writing
 files readable by VTK and ParaView. VTKHDF is an HDF5-based file format designed
 for scalable scientific data storage and visualization.
 
+ParaView is built on VTK and uses its data model and VTKHDF reader.
+
 fVTKHDF is designed primarily for MPI-parallel high-performance computing (HPC)
 applications. A serial build is also available, preserving the same high-level
 API.
@@ -16,7 +18,7 @@ Dataset Types and Writers
 
 The VTKHDF format distinguishes *simple* VTK dataset types, such as ImageData
 and UnstructuredGrid, from *composite* types, such as MultiBlockDataSet and
-PartitionedDataSetCollection. Composite types are containers for simple VTK
+PartitionedDataSetCollection. Composite types contain collections of simple VTK
 datasets. Each simple VTK dataset has its own mesh and associated point, cell,
 and field data.
 
@@ -35,17 +37,22 @@ Currently supported VTK dataset types:
   rectilinear grid of root cells, supporting moving geometry and changing
   refinement.
 
-* **MultiBlockDataSet (MB)**: a composite type containing a flat collection
-  of simple block types. Each block selects its own mode; temporal blocks
+* **MultiBlockDataSet (MB) and PartitionedDataSetCollection (PDC)**:
+  two representations of a composite dataset containing simple blocks. Blocks
+  form a flat collection by default and can be organized into a hierarchy with
+  the shared assembly API. Each block selects its own mode; temporal blocks
   share a common timeline.
 
 fVTKHDF provides a file writer for each supported VTK dataset type. Each
 writer is a Fortran derived type exported by its corresponding module.
 Writers for simple VTK datasets provide methods for defining the mesh and
 writing point, cell, and field data. Composite writers manage collections
-of simple VTK datasets. The :doc:`MB writer <mb>` returns typed block pointers
-with the same mesh and data methods as the corresponding standalone writers;
-the owning file manages their lifecycle.
+of simple VTK datasets. Both use the same :doc:`composite dataset API
+<composite>`, returning typed block pointers with the same mesh and data
+methods as the corresponding standalone writers. The owning file manages
+their lifecycle. Choose the MB or PDC file type according to the composite
+representation VTK's ``vtkHDFReader`` should produce. All subsequent writer
+operations are identical.
 
 .. list-table::
    :header-rows: 1
@@ -71,6 +78,9 @@ the owning file manages their lifecycle.
    * - MultiBlockDataSet
      - ``vtkhdf_mb_file``
      - ``vtkhdf_mb_file_type``
+   * - PartitionedDataSetCollection
+     - ``vtkhdf_pdc_file``
+     - ``vtkhdf_pdc_file_type``
 
 The ``vtkhdf_vtk_cell_types`` module additionally provides VTK cell type
 integer codes relevant to UnstructuredGrid.

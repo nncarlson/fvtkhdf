@@ -26,7 +26,9 @@ add_fypp_sources(GEN_SRC SOURCES ${FYPP_SRC}
 
 set(SRC
   vtkhdf_simple_dataset_class.F90
+  vtkhdf_composite_file_type.F90
   vtkhdf_mb_file_type.F90
+  vtkhdf_pdc_file_type.F90
   vtkhdf_unstructured_file_type.F90
   vtkhdf_hypertree_file_type.F90
   vtkhdf_image_file_type.F90

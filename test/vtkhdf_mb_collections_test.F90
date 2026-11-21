@@ -1,7 +1,11 @@
 ! Exercise MB ownership and orchestration of heterogeneous block collections.
 program vtkhdf_mb_collections_test
   use,intrinsic :: iso_fortran_env, only: int8, real64
+#ifdef PDC_COLLECTION
+  use vtkhdf_pdc_file_type, vtkhdf_mb_file => vtkhdf_pdc_file
+#else
   use vtkhdf_mb_file_type
+#endif
   use vtkhdf_simple_dataset_class, only: vtkhdf_simple_dataset
   use vtkhdf_unstructured_writer_type, only: vtkhdf_unstructured_writer
   use vtkhdf_structured_base_class, only: vtkhdf_structured_base
@@ -18,6 +22,17 @@ program vtkhdf_mb_collections_test
   type :: block_pointer
     class(vtkhdf_simple_dataset), pointer :: p => null()
   end type
+#ifdef PDC_COLLECTION
+  character(*), parameter :: base_prefix = 'pdc'
+#else
+  character(*), parameter :: base_prefix = 'mb'
+#endif
+#ifdef ASSEMBLY_COLLECTION
+  character(*), parameter :: prefix = base_prefix//'_assembly_types'
+  integer :: collection_node
+#else
+  character(*), parameter :: prefix = base_prefix
+#endif
   type(vtkhdf_mb_file) :: mb
   type(vtkhdf_unstructured_block), pointer :: unstructured
   type(vtkhdf_image_block), pointer :: image
@@ -46,9 +61,9 @@ program vtkhdf_mb_collections_test
     ! Reuse the owner after closing each collection. Keep mixed static/temporal
     ! blocks in a separate file: VTK readers have trouble with that mixture.
 #ifdef USE_MPI
-    call mb%create('mb_collection_'//trim(cases(cycle))//'.vtkhdf',MPI_COMM_WORLD,stat,errmsg)
+    call mb%create(prefix//'_collection_'//trim(cases(cycle))//'.vtkhdf',MPI_COMM_WORLD,stat,errmsg)
 #else
-    call mb%create('mb_collection_'//trim(cases(cycle))//'.vtkhdf',stat,errmsg)
+    call mb%create(prefix//'_collection_'//trim(cases(cycle))//'.vtkhdf',stat,errmsg)
 #endif
     if (stat /= 0) error stop errmsg
     mode = VTKHDF_STATIC
@@ -77,6 +92,15 @@ program vtkhdf_mb_collections_test
     call mb%add_block('Repeated Block',hypertree,mode=mode)
     blocks(5)%p => hypertree
     roots(5) = hypertree%root()
+
+#ifdef ASSEMBLY_COLLECTION
+    collection_node = mb%add_node('Datasets')
+    do j = 1, size(blocks)
+      call mb%add_block_ref(blocks(j)%p,parent=collection_node)
+    end do
+    call mb%set_assembly()
+    ! Every simple writer must remain usable after commitment.
+#endif
 
     ! Use all saved pointers after collection growth, both directly and through
     ! their common base. MB must own exactly the same targets.

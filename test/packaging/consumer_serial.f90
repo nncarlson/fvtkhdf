@@ -1,5 +1,6 @@
 program consumer_serial
   use,intrinsic :: iso_fortran_env, only: int8
+  use vtkhdf_pdc_file_type, only: vtkhdf_pdc_file
   use vtkhdf_unstructured_file_type
   use vtkhdf_mb_file_type, only: vtkhdf_mb_file, vtkhdf_unstructured_block, vtkhdf_image_block, &
       vtkhdf_rectilinear_block, vtkhdf_structured_block, vtkhdf_hypertree_block
@@ -15,6 +16,7 @@ program consumer_serial
   type(vtkhdf_rectilinear_file) :: rect
   type(vtkhdf_structured_file) :: grid
   type(vtkhdf_mb_file) :: mb
+  type(vtkhdf_pdc_file) :: pdc
   type(vtkhdf_unstructured_block), pointer :: block
   type(vtkhdf_image_block), pointer :: image_block
   type(vtkhdf_rectilinear_block), pointer :: rect_block
@@ -22,7 +24,7 @@ program consumer_serial
   type(vtkhdf_hypertree_block), pointer :: hypertree_block
   real :: points(3,2,2,1)
   type(vtkhdf_cell_data_handle) :: variable
-  integer :: selected(3,2), rank
+  integer :: selected(3,2), rank, node
   real :: values(1,1,1)
   call file%create('dummy.vtkhdf', ierr, errmsg)
   call file%close
@@ -70,7 +72,22 @@ program consumer_serial
   else
     call hypertree_block%write_mesh_topology([integer::],[1],[logical::])
   end if
+  node = mb%add_node('Datasets')
+  call mb%add_block_ref(block,parent=node)
+  call mb%add_block_ref(hypertree_block,parent=node)
+  call mb%set_assembly()
   call mb%close()
+
+  call pdc%create('consumer_pdc.vtkhdf',ierr,errmsg)
+  if (ierr /= 0) error stop errmsg
+  call pdc%add_block('mesh',block)
+  call block%write_mesh(reshape(points,[3,4]),[1,2,4,3],[1,5],[9_int8])
+  node = pdc%add_node('Datasets')
+  call pdc%add_block_ref(block,parent=node)
+  call pdc%set_assembly()
+  call block%write_cell_data('value',[2.])
+  call pdc%flush()
+  call pdc%close()
 
   print *, 'consumer_serial: link OK'
 end program

@@ -29,11 +29,15 @@ required only for parallel builds.
   grid of root cells, including moving geometry, changing refinement, and
   masked cells. Each MPI rank supplies a separate partition of the trees.
 
-* **MultiBlockDataSet:** A flat collection of ImageData, RectilinearGrid,
-  StructuredGrid, UnstructuredGrid, and HyperTreeGrid blocks in one file. Typed block pointers
+* **MultiBlockDataSet and PartitionedDataSetCollection:** A flat collection of
+  ImageData, RectilinearGrid, StructuredGrid, UnstructuredGrid, and HyperTreeGrid
+  blocks in one file. Typed block pointers
   provide each simple writer's mesh and data methods. Each block selects its
-  own mode, and all temporal blocks share a common timeline. Hierarchical
-  nesting is not supported.
+  own mode, and all temporal blocks share a common timeline. Blocks form a flat
+  collection by default; assembly construction organizes them hierarchically
+  and allows multiple references to a block. The two file types share one composite API; choose
+  the file type according to the composite representation VTK's `vtkHDFReader`
+  (also used by ParaView) should produce. See the [composite dataset manual](doc/sphinx/composite.rst).
 
 All simple dataset writers support static and time-dependent cell and field
 data. All except HyperTreeGrid also support point data. Depending on the dataset
@@ -42,7 +46,8 @@ type, the mesh can remain fixed, move, or change topology between time steps.
 ## Reader Compatibility
 
 Unless otherwise indicated, reader support targets ParaView 5.13 and later.
-Older releases may work, but compatibility is not guaranteed.
+Older releases may work, but compatibility is not guaranteed. For best results,
+use the latest stable release of ParaView.
 
 | Feature | Reader requirement |
 | --- | --- |
@@ -190,10 +195,6 @@ Planned and prospective features include:
 * Completing UnstructuredGrid feature coverage
 
   - Add support for [polyhedron cells](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html#polyhedron-support)
-
-* Composite VTK datasets
-  - Add a PartitionedDataSetCollection writer ([issue #26](https://github.com/nncarlson/fvtkhdf/issues/26)).
-  - Implement a general `Assembly` tree for PartitionedDataSetCollection.
 
 ### Additional Dataset Types
 
