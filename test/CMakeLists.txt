@@ -122,7 +122,6 @@ set_tests_properties(vtkhdf_pdc_reader_compatibility PROPERTIES
   FIXTURES_REQUIRED vtkhdf_pdc_collection_files SKIP_RETURN_CODE 77 LABELS reader-compatibility)
 
 
-vtkhdf_add_test_target(vtkhdf_mb_hypertree_test vtkhdf_mb_hypertree_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_duplicate_block_name_test vtkhdf_mb_duplicate_block_name_test.F90)
 vtkhdf_add_test_target(vtkhdf_unstructured_test vtkhdf_unstructured_test.F90)
 vtkhdf_add_test_target(vtkhdf_unstructured_static_test vtkhdf_unstructured_static_test.F90)
@@ -157,31 +156,37 @@ foreach(check layout reader)
   set_tests_properties(vtkhdf_mb_collections_${check} PROPERTIES
     FIXTURES_REQUIRED vtkhdf_mb_collection_files SKIP_RETURN_CODE 77)
 endforeach()
-vtkhdf_add_runtime_test(vtkhdf_mb_hypertree vtkhdf_mb_hypertree_test)
-set_tests_properties(vtkhdf_mb_hypertree PROPERTIES FIXTURES_SETUP vtkhdf_mb_hypertree_files)
-foreach(check layout reader)
-  add_test(NAME vtkhdf_mb_hypertree_${check}
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_hypertree_check.py
-            ${check} ${CMAKE_CURRENT_BINARY_DIR})
-  set_tests_properties(vtkhdf_mb_hypertree_${check} PROPERTIES
-    FIXTURES_REQUIRED vtkhdf_mb_hypertree_files SKIP_RETURN_CODE 77)
-endforeach()
-if(ENABLE_MPI)
-  set(MB_HYPERTREE_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/mb-hypertree-two-rank)
-  file(MAKE_DIRECTORY ${MB_HYPERTREE_TWO_RANK_DIR})
-  add_test(NAME vtkhdf_mb_hypertree_two_rank
-    COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
-            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_mb_hypertree_test ${MPIEXEC_POSTFLAGS})
-  set_tests_properties(vtkhdf_mb_hypertree_two_rank PROPERTIES PROCESSORS 2
-    WORKING_DIRECTORY ${MB_HYPERTREE_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_mb_hypertree_two_rank_files)
+foreach(format mb pdc)
+  vtkhdf_add_test_target(vtkhdf_${format}_hypertree_test vtkhdf_mb_hypertree_test.F90)
+  if(format STREQUAL "pdc")
+    target_compile_definitions(vtkhdf_${format}_hypertree_test PRIVATE PDC_COLLECTION)
+  endif()
+  vtkhdf_add_runtime_test(vtkhdf_${format}_hypertree vtkhdf_${format}_hypertree_test)
+  set_tests_properties(vtkhdf_${format}_hypertree PROPERTIES FIXTURES_SETUP vtkhdf_${format}_hypertree_files)
   foreach(check layout reader)
-    add_test(NAME vtkhdf_mb_hypertree_two_rank_${check}
+    add_test(NAME vtkhdf_${format}_hypertree_${check}
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_hypertree_check.py
-              ${check} ${MB_HYPERTREE_TWO_RANK_DIR})
-    set_tests_properties(vtkhdf_mb_hypertree_two_rank_${check} PROPERTIES
-      FIXTURES_REQUIRED vtkhdf_mb_hypertree_two_rank_files SKIP_RETURN_CODE 77)
+              ${check} ${CMAKE_CURRENT_BINARY_DIR} ${format})
+    set_tests_properties(vtkhdf_${format}_hypertree_${check} PROPERTIES
+      FIXTURES_REQUIRED vtkhdf_${format}_hypertree_files SKIP_RETURN_CODE 77)
   endforeach()
-endif()
+  if(ENABLE_MPI)
+    set(HYPERTREE_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/${format}-hypertree-two-rank)
+    file(MAKE_DIRECTORY ${HYPERTREE_TWO_RANK_DIR})
+    add_test(NAME vtkhdf_${format}_hypertree_two_rank
+      COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
+              $<TARGET_FILE:vtkhdf_${format}_hypertree_test> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(vtkhdf_${format}_hypertree_two_rank PROPERTIES PROCESSORS 2
+      WORKING_DIRECTORY ${HYPERTREE_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_${format}_hypertree_two_rank_files)
+    foreach(check layout reader)
+      add_test(NAME vtkhdf_${format}_hypertree_two_rank_${check}
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_hypertree_check.py
+                ${check} ${HYPERTREE_TWO_RANK_DIR} ${format})
+      set_tests_properties(vtkhdf_${format}_hypertree_two_rank_${check} PROPERTIES
+        FIXTURES_REQUIRED vtkhdf_${format}_hypertree_two_rank_files SKIP_RETURN_CODE 77)
+    endforeach()
+  endif()
+endforeach()
 vtkhdf_add_runtime_test(vtkhdf_mb_duplicate_block_name_file_type vtkhdf_mb_duplicate_block_name_test)
 vtkhdf_add_runtime_test(vtkhdf_unstructured_fixture_file vtkhdf_unstructured_test)
 vtkhdf_add_runtime_test(vtkhdf_unstructured_static_file_type vtkhdf_unstructured_static_test)

@@ -330,3 +330,9 @@ run with two and four ranks, including empty parts, uneven ownership,
 noncontiguous inputs, and topology changes. Contract failures check the
 intended assertion diagnostic, including first-step data on empty ranks,
 kind mismatches, lifecycle rules, and Debug collective agreement.
+
+The `vtkhdf_mb_hypertree_*` and `vtkhdf_pdc_hypertree_*` tests also check static
+and temporal interface pairs on composite HTG blocks. Layout and VTK readback
+checks cover block-level attributes and component values, replacement after
+topology changes, omission reuse, and step finalization by the owning file,
+including empty MPI contributions.
