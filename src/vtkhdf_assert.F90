@@ -32,8 +32,8 @@ subroutine vtkhdf_assert(file, line)
     use mpi
     call MPI_Abort(MPI_COMM_WORLD, 1, ierr)
   end block
-#else
-  error stop
 #endif
+  ! A fatal assertion must not return even if MPI_Abort does.
+  error stop
 
 end subroutine vtkhdf_assert
