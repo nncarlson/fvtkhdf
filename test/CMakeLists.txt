@@ -9,6 +9,31 @@ function(vtkhdf_add_test_target target source)
   target_link_libraries(${target} PRIVATE vtkhdf_test_support)
 endfunction()
 
+# Exercise the real fatal handler without linking the application's MPI/HDF5 stack.
+add_executable(vtkhdf_assert_returning_mpi_test
+  vtkhdf_assert_test.F90
+  support/vtkhdf_assert_stubs.F90
+  ${PROJECT_SOURCE_DIR}/src/vtkhdf_assert.F90
+)
+set(ASSERT_TEST_MODULE_DIR ${CMAKE_CURRENT_BINARY_DIR}/assert-returning-mpi-mod)
+file(MAKE_DIRECTORY ${ASSERT_TEST_MODULE_DIR})
+set_target_properties(vtkhdf_assert_returning_mpi_test PROPERTIES
+  Fortran_MODULE_DIRECTORY ${ASSERT_TEST_MODULE_DIR}
+)
+target_include_directories(vtkhdf_assert_returning_mpi_test PRIVATE
+  ${ASSERT_TEST_MODULE_DIR} ${PROJECT_SOURCE_DIR}/src
+)
+target_compile_definitions(vtkhdf_assert_returning_mpi_test PRIVATE USE_MPI)
+add_test(NAME vtkhdf_assert_returning_mpi
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_assert_check.py
+          $<TARGET_FILE:vtkhdf_assert_returning_mpi_test>
+)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/assert-returning-mpi)
+set_tests_properties(vtkhdf_assert_returning_mpi PROPERTIES
+  PROCESSORS 1 TIMEOUT 30
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/assert-returning-mpi
+)
+
 function(vtkhdf_add_runtime_test test_name target)
   if(ENABLE_MPI)
     add_test(${test_name} ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4

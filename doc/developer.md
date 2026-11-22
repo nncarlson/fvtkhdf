@@ -278,9 +278,12 @@ A failed local contract must terminate the MPI job, so other ranks are not left
 waiting in later collectives. The current
 [`vtkhdf_assert`](../src/vtkhdf_assert.F90) reports the rank, source location,
 and HDF5 error stack, then calls `MPI_Abort(MPI_COMM_WORLD,...)` in MPI builds;
-serial builds use `error stop`. This assumes an active MPI runtime. Preserve
-job-wide termination when changing the assertion machinery; cleanup requiring
-collective participation does not belong in that failure path.
+if that call returns, `error stop` terminates locally rather than returning to
+the invalid operation. Serial builds use the same `error stop`. The local
+fallback does not replace the MPI-wide abort request, which assumes an active
+MPI runtime. Preserve job-wide termination when changing the assertion
+machinery; cleanup requiring collective participation does not belong in that
+failure path.
 
 Test the behavior protected by a check, rather than duplicating its expression
 in a test. Tests that expect an `ASSERT` failure belong only in builds where
