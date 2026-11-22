@@ -650,7 +650,7 @@ contains
     type(vtkhdf_h5e_context) :: err_ctx
 
     INSIST(this%root_id >= 0) ! interface registration requires an open writer
-    ASSERT(this%ctx%identical([1, this%interface_state, ${kind}$])) ! interface registration collective agreement
+    ASSERT(this%ctx%identical([1, this%interface_state, kind(mold)])) ! interface registration collective agreement
     INSIST(this%interface_state == INTERFACE_UNDEFINED)
     INSIST(this%is_temporal)
     INSIST(this%nsteps == 0) ! interface registration precedes time stepping
@@ -665,7 +665,7 @@ contains
     end do
     call write_interface_names(this, indices)
     this%interface_state = INTERFACE_TEMPORAL
-    this%interface_kind = ${kind}$
+    this%interface_kind = kind(mold)
     call err_ctx%restore(0)
   end subroutine register_temporal_interface_data_${kind}$
 #:endfor
