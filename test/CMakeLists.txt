@@ -33,6 +33,10 @@ set_tests_properties(vtkhdf_assert_returning_mpi PROPERTIES
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 
+add_test(NAME vtkhdf_expect_assertion_checks
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_expect_assertion_check.py)
+set_tests_properties(vtkhdf_expect_assertion_checks PROPERTIES TIMEOUT 30)
+
 function(vtkhdf_add_runtime_test test_name target)
   if(ENABLE_MPI)
     add_test(${test_name} ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
@@ -867,12 +871,15 @@ if(ENABLE_MPI AND (CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL "Debug
   list(APPEND interface_debug_failures
     "kind_agreement_register|interface registration collective agreement"
     "kind_agreement_write|interface write collective agreement"
-    "operation_agreement|interface write collective agreement")
+    "operation_agreement|interface write collective agreement|interface registration collective agreement")
 endif()
 foreach(failure IN LISTS interface_failures interface_debug_failures)
   string(REPLACE "|" ";" fields "${failure}")
-  list(GET fields 0 scenario)
-  list(GET fields 1 assertion)
+  list(POP_FRONT fields scenario)
+  set(assertion_args)
+  foreach(assertion IN LISTS fields)
+    list(APPEND assertion_args --assertion "${assertion}")
+  endforeach()
   set(command $<TARGET_FILE:vtkhdf_hypertree_interface_fail_test>)
   set(processors 1)
   if(ENABLE_MPI)
@@ -889,7 +896,7 @@ foreach(failure IN LISTS interface_failures interface_debug_failures)
     ${interface_test_configs}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_expect_assertion.py
             --source ${PROJECT_SOURCE_DIR}/src/vtkhdf_hypertree_writer_type.F90.fypp
-            --assertion "${assertion}" --diagnostic-glob "interface-assertion-R*.log" -- ${command})
+            ${assertion_args} --diagnostic-glob "interface-assertion-R*.log" -- ${command})
   set(dir ${CMAKE_CURRENT_BINARY_DIR}/interface-fail-${scenario})
   file(MAKE_DIRECTORY ${dir})
   set_tests_properties(vtkhdf_hypertree_interface_fail_${scenario} PROPERTIES

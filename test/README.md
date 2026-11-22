@@ -76,6 +76,13 @@ duplicate-write assertion diagnostic. Its UnstructuredGrid setup runs independen
 ImageData setup, and the expected source location is resolved from the template
 so unrelated setup errors cannot satisfy the test.
 
+Repeatable `--assertion` options allow a test to accept any of several precise
+assertion locations. The interface `operation_agreement` test accepts either
+the write-side or registration-side agreement assertion: any rank may abort
+first. `vtkhdf_expect_assertion_checks` verifies both alternatives with isolated
+diagnostics, including a surviving nonzero-rank log, while still rejecting
+unrelated errors, successful commands, missing diagnostics, and stale logs.
+
 `vtkhdf_assert_returning_mpi` compiles the actual fatal handler with isolated,
 test-only MPI and HDF5 modules. Its `MPI_Abort` deliberately returns; the checker
 requires a failed `INSIST` to call `MPI_Abort` and exit unsuccessfully, while a

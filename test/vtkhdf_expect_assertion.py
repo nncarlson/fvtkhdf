@@ -1,4 +1,4 @@
-"""Require a failing command and the diagnostic from a specific assertion."""
+"""Require a failing command and a diagnostic from an allowed assertion."""
 
 import argparse
 from pathlib import Path
@@ -10,8 +10,8 @@ import sys
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
-    parser.add_argument("--assertion", required=True,
-                        help="unique text identifying the assertion's source line")
+    parser.add_argument("--assertion", required=True, action="append",
+                        help="unique text identifying an allowed assertion's source line; repeat for alternatives")
     parser.add_argument("--diagnostic-glob",
                         help="read per-rank diagnostic files if MPI abort loses captured output")
     parser.add_argument("command", nargs=argparse.REMAINDER)
@@ -24,12 +24,16 @@ def main():
 
     # Fypp preserves template line numbers. Resolve the location from source so
     # adding lines above the assertion does not invalidate the expected result.
-    lines = [number for number, line in enumerate(args.source.read_text().splitlines(), 1)
-             if args.assertion in line]
-    if len(lines) != 1:
-        parser.error("--assertion must identify exactly one source line")
-    location = f"{args.source.name}:{lines[0]}"
-    diagnostic = rf"Panic! Assertion failed at [^\r\n]*{re.escape(location)}(?!\d)"
+    source_lines = args.source.read_text().splitlines()
+    locations = []
+    patterns = []
+    for assertion in args.assertion:
+        lines = [number for number, line in enumerate(source_lines, 1) if assertion in line]
+        if len(lines) != 1:
+            parser.error(f"--assertion {assertion!r} must identify exactly one source line")
+        location = f"{args.source.name}:{lines[0]}"
+        locations.append(location)
+        patterns.append(rf"Panic! Assertion failed at [^\r\n]*{re.escape(location)}(?!\d)")
 
     if args.diagnostic_glob:
         # Never accept a diagnostic left by an earlier invocation.
@@ -45,9 +49,10 @@ def main():
     if result.returncode == 0:
         sys.stderr.write("Expected assertion failure, but command exited successfully\n")
         return 1
-    if not re.search(diagnostic, result.stdout + result.stderr + diagnostics):
+    output = result.stdout + result.stderr + diagnostics
+    if not any(re.search(pattern, output) for pattern in patterns):
         sys.stderr.write(diagnostics)
-        sys.stderr.write(f"Expected assertion at {location}; command exited {result.returncode}\n")
+        sys.stderr.write(f"Expected assertion at {' or '.join(locations)}; command exited {result.returncode}\n")
         return 1
     return 0
 
