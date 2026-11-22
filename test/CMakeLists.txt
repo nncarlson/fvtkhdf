@@ -28,10 +28,9 @@ add_test(NAME vtkhdf_assert_returning_mpi
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_assert_check.py
           $<TARGET_FILE:vtkhdf_assert_returning_mpi_test>
 )
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/assert-returning-mpi)
 set_tests_properties(vtkhdf_assert_returning_mpi PROPERTIES
   PROCESSORS 1 TIMEOUT 30
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/assert-returning-mpi
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 function(vtkhdf_add_runtime_test test_name target)

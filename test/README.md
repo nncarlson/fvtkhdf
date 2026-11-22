@@ -75,9 +75,10 @@ so unrelated setup errors cannot satisfy the test.
 
 `vtkhdf_assert_returning_mpi` compiles the actual fatal handler with isolated,
 test-only MPI and HDF5 modules. Its `MPI_Abort` deliberately returns; the checker
-requires the assertion diagnostic, the abort attempt, local error termination,
-and no post-assertion output or file. A successful `INSIST` must still reach
-that operation without invoking the fatal handler. The test runs as one process,
+requires a failed `INSIST` to call `MPI_Abort` and exit unsuccessfully, while a
+successful `INSIST` must exit normally without calling `MPI_Abort`. The driver
+ends normally if the fatal handler returns, so the exit status detects a missing
+local termination. The test runs as one process,
 without real MPI/HDF5 libraries or an MPI launcher, in both serial and MPI
 configurations, including Release. It tests the application's fallback, not
 the native MPI runtime's abort behavior.
