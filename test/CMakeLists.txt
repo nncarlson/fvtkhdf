@@ -835,7 +835,7 @@ set(interface_failures
   "static_twice|INSIST(this%interface_state /= INTERFACE_STATIC)"
   "register_twice|INSIST(this%interface_state == INTERFACE_UNDEFINED)"
   "register_after_static|INSIST(this%interface_state == INTERFACE_UNDEFINED)"
-  "late_register|INSIST(this%nsteps == 0)"
+  "late_register|interface registration precedes time stepping"
   "outside_step|temporal interface requires an open step"
   "between_steps|temporal interface requires an open step"
   "no_grid|INSIST(this%grid_defined .and. this%geometry_defined .and. this%topology_defined)"
@@ -857,13 +857,14 @@ set(interface_failures
 if(ENABLE_MPI)
   list(APPEND interface_failures "missing_initial_empty|initial interface pair required, even with no cells")
 endif()
-if(ENABLE_MPI AND CMAKE_BUILD_TYPE STREQUAL "Debug")
-  list(APPEND interface_failures
+set(interface_debug_failures)
+if(ENABLE_MPI AND (CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL "Debug"))
+  list(APPEND interface_debug_failures
     "kind_agreement_register|interface registration collective agreement"
     "kind_agreement_write|interface write collective agreement"
     "operation_agreement|interface write collective agreement")
 endif()
-foreach(failure IN LISTS interface_failures)
+foreach(failure IN LISTS interface_failures interface_debug_failures)
   string(REPLACE "|" ";" fields "${failure}")
   list(GET fields 0 scenario)
   list(GET fields 1 assertion)
@@ -875,12 +876,12 @@ foreach(failure IN LISTS interface_failures)
     set(processors 4)
   endif()
   list(APPEND command ${scenario})
-  # Registration timing also appears in ordinary overloads: use its comment
-  # to identify the interface-specific assertion uniquely.
-  if(scenario STREQUAL "late_register")
-    set(assertion "interface registration precedes time stepping")
+  set(interface_test_configs)
+  if(CMAKE_CONFIGURATION_TYPES AND failure IN_LIST interface_debug_failures)
+    set(interface_test_configs CONFIGURATIONS Debug)
   endif()
   add_test(NAME vtkhdf_hypertree_interface_fail_${scenario}
+    ${interface_test_configs}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_expect_assertion.py
             --source ${PROJECT_SOURCE_DIR}/src/vtkhdf_hypertree_writer_type.F90.fypp
             --assertion "${assertion}" --diagnostic-glob "interface-assertion-R*.log" -- ${command})
