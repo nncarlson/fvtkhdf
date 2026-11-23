@@ -7,39 +7,13 @@ and ParaView.
 It targets MPI-parallel HPC workflows and uses parallel HDF5 for collective I/O.
 A serial build is also available.
 
-.. toctree::
-   :maxdepth: 1
-   :caption: Reference Manual
-
-   overview
-   common
-   field_data
+* :doc:`installation`: prerequisites, serial and MPI builds, examples, and
+  integration with your project.
+* :doc:`reference`: writer interfaces, dataset types, and reader compatibility.
 
 .. toctree::
+   :hidden:
    :maxdepth: 1
-   :caption: Structured VTK Dataset Types
 
-   Common Interface <structured>
-   ImageData <image>
-   RectilinearGrid <rectilinear>
-   StructuredGrid <structured_grid>
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Unstructured VTK Dataset Types
-
-   UnstructuredGrid <unstructured>
-   vtk_cell_types
-   stitching
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Tree-Based AMR VTK Dataset Types
-
-   HyperTreeGrid <hypertree>
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Composite VTK Dataset Types
-
-   Composite Datasets (MB and PDC) <composite>
+   installation
+   reference

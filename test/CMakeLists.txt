@@ -258,226 +258,214 @@ else()
   set(VTKHDF_DYNAMIC_UNSTRUCTURED_CONNECTIVITY_ID_OFFSETS_REGEX "\\(0\\): 0, 0, 4, 4, 4")
 endif()
 
-if(H5DUMP_EXECUTABLE)
-
-  add_test(
-    NAME vtkhdf_unstructured_static_cell_attribute
-    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/CellData/static-cell-scalar/Attribute
-            ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_unstructured_static_cell_attribute PROPERTIES
-    DEPENDS vtkhdf_unstructured_fixture_file
-    PASS_REGULAR_EXPRESSION "\"Scalars\""
-  )
-
-  add_test(
-    NAME vtkhdf_unstructured_static_point_attribute
-    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/PointData/static-point-vector/Attribute
-            ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_unstructured_static_point_attribute PROPERTIES
-    DEPENDS vtkhdf_unstructured_fixture_file
-    PASS_REGULAR_EXPRESSION "\"Vectors\""
-  )
-
-  add_test(
-    NAME vtkhdf_unstructured_temporal_cell_attribute
-    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/CellData/cell-radius/Attribute
-            ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_unstructured_temporal_cell_attribute PROPERTIES
-    DEPENDS vtkhdf_unstructured_fixture_file
-    PASS_REGULAR_EXPRESSION "\"Scalars\""
-  )
-
-  add_test(
-    NAME vtkhdf_unstructured_temporal_point_attribute
-    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/PointData/point-velocity/Attribute
-            ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_unstructured_temporal_point_attribute PROPERTIES
-    DEPENDS vtkhdf_unstructured_fixture_file
-    PASS_REGULAR_EXPRESSION "\"Vectors\""
-  )
-
-  add_test(
-    NAME vtkhdf_mb_static_cell_attribute
-    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/Group_0/CellData/static-cell-scalar/Attribute
-            ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_mb_static_cell_attribute PROPERTIES
-    DEPENDS vtkhdf_mb_fixture_file
-    PASS_REGULAR_EXPRESSION "\"Scalars\""
-  )
-
-  add_test(
-    NAME vtkhdf_mb_temporal_point_attribute
-    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/Group_1/PointData/point-velocity/Attribute
-            ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_mb_temporal_point_attribute PROPERTIES
-    DEPENDS vtkhdf_mb_fixture_file
-    PASS_REGULAR_EXPRESSION "\"Vectors\""
-  )
-
-  add_test(
-    NAME vtkhdf_mb_assembly_block_a_link
-    COMMAND ${H5DUMP_EXECUTABLE} -n ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_mb_assembly_block_a_link PROPERTIES
-    DEPENDS vtkhdf_mb_fixture_file
-    PASS_REGULAR_EXPRESSION "link +/VTKHDF/Assembly/Block-A -> /VTKHDF/Group_0"
-  )
-
-  add_test(
-    NAME vtkhdf_mb_assembly_block_b_link
-    COMMAND ${H5DUMP_EXECUTABLE} -n ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_mb_assembly_block_b_link PROPERTIES
-    DEPENDS vtkhdf_mb_fixture_file
-    PASS_REGULAR_EXPRESSION "link +/VTKHDF/Assembly/Block-B -> /VTKHDF/Group_1"
-  )
-
-  add_test(
-    NAME vtkhdf_mb_group_0_name
-    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/Group_0/Name
-            ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_mb_group_0_name PROPERTIES
-    DEPENDS vtkhdf_mb_fixture_file
-    PASS_REGULAR_EXPRESSION "\"Block-A\""
-  )
-
-  add_test(
-    NAME vtkhdf_mb_group_1_name
-    COMMAND ${H5DUMP_EXECUTABLE} -a /VTKHDF/Group_1/Name
-            ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_mb_group_1_name PROPERTIES
-    DEPENDS vtkhdf_mb_fixture_file
-    PASS_REGULAR_EXPRESSION "\"Block-B\""
-  )
-
-  add_test(
-    NAME vtkhdf_mb_duplicate_block_name_first_link
-    COMMAND ${H5DUMP_EXECUTABLE} -n ${CMAKE_CURRENT_BINARY_DIR}/mb_duplicate_block_name_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_mb_duplicate_block_name_first_link PROPERTIES
-    DEPENDS vtkhdf_mb_duplicate_block_name_file_type
-    PASS_REGULAR_EXPRESSION "link +/VTKHDF/Assembly/Repeated_Block -> /VTKHDF/Group_0"
-  )
-
-  add_test(
-    NAME vtkhdf_mb_duplicate_block_name_second_link
-    COMMAND ${H5DUMP_EXECUTABLE} -n ${CMAKE_CURRENT_BINARY_DIR}/mb_duplicate_block_name_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_mb_duplicate_block_name_second_link PROPERTIES
-    DEPENDS vtkhdf_mb_duplicate_block_name_file_type
-    PASS_REGULAR_EXPRESSION "link +/VTKHDF/Assembly/Repeated_Block_1 -> /VTKHDF/Group_2"
-  )
-
-  if(ENABLE_MPI)
-    add_test(
-      NAME vtkhdf_mb_zero_part_sparse_number_of_parts
-      COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/Group_1/Steps/NumberOfParts
-              ${CMAKE_CURRENT_BINARY_DIR}/mb_zero_part_test.vtkhdf
-    )
-    set_tests_properties(vtkhdf_mb_zero_part_sparse_number_of_parts PROPERTIES
-      DEPENDS vtkhdf_mb_zero_part_file_type
-      PASS_REGULAR_EXPRESSION "\\(0\\): 3, 3"
-    )
-
-    add_test(
-      NAME vtkhdf_mb_zero_part_sparse_number_of_points
-      COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/Group_1/NumberOfPoints
-              ${CMAKE_CURRENT_BINARY_DIR}/mb_zero_part_test.vtkhdf
-    )
-    set_tests_properties(vtkhdf_mb_zero_part_sparse_number_of_points PROPERTIES
-      DEPENDS vtkhdf_mb_zero_part_file_type
-      PASS_REGULAR_EXPRESSION "\\(0\\): 8, 8, 8"
-    )
-
-    add_test(
-      NAME vtkhdf_mb_zero_part_sparse_point_data_offsets
-      COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/Group_1/Steps/PointDataOffsets/point-radius
-              ${CMAKE_CURRENT_BINARY_DIR}/mb_zero_part_test.vtkhdf
-    )
-    set_tests_properties(vtkhdf_mb_zero_part_sparse_point_data_offsets PROPERTIES
-      DEPENDS vtkhdf_mb_zero_part_file_type
-      PASS_REGULAR_EXPRESSION "\\(0\\): 0, 24"
-    )
+# Keep structural checks visible even when the optional HDF5 tools are absent.
+function(vtkhdf_add_h5dump_test name)
+  if(H5DUMP_EXECUTABLE)
+    add_test(NAME ${name} COMMAND "${H5DUMP_EXECUTABLE}" ${ARGN})
+  else()
+    add_test(NAME ${name}
+      COMMAND ${CMAKE_COMMAND} -E echo "h5dump unavailable: skipping structural check")
+    set_tests_properties(${name} PROPERTIES
+      SKIP_REGULAR_EXPRESSION "^h5dump unavailable:")
   endif()
+  set_tests_properties(${name} PROPERTIES LABELS h5dump)
+endfunction()
 
-  add_test(
-    NAME vtkhdf_dynamic_unstructured_number_of_points
-    COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/NumberOfPoints
-            ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
+vtkhdf_add_h5dump_test(vtkhdf_unstructured_static_cell_attribute
+  -a /VTKHDF/CellData/static-cell-scalar/Attribute
+  ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
+)
+set_tests_properties(vtkhdf_unstructured_static_cell_attribute PROPERTIES
+  DEPENDS vtkhdf_unstructured_fixture_file
+  PASS_REGULAR_EXPRESSION "\"Scalars\""
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_unstructured_static_point_attribute
+  -a /VTKHDF/PointData/static-point-vector/Attribute
+  ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
+)
+set_tests_properties(vtkhdf_unstructured_static_point_attribute PROPERTIES
+  DEPENDS vtkhdf_unstructured_fixture_file
+  PASS_REGULAR_EXPRESSION "\"Vectors\""
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_unstructured_temporal_cell_attribute
+  -a /VTKHDF/CellData/cell-radius/Attribute
+  ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
+)
+set_tests_properties(vtkhdf_unstructured_temporal_cell_attribute PROPERTIES
+  DEPENDS vtkhdf_unstructured_fixture_file
+  PASS_REGULAR_EXPRESSION "\"Scalars\""
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_unstructured_temporal_point_attribute
+  -a /VTKHDF/PointData/point-velocity/Attribute
+  ${CMAKE_CURRENT_BINARY_DIR}/unstructured_test.vtkhdf
+)
+set_tests_properties(vtkhdf_unstructured_temporal_point_attribute PROPERTIES
+  DEPENDS vtkhdf_unstructured_fixture_file
+  PASS_REGULAR_EXPRESSION "\"Vectors\""
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_mb_static_cell_attribute
+  -a /VTKHDF/Group_0/CellData/static-cell-scalar/Attribute
+  ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
+)
+set_tests_properties(vtkhdf_mb_static_cell_attribute PROPERTIES
+  DEPENDS vtkhdf_mb_fixture_file
+  PASS_REGULAR_EXPRESSION "\"Scalars\""
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_mb_temporal_point_attribute
+  -a /VTKHDF/Group_1/PointData/point-velocity/Attribute
+  ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
+)
+set_tests_properties(vtkhdf_mb_temporal_point_attribute PROPERTIES
+  DEPENDS vtkhdf_mb_fixture_file
+  PASS_REGULAR_EXPRESSION "\"Vectors\""
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_mb_assembly_block_a_link
+  -n ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
+)
+set_tests_properties(vtkhdf_mb_assembly_block_a_link PROPERTIES
+  DEPENDS vtkhdf_mb_fixture_file
+  PASS_REGULAR_EXPRESSION "link +/VTKHDF/Assembly/Block-A -> /VTKHDF/Group_0"
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_mb_assembly_block_b_link
+  -n ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
+)
+set_tests_properties(vtkhdf_mb_assembly_block_b_link PROPERTIES
+  DEPENDS vtkhdf_mb_fixture_file
+  PASS_REGULAR_EXPRESSION "link +/VTKHDF/Assembly/Block-B -> /VTKHDF/Group_1"
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_mb_group_0_name
+  -a /VTKHDF/Group_0/Name
+  ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
+)
+set_tests_properties(vtkhdf_mb_group_0_name PROPERTIES
+  DEPENDS vtkhdf_mb_fixture_file
+  PASS_REGULAR_EXPRESSION "\"Block-A\""
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_mb_group_1_name
+  -a /VTKHDF/Group_1/Name
+  ${CMAKE_CURRENT_BINARY_DIR}/mb_test.vtkhdf
+)
+set_tests_properties(vtkhdf_mb_group_1_name PROPERTIES
+  DEPENDS vtkhdf_mb_fixture_file
+  PASS_REGULAR_EXPRESSION "\"Block-B\""
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_mb_duplicate_block_name_first_link
+  -n ${CMAKE_CURRENT_BINARY_DIR}/mb_duplicate_block_name_test.vtkhdf
+)
+set_tests_properties(vtkhdf_mb_duplicate_block_name_first_link PROPERTIES
+  DEPENDS vtkhdf_mb_duplicate_block_name_file_type
+  PASS_REGULAR_EXPRESSION "link +/VTKHDF/Assembly/Repeated_Block -> /VTKHDF/Group_0"
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_mb_duplicate_block_name_second_link
+  -n ${CMAKE_CURRENT_BINARY_DIR}/mb_duplicate_block_name_test.vtkhdf
+)
+set_tests_properties(vtkhdf_mb_duplicate_block_name_second_link PROPERTIES
+  DEPENDS vtkhdf_mb_duplicate_block_name_file_type
+  PASS_REGULAR_EXPRESSION "link +/VTKHDF/Assembly/Repeated_Block_1 -> /VTKHDF/Group_2"
+)
+
+if(ENABLE_MPI)
+  vtkhdf_add_h5dump_test(vtkhdf_mb_zero_part_sparse_number_of_parts
+    -d /VTKHDF/Group_1/Steps/NumberOfParts
+    ${CMAKE_CURRENT_BINARY_DIR}/mb_zero_part_test.vtkhdf
   )
-  set_tests_properties(vtkhdf_dynamic_unstructured_number_of_points PROPERTIES
-    DEPENDS vtkhdf_dynamic_unstructured_file_type
-    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_NUMBER_OF_POINTS_REGEX}"
+  set_tests_properties(vtkhdf_mb_zero_part_sparse_number_of_parts PROPERTIES
+    DEPENDS vtkhdf_mb_zero_part_file_type
+    PASS_REGULAR_EXPRESSION "\\(0\\): 3, 3"
   )
 
-  add_test(
-    NAME vtkhdf_dynamic_unstructured_number_of_cells
-    COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/NumberOfCells
-            ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
+  vtkhdf_add_h5dump_test(vtkhdf_mb_zero_part_sparse_number_of_points
+    -d /VTKHDF/Group_1/NumberOfPoints
+    ${CMAKE_CURRENT_BINARY_DIR}/mb_zero_part_test.vtkhdf
   )
-  set_tests_properties(vtkhdf_dynamic_unstructured_number_of_cells PROPERTIES
-    DEPENDS vtkhdf_dynamic_unstructured_file_type
-    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_NUMBER_OF_CELLS_REGEX}"
-  )
-
-  add_test(
-    NAME vtkhdf_dynamic_unstructured_point_offsets
-    COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/Steps/PointOffsets
-            ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_dynamic_unstructured_point_offsets PROPERTIES
-    DEPENDS vtkhdf_dynamic_unstructured_file_type
-    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_POINT_OFFSETS_REGEX}"
+  set_tests_properties(vtkhdf_mb_zero_part_sparse_number_of_points PROPERTIES
+    DEPENDS vtkhdf_mb_zero_part_file_type
+    PASS_REGULAR_EXPRESSION "\\(0\\): 8, 8, 8"
   )
 
-  add_test(
-    NAME vtkhdf_dynamic_unstructured_cell_offsets
-    COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/Steps/CellOffsets
-            ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
+  vtkhdf_add_h5dump_test(vtkhdf_mb_zero_part_sparse_point_data_offsets
+    -d /VTKHDF/Group_1/Steps/PointDataOffsets/point-radius
+    ${CMAKE_CURRENT_BINARY_DIR}/mb_zero_part_test.vtkhdf
   )
-  set_tests_properties(vtkhdf_dynamic_unstructured_cell_offsets PROPERTIES
-    DEPENDS vtkhdf_dynamic_unstructured_file_type
-    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_CELL_OFFSETS_REGEX}"
-  )
-
-  add_test(
-    NAME vtkhdf_dynamic_unstructured_connectivity_id_offsets
-    COMMAND ${H5DUMP_EXECUTABLE} -d /VTKHDF/Steps/ConnectivityIdOffsets
-            ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
-  )
-  set_tests_properties(vtkhdf_dynamic_unstructured_connectivity_id_offsets PROPERTIES
-    DEPENDS vtkhdf_dynamic_unstructured_file_type
-    PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_CONNECTIVITY_ID_OFFSETS_REGEX}"
-  )
-
-  add_test(
-    NAME vtkhdf_chunk_default_layout
-    COMMAND ${H5DUMP_EXECUTABLE} -pH -d /VTKHDF/Types
-            ${CMAKE_CURRENT_BINARY_DIR}/chunk_default.vtkhdf
-  )
-  set_tests_properties(vtkhdf_chunk_default_layout PROPERTIES
-    FIXTURES_REQUIRED vtkhdf_chunk_files
-    PASS_REGULAR_EXPRESSION "CHUNKED \\( 131072 \\)"
-  )
-
-  add_test(
-    NAME vtkhdf_chunk_custom_layout
-    COMMAND ${H5DUMP_EXECUTABLE} -pH -d /VTKHDF/Group_0/Types
-            ${CMAKE_CURRENT_BINARY_DIR}/chunk_custom.vtkhdf
-  )
-  set_tests_properties(vtkhdf_chunk_custom_layout PROPERTIES
-    FIXTURES_REQUIRED vtkhdf_chunk_files
-    PASS_REGULAR_EXPRESSION "CHUNKED \\( 1048576 \\)"
+  set_tests_properties(vtkhdf_mb_zero_part_sparse_point_data_offsets PROPERTIES
+    DEPENDS vtkhdf_mb_zero_part_file_type
+    PASS_REGULAR_EXPRESSION "\\(0\\): 0, 24"
   )
 endif()
+
+vtkhdf_add_h5dump_test(vtkhdf_dynamic_unstructured_number_of_points
+  -d /VTKHDF/NumberOfPoints
+  ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
+)
+set_tests_properties(vtkhdf_dynamic_unstructured_number_of_points PROPERTIES
+  DEPENDS vtkhdf_dynamic_unstructured_file_type
+  PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_NUMBER_OF_POINTS_REGEX}"
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_dynamic_unstructured_number_of_cells
+  -d /VTKHDF/NumberOfCells
+  ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
+)
+set_tests_properties(vtkhdf_dynamic_unstructured_number_of_cells PROPERTIES
+  DEPENDS vtkhdf_dynamic_unstructured_file_type
+  PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_NUMBER_OF_CELLS_REGEX}"
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_dynamic_unstructured_point_offsets
+  -d /VTKHDF/Steps/PointOffsets
+  ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
+)
+set_tests_properties(vtkhdf_dynamic_unstructured_point_offsets PROPERTIES
+  DEPENDS vtkhdf_dynamic_unstructured_file_type
+  PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_POINT_OFFSETS_REGEX}"
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_dynamic_unstructured_cell_offsets
+  -d /VTKHDF/Steps/CellOffsets
+  ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
+)
+set_tests_properties(vtkhdf_dynamic_unstructured_cell_offsets PROPERTIES
+  DEPENDS vtkhdf_dynamic_unstructured_file_type
+  PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_CELL_OFFSETS_REGEX}"
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_dynamic_unstructured_connectivity_id_offsets
+  -d /VTKHDF/Steps/ConnectivityIdOffsets
+  ${CMAKE_CURRENT_BINARY_DIR}/dyn_unstructured_test.vtkhdf
+)
+set_tests_properties(vtkhdf_dynamic_unstructured_connectivity_id_offsets PROPERTIES
+  DEPENDS vtkhdf_dynamic_unstructured_file_type
+  PASS_REGULAR_EXPRESSION "${VTKHDF_DYNAMIC_UNSTRUCTURED_CONNECTIVITY_ID_OFFSETS_REGEX}"
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_chunk_default_layout
+  -pH -d /VTKHDF/Types
+  ${CMAKE_CURRENT_BINARY_DIR}/chunk_default.vtkhdf
+)
+set_tests_properties(vtkhdf_chunk_default_layout PROPERTIES
+  FIXTURES_REQUIRED vtkhdf_chunk_files
+  PASS_REGULAR_EXPRESSION "CHUNKED \\( 131072 \\)"
+)
+
+vtkhdf_add_h5dump_test(vtkhdf_chunk_custom_layout
+  -pH -d /VTKHDF/Group_0/Types
+  ${CMAKE_CURRENT_BINARY_DIR}/chunk_custom.vtkhdf
+)
+set_tests_properties(vtkhdf_chunk_custom_layout PROPERTIES
+  FIXTURES_REQUIRED vtkhdf_chunk_files
+  PASS_REGULAR_EXPRESSION "CHUNKED \\( 1048576 \\)"
+)
 
 add_test(
   NAME vtkhdf_unstructured_reader_smoke

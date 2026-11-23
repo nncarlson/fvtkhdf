@@ -6,7 +6,7 @@ checking policy, and validation practices used by fVTKHDF.
 ## Source Organization
 
 The public file writers implement the API documented in the
-[reference manual](sphinx/index.rst). Each simple dataset has an abstract writer
+[reference manual](sphinx/reference.rst). Each simple dataset has an abstract writer
 class containing its dataset state and writing implementation, with concrete
 file and block descendants. The file descendant adds standalone file ownership,
 creation, flushing, and file cleanup. The block descendant borrows its composite

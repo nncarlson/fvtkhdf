@@ -47,6 +47,9 @@ them.
 
 These are `h5dump`-based checks layered on top of fixture or regression files.
 They protect on-disk metadata that reader smoke alone would miss.
+The checks remain registered when `h5dump` is unavailable at configuration
+time; CTest reports them as skipped. Run them with
+`ctest --test-dir build -L h5dump`.
 
 - UnstructuredGrid fixture attribute checks for static and temporal point/cell data.
 - Dynamic UnstructuredGrid temporal mesh checks for `NumberOfPoints`, `NumberOfCells`,
