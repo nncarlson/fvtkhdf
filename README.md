@@ -14,6 +14,13 @@ fVTKHDF targets version 2.8 of the
 for the dataset types it supports. The library depends on HDF5, with MPI
 required only for parallel builds.
 
+## Documentation
+
+* [Installation Guide](https://nncarlson.github.io/fvtkhdf/installation.html):
+  prerequisites, building, testing, and project integration.
+* [Reference Manual](https://nncarlson.github.io/fvtkhdf/reference.html):
+  writer interfaces, dataset types, and reader compatibility.
+
 ## Dataset Support
 
 * **ImageData, RectilinearGrid, and StructuredGrid:** Logically rectangular
@@ -55,88 +62,28 @@ use the latest stable release of ParaView.
 | HyperTreeGrid | ParaView 6.2+ (VTK 9.7+) |
 | Dataset attribute designations (`Scalars`, `Vectors`, `Tensors`, `GlobalIds`, etc.) | ParaView 6.2+ (VTK 9.7+); older readers ignore these designations |
 
-See the [reference manual](https://nncarlson.github.io/fvtkhdf/) for
+See the [reference manual](https://nncarlson.github.io/fvtkhdf/reference.html) for
 format-specific reader limitations and workarounds.
-
-## Documentation
-
-See the [Reference Manual](https://nncarlson.github.io/fvtkhdf/).
 
 ## Installation
 
-### Prerequisites
-
-* Fortran 2018 Compiler (GCC 13+, Intel oneAPI, etc.)
-* CMake (3.28+)
-* HDF5 C Library (1.10+) (Parallel HDF5 for MPI-enabled build)
-* Python 3 + `fypp`; `vtk` is recommended for reader-validation tests
-  (`pip install fypp vtk`)
-* MPI (Optional)
-
-### Build and Install
-
-Before configuring, select the intended compiler and HDF5 environment, along
-with a compatible MPI installation for parallel builds.
-
-By default, the library builds with MPI support enabled. Use
-`-DENABLE_MPI=OFF` for a serial-only build. If your MPI installation does
-not provide the `mpi_f08` module, use `-DUSE_MPI_F08=OFF` to disable the
-`mpi_f08` communicator overloads while keeping the integer-communicator MPI
-interface enabled.
+Select a Fortran 2018 compiler, CMake 3.28+, the HDF5 C library, and Python 3
+with `fypp`. The default build enables MPI and requires parallel HDF5 built
+with a compatible MPI installation.
 
 ```bash
 git clone https://github.com/nncarlson/fvtkhdf
 cd fvtkhdf
-# Configure the build and set install location
 cmake -B build --install-prefix /path/to/install
-# Build and install
 cmake --build build --parallel
+ctest --test-dir build --output-on-failure
 cmake --install build
 ```
 
-The installation includes CMake package configuration files for use with
-`find_package(fVTKHDF)`, as shown below.
-
-Add `-DBUILD_EXAMPLES=ON` to the CMake configure command to build the example
-programs. The executables are placed in `build/example/`.
-
-Run the tests for your chosen build configuration with:
-
-```bash
-ctest --test-dir build --output-on-failure
-```
-
-### Fortran Package Manager (fpm)
-
-See [fpm/README.md](fpm/README.md) for instructions on building fVTKHDF with the
-Fortran Package Manager.
-
-### Spack
-
-fVTKHDF is available through Spack:
-
-```bash
-spack install fvtkhdf
-```
-
-The Spack package builds the MPI-enabled configuration and currently
-targets parallel HDF5 1.14.x.
-
-## Using fVTKHDF in your Project
-
-Once installed, you can use **fVTKHDF** in your own CMake-based project by
-adding the following to your `CMakeLists.txt`:
-
-```CMake
-find_package(fVTKHDF REQUIRED)
-
-add_executable(my_simulation main.f90)
-target_link_libraries(my_simulation PRIVATE fVTKHDF::fvtkhdf)
-```
-
-For an installation in a custom location, add
-`-DCMAKE_PREFIX_PATH=/path/to/install` when configuring your project so CMake
-can find the package.
+Use `-DENABLE_MPI=OFF` for a serial build. See the
+[Installation Guide](https://nncarlson.github.io/fvtkhdf/installation.html)
+for prerequisites, MPI options, examples, fpm, Spack, and
+[project integration](https://nncarlson.github.io/fvtkhdf/installation.html#using-fvtkhdf-in-your-project).
 
 ## Quick Start
 

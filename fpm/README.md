@@ -1,6 +1,19 @@
 # fpm Usage
 
-This repository includes limited `fpm` support as a secondary build path.
+This repository provides fpm support as a secondary build path. The regression
+test suite requires CMake/CTest.
+
+fVTKHDF generates some of its Fortran sources from Fypp templates. Because fpm
+does not natively support Fypp preprocessing, run `generate_fpm_src.py` before
+building with fpm. The script expands the `.F90.fypp` templates into `.F90`
+files and assembles an fpm project in `fpm-src/`, including the remaining
+sources, examples, and manifest. This step requires Python 3 and the `fypp`
+executable on your `PATH`.
+
+Use matching serial or MPI options for generation and the subsequent fpm build,
+as shown below. Regenerate after changing the library sources or switching
+between serial and MPI builds. Make source changes in the original files;
+the script recreates the generated tree each time.
 
 ## Serial build
 

@@ -1,0 +1,42 @@
+================
+Reference Manual
+================
+
+For build and project setup, see :doc:`installation`.
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Reference Manual
+
+   overview
+   common
+   field_data
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Structured VTK Dataset Types
+
+   Common Interface <structured>
+   ImageData <image>
+   RectilinearGrid <rectilinear>
+   StructuredGrid <structured_grid>
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Unstructured VTK Dataset Types
+
+   UnstructuredGrid <unstructured>
+   vtk_cell_types
+   stitching
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Tree-Based AMR VTK Dataset Types
+
+   HyperTreeGrid <hypertree>
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Composite VTK Dataset Types
+
+   Composite Datasets (MB and PDC) <composite>
