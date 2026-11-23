@@ -299,14 +299,16 @@ def check_coarse_layout():
 def check_interface_layout():
     with h5py.File(directory/"hypertree_interface.vtkhdf") as f:
         root = f["VTKHDF"]
-        require(root.attrs["InterfaceNormalsName"] == b"normals", "hypertree_interface: InterfaceNormalsName")
-        require(root.attrs["InterfaceInterceptsName"] == b"intercepts", "hypertree_interface: InterfaceInterceptsName")
-        for key in ("normals", "intercepts"):
+        require(root.attrs["InterfaceNormalsName"] == b"vtkInterfaceNormals", "hypertree_interface: InterfaceNormalsName")
+        require(root.attrs["InterfaceInterceptsName"] == b"vtkInterfaceIntercepts", "hypertree_interface: InterfaceInterceptsName")
+        for key in ("vtkInterfaceNormals", "vtkInterfaceIntercepts"):
             require(root[f"CellData/{key}"].shape[1:] == (3,), f"hypertree_interface: CellData/{key} components")
     for name in FIXTURES:
         with h5py.File(directory/f"{name}.vtkhdf") as f:
             for key in ("InterfaceNormalsName", "InterfaceInterceptsName"):
                 require(key not in f["VTKHDF"].attrs, f"{name}: unexpected {key}")
+            for key in ("vtkInterfaceNormals", "vtkInterfaceIntercepts"):
+                require(key not in f["VTKHDF/CellData"], f"{name}: unexpected interface dataset {key}")
 
 
 def check_interface_reader():
@@ -315,10 +317,10 @@ def check_interface_reader():
     reader.Update()
     for hypertree in pieces(reader.GetOutputDataObject(0)):
         require(hypertree.GetHasInterface(), "hypertree_interface: reader did not enable the interface")
-        require(hypertree.GetInterfaceNormalsName() == "normals", "hypertree_interface: normals name")
-        require(hypertree.GetInterfaceInterceptsName() == "intercepts", "hypertree_interface: intercepts name")
+        require(hypertree.GetInterfaceNormalsName() == "vtkInterfaceNormals", "hypertree_interface: normals name")
+        require(hypertree.GetInterfaceInterceptsName() == "vtkInterfaceIntercepts", "hypertree_interface: intercepts name")
         cell_data = hypertree.GetCellData()
-        for key in ("normals", "intercepts"):
+        for key in ("vtkInterfaceNormals", "vtkInterfaceIntercepts"):
             array = cell_data.GetArray(key)
             require(array is not None and array.GetNumberOfComponents() == 3, f"hypertree_interface: {key} array")
 

@@ -62,6 +62,7 @@ EXAMPLE_GLOBS = (
 
 EXAMPLE_COPY_FILES = (
     "README.md",
+    "hypertree_dynamic_mesh_view.py",
 )
 
 

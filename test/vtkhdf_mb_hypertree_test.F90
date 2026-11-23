@@ -1,7 +1,11 @@
-! Exercise MB's shared timeline with fixed, moving, and dynamic HTG blocks.
+! Exercise composite HTG interfaces and shared fixed/moving/dynamic timelines.
 program vtkhdf_mb_hypertree_test
   use,intrinsic :: iso_fortran_env, only: int64, real64
+#ifdef PDC_COLLECTION
+  use vtkhdf_pdc_file_type, vtkhdf_mb_file => vtkhdf_pdc_file
+#else
   use vtkhdf_mb_file_type
+#endif
   use vtkhdf_test_env
 #ifdef USE_MPI_F08
   use mpi_f08, only: MPI_COMM_WORLD
@@ -13,6 +17,12 @@ program vtkhdf_mb_hypertree_test
     type(vtkhdf_hypertree_block), pointer :: p => null()
   end type
   type(vtkhdf_mb_file) :: file
+#ifdef PDC_COLLECTION
+  character(*), parameter :: prefix = 'pdc'
+#else
+  character(*), parameter :: prefix = 'mb'
+#endif
+  type(vtkhdf_hypertree_block), pointer :: static_block
   type(block_pointer) :: blocks(3)
   type(vtkhdf_cell_data_handle) :: value(3)
   character(7), parameter :: names(3) = [character(7) :: 'fixed', 'moving', 'dynamic']
@@ -24,9 +34,9 @@ program vtkhdf_mb_hypertree_test
 
   call test_env_init(rank,nproc)
 #ifdef USE_MPI
-  call file%create('mb_hypertree.vtkhdf',MPI_COMM_WORLD,stat,errmsg,data_chunk_bytes=64_int64)
+  call file%create(prefix//'_hypertree.vtkhdf',MPI_COMM_WORLD,stat,errmsg,data_chunk_bytes=64_int64)
 #else
-  call file%create('mb_hypertree.vtkhdf',stat,errmsg,data_chunk_bytes=64_int64)
+  call file%create(prefix//'_hypertree.vtkhdf',stat,errmsg,data_chunk_bytes=64_int64)
 #endif
   if (stat /= 0) error stop errmsg
   do mode = VTKHDF_FIXED_MESH,VTKHDF_DYNAMIC_MESH
@@ -34,9 +44,10 @@ program vtkhdf_mb_hypertree_test
     call blocks(mode)%p%write_mesh([3,1,1])
     call blocks(mode)%p%write_field_data('id',data=mode)
     value(mode) = blocks(mode)%p%register_temporal_cell_data('value',0.0_real64)
+    call blocks(mode)%p%register_temporal_interface_data(0.0_real64)
   end do
   do step = 0,2
-    ! Starting step 2 finalizes step 1; closing MB finalizes step 2.
+    ! Starting step 2 finalizes step 1; closing the owner finalizes step 2.
     call file%start_time_step(real(step,real64))
     do mode = VTKHDF_FIXED_MESH,VTKHDF_DYNAMIC_MESH
       if (.not.blocks(mode)%p%step_is_open()) error stop 'HTG step not started'
@@ -52,7 +63,10 @@ program vtkhdf_mb_hypertree_test
             [0.0_real64],[0.0_real64])
       end if
       ! Step 2 reuses the latest cell values, including the dynamic topology.
-      if (step < 2) call blocks(mode)%p%write_cell_data(value(mode),values)
+      if (step < 2) then
+        call blocks(mode)%p%write_cell_data(value(mode),values)
+        call write_interface(blocks(mode)%p)
+      end if
     end do
     if (step == 0) then
       call file%finalize_time_step()
@@ -64,9 +78,36 @@ program vtkhdf_mb_hypertree_test
   call file%flush()
   call file%close()
   call file%close()
+
+  ! Keep static blocks in a separate file to avoid mixed-timeline reader issues.
+#ifdef USE_MPI
+  call file%create(prefix//'_hypertree_static.vtkhdf',MPI_COMM_WORLD,stat,errmsg)
+#else
+  call file%create(prefix//'_hypertree_static.vtkhdf',stat,errmsg)
+#endif
+  if (stat /= 0) error stop errmsg
+  call file%add_block('static',static_block)
+  call static_block%write_mesh([3,1,1])
+  call static_block%write_mesh_geometry([0.0_real64,1.0_real64,2.0_real64],[0.0_real64],[0.0_real64])
+  call local_topology(0,0,0)
+  call static_block%write_mesh_topology(ids,xtree,refined)
+  call static_block%write_cell_data('value',values)
+  call write_interface(static_block)
+  call file%close()
   call test_env_finalize()
 
 contains
+
+  subroutine write_interface(block)
+    type(vtkhdf_hypertree_block), intent(inout) :: block
+    real(real64) :: normals(3,size(values)), intercepts(3,size(values))
+    integer :: component
+    do component = 1,3
+      normals(component,:) = values + 0.125_real64*component
+      intercepts(component,:) = -values - 0.25_real64*component
+    end do
+    call block%write_interface_data(normals,intercepts)
+  end subroutine
 
   subroutine local_topology(phase, mode, step)
     integer, intent(in) :: phase, mode, step

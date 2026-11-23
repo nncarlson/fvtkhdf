@@ -33,6 +33,10 @@ set_tests_properties(vtkhdf_assert_returning_mpi PROPERTIES
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 
+add_test(NAME vtkhdf_expect_assertion_checks
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_expect_assertion_check.py)
+set_tests_properties(vtkhdf_expect_assertion_checks PROPERTIES TIMEOUT 30)
+
 function(vtkhdf_add_runtime_test test_name target)
   if(ENABLE_MPI)
     add_test(${test_name} ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4
@@ -122,7 +126,6 @@ set_tests_properties(vtkhdf_pdc_reader_compatibility PROPERTIES
   FIXTURES_REQUIRED vtkhdf_pdc_collection_files SKIP_RETURN_CODE 77 LABELS reader-compatibility)
 
 
-vtkhdf_add_test_target(vtkhdf_mb_hypertree_test vtkhdf_mb_hypertree_test.F90)
 vtkhdf_add_test_target(vtkhdf_mb_duplicate_block_name_test vtkhdf_mb_duplicate_block_name_test.F90)
 vtkhdf_add_test_target(vtkhdf_unstructured_test vtkhdf_unstructured_test.F90)
 vtkhdf_add_test_target(vtkhdf_unstructured_static_test vtkhdf_unstructured_static_test.F90)
@@ -157,31 +160,37 @@ foreach(check layout reader)
   set_tests_properties(vtkhdf_mb_collections_${check} PROPERTIES
     FIXTURES_REQUIRED vtkhdf_mb_collection_files SKIP_RETURN_CODE 77)
 endforeach()
-vtkhdf_add_runtime_test(vtkhdf_mb_hypertree vtkhdf_mb_hypertree_test)
-set_tests_properties(vtkhdf_mb_hypertree PROPERTIES FIXTURES_SETUP vtkhdf_mb_hypertree_files)
-foreach(check layout reader)
-  add_test(NAME vtkhdf_mb_hypertree_${check}
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_hypertree_check.py
-            ${check} ${CMAKE_CURRENT_BINARY_DIR})
-  set_tests_properties(vtkhdf_mb_hypertree_${check} PROPERTIES
-    FIXTURES_REQUIRED vtkhdf_mb_hypertree_files SKIP_RETURN_CODE 77)
-endforeach()
-if(ENABLE_MPI)
-  set(MB_HYPERTREE_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/mb-hypertree-two-rank)
-  file(MAKE_DIRECTORY ${MB_HYPERTREE_TWO_RANK_DIR})
-  add_test(NAME vtkhdf_mb_hypertree_two_rank
-    COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
-            ${CMAKE_CURRENT_BINARY_DIR}/vtkhdf_mb_hypertree_test ${MPIEXEC_POSTFLAGS})
-  set_tests_properties(vtkhdf_mb_hypertree_two_rank PROPERTIES PROCESSORS 2
-    WORKING_DIRECTORY ${MB_HYPERTREE_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_mb_hypertree_two_rank_files)
+foreach(format mb pdc)
+  vtkhdf_add_test_target(vtkhdf_${format}_hypertree_test vtkhdf_mb_hypertree_test.F90)
+  if(format STREQUAL "pdc")
+    target_compile_definitions(vtkhdf_${format}_hypertree_test PRIVATE PDC_COLLECTION)
+  endif()
+  vtkhdf_add_runtime_test(vtkhdf_${format}_hypertree vtkhdf_${format}_hypertree_test)
+  set_tests_properties(vtkhdf_${format}_hypertree PROPERTIES FIXTURES_SETUP vtkhdf_${format}_hypertree_files)
   foreach(check layout reader)
-    add_test(NAME vtkhdf_mb_hypertree_two_rank_${check}
+    add_test(NAME vtkhdf_${format}_hypertree_${check}
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_hypertree_check.py
-              ${check} ${MB_HYPERTREE_TWO_RANK_DIR})
-    set_tests_properties(vtkhdf_mb_hypertree_two_rank_${check} PROPERTIES
-      FIXTURES_REQUIRED vtkhdf_mb_hypertree_two_rank_files SKIP_RETURN_CODE 77)
+              ${check} ${CMAKE_CURRENT_BINARY_DIR} ${format})
+    set_tests_properties(vtkhdf_${format}_hypertree_${check} PROPERTIES
+      FIXTURES_REQUIRED vtkhdf_${format}_hypertree_files SKIP_RETURN_CODE 77)
   endforeach()
-endif()
+  if(ENABLE_MPI)
+    set(HYPERTREE_TWO_RANK_DIR ${CMAKE_CURRENT_BINARY_DIR}/${format}-hypertree-two-rank)
+    file(MAKE_DIRECTORY ${HYPERTREE_TWO_RANK_DIR})
+    add_test(NAME vtkhdf_${format}_hypertree_two_rank
+      COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
+              $<TARGET_FILE:vtkhdf_${format}_hypertree_test> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(vtkhdf_${format}_hypertree_two_rank PROPERTIES PROCESSORS 2
+      WORKING_DIRECTORY ${HYPERTREE_TWO_RANK_DIR} FIXTURES_SETUP vtkhdf_${format}_hypertree_two_rank_files)
+    foreach(check layout reader)
+      add_test(NAME vtkhdf_${format}_hypertree_two_rank_${check}
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_mb_hypertree_check.py
+                ${check} ${HYPERTREE_TWO_RANK_DIR} ${format})
+      set_tests_properties(vtkhdf_${format}_hypertree_two_rank_${check} PROPERTIES
+        FIXTURES_REQUIRED vtkhdf_${format}_hypertree_two_rank_files SKIP_RETURN_CODE 77)
+    endforeach()
+  endif()
+endforeach()
 vtkhdf_add_runtime_test(vtkhdf_mb_duplicate_block_name_file_type vtkhdf_mb_duplicate_block_name_test)
 vtkhdf_add_runtime_test(vtkhdf_unstructured_fixture_file vtkhdf_unstructured_test)
 vtkhdf_add_runtime_test(vtkhdf_unstructured_static_file_type vtkhdf_unstructured_static_test)
@@ -733,7 +742,7 @@ vtkhdf_add_test_target(vtkhdf_hypertree_fail_test vtkhdf_hypertree_fail_test.F90
 foreach(case no_grid bad_dims bad_branch_factor grid_twice axis_length tree_id_range missing_cells extra_cells
              masked_refined topology_twice data_before_topology data_before_geometry wrong_cell_count
              geometry_change late_register mesh_after_data static_data missing_data
-             interface_one_name interface_bad_name invalid_mode cell_outside_step temporal_count missing_initial
+             invalid_mode cell_outside_step temporal_count missing_initial
              field_outside_step field_late_register)
   vtkhdf_add_runtime_test(vtkhdf_hypertree_fail_${case} vtkhdf_hypertree_fail_test ${case})
   set_tests_properties(vtkhdf_hypertree_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
@@ -796,3 +805,100 @@ if(ENABLE_MPI)
     set_tests_properties(${test_name} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
   endforeach()
 endif()
+
+# Material-interface pairs use the ordinary cell registry with private handles.
+add_fypp_sources(HYPERTREE_INTERFACE_TEST_SRC SOURCES vtkhdf_hypertree_interface_test.F90.fypp FLAGS --line-numbering)
+vtkhdf_add_test_target(vtkhdf_hypertree_interface_test "${HYPERTREE_INTERFACE_TEST_SRC}")
+vtkhdf_add_test_target(vtkhdf_hypertree_interface_fail_test vtkhdf_hypertree_interface_fail_test.F90)
+vtkhdf_add_runtime_test(vtkhdf_hypertree_interface_files vtkhdf_hypertree_interface_test)
+set_tests_properties(vtkhdf_hypertree_interface_files PROPERTIES FIXTURES_SETUP vtkhdf_hypertree_interface_files)
+foreach(check layout reader)
+  add_test(NAME vtkhdf_hypertree_interface_${check}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_hypertree_interface_check.py
+            ${check} ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties(vtkhdf_hypertree_interface_${check} PROPERTIES
+    FIXTURES_REQUIRED vtkhdf_hypertree_interface_files SKIP_RETURN_CODE 77)
+endforeach()
+if(ENABLE_MPI)
+  set(interface_two_rank_dir ${CMAKE_CURRENT_BINARY_DIR}/interface-two-rank)
+  file(MAKE_DIRECTORY ${interface_two_rank_dir})
+  add_test(NAME vtkhdf_hypertree_interface_two_rank
+    COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2
+            $<TARGET_FILE:vtkhdf_hypertree_interface_test> ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(vtkhdf_hypertree_interface_two_rank PROPERTIES PROCESSORS 2
+    WORKING_DIRECTORY ${interface_two_rank_dir} FIXTURES_SETUP vtkhdf_hypertree_interface_two_rank_files)
+  foreach(check layout reader)
+    add_test(NAME vtkhdf_hypertree_interface_two_rank_${check}
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_hypertree_interface_check.py
+              ${check} ${interface_two_rank_dir})
+    set_tests_properties(vtkhdf_hypertree_interface_two_rank_${check} PROPERTIES
+      FIXTURES_REQUIRED vtkhdf_hypertree_interface_two_rank_files SKIP_RETURN_CODE 77)
+  endforeach()
+endif()
+
+set(interface_failures
+  "closed_write|interface write requires an open writer"
+  "closed_register|interface registration requires an open writer"
+  "static_register|INSIST(this%is_temporal)"
+  "dynamic_static|static interface mode"
+  "static_twice|INSIST(this%interface_state /= INTERFACE_STATIC)"
+  "register_twice|INSIST(this%interface_state == INTERFACE_UNDEFINED)"
+  "register_after_static|INSIST(this%interface_state == INTERFACE_UNDEFINED)"
+  "late_register|interface registration precedes time stepping"
+  "outside_step|temporal interface requires an open step"
+  "between_steps|temporal interface requires an open step"
+  "no_grid|INSIST(this%grid_defined .and. this%geometry_defined .and. this%topology_defined)"
+  "no_geometry|INSIST(this%grid_defined .and. this%geometry_defined .and. this%topology_defined)"
+  "no_topology|INSIST(this%grid_defined .and. this%geometry_defined .and. this%topology_defined)"
+  "missing_initial|initial interface pair required, even with no cells"
+  "duplicate|interface pair already written"
+  "normals_components|INSIST(size(normals,1) == 3)"
+  "intercepts_components|INSIST(size(intercepts,1) == 3)"
+  "normals_count|INSIST(size(normals,2,kind=int64) == this%ncell)"
+  "intercepts_count|INSIST(size(intercepts,2,kind=int64) == this%ncell)"
+  "temporal_normals_components|INSIST(size(normals,1) == 3)"
+  "temporal_intercepts_count|INSIST(size(intercepts,2,kind=int64) == this%ncell)"
+  "kind_64_to_32|INSIST(this%interface_kind =="
+  "kind_32_to_64|INSIST(this%interface_kind =="
+  "static_barrier|geometry cannot follow cell data"
+  "temporal_barrier|topology cannot follow cell data"
+  "changed_count|last_entity_count == this%ncell")
+if(ENABLE_MPI)
+  list(APPEND interface_failures "missing_initial_empty|initial interface pair required, even with no cells")
+endif()
+set(interface_debug_failures)
+if(ENABLE_MPI AND (CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL "Debug"))
+  list(APPEND interface_debug_failures
+    "kind_agreement_register|interface registration collective agreement"
+    "kind_agreement_write|interface write collective agreement"
+    "operation_agreement|interface write collective agreement|interface registration collective agreement")
+endif()
+foreach(failure IN LISTS interface_failures interface_debug_failures)
+  string(REPLACE "|" ";" fields "${failure}")
+  list(POP_FRONT fields scenario)
+  set(assertion_args)
+  foreach(assertion IN LISTS fields)
+    list(APPEND assertion_args --assertion "${assertion}")
+  endforeach()
+  set(command $<TARGET_FILE:vtkhdf_hypertree_interface_fail_test>)
+  set(processors 1)
+  if(ENABLE_MPI)
+    list(PREPEND command ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4)
+    list(APPEND command ${MPIEXEC_POSTFLAGS})
+    set(processors 4)
+  endif()
+  list(APPEND command ${scenario})
+  set(interface_test_configs)
+  if(CMAKE_CONFIGURATION_TYPES AND failure IN_LIST interface_debug_failures)
+    set(interface_test_configs CONFIGURATIONS Debug)
+  endif()
+  add_test(NAME vtkhdf_hypertree_interface_fail_${scenario}
+    ${interface_test_configs}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/vtkhdf_expect_assertion.py
+            --source ${PROJECT_SOURCE_DIR}/src/vtkhdf_hypertree_writer_type.F90.fypp
+            ${assertion_args} --diagnostic-glob "interface-assertion-R*.log" -- ${command})
+  set(dir ${CMAKE_CURRENT_BINARY_DIR}/interface-fail-${scenario})
+  file(MAKE_DIRECTORY ${dir})
+  set_tests_properties(vtkhdf_hypertree_interface_fail_${scenario} PROPERTIES
+    PROCESSORS ${processors} WORKING_DIRECTORY ${dir} TIMEOUT 30)
+endforeach()

@@ -58,9 +58,32 @@ written as in the fixed-mesh example. It supports serial and MPI builds.
 `hypertree_dynamic_mesh.F90` writes a 2D grid of quadtrees that are refined around a
 circle moving across the grid. It demonstrates `VTKHDF_DYNAMIC_MESH`, the
 breadth-first cell order of each tree, a new topology at every step, and
-temporal cell and field data. Root cells are dealt to the MPI ranks in turn.
+temporal cell and field data. It registers and writes a material interface
+that approximates the circle by straight segments in boundary cells. The full
+grid is retained on both sides of the interface, with no masked cells.
+Root cells are dealt to the MPI ranks in turn.
 See the [HyperTreeGrid manual](../doc/sphinx/hypertree.rst). It supports serial and
 MPI builds.
+
+To show the full grid with the interface overlaid, run the supplied ParaView
+script from the directory containing the output:
+
+```bash
+pvpython --force-offscreen-rendering \
+  /path/to/fvtkhdf/example/hypertree_dynamic_mesh_view.py hypertree_dynamic_mesh.vtkhdf
+```
+
+This command writes the state and exits; it does not start an interactive
+viewer. The offscreen option prevents a temporary render window from opening.
+In ParaView, use **File > Load State** to open the resulting
+`hypertree_dynamic_mesh.pvsm`, then use the time controls to follow the circle.
+The view colors the full grid by `level`, shows its cell edges, and overlays
+the interface in red. Color by `distance` to see signed distance from the circle.
+
+The script uses **Hyper Tree Grid To Unstructured Grid** for the full cells,
+and **Hyper Tree Grid Geometry Filter** with **Fill Material** disabled for
+the interface lines. Opening the data file directly uses the usual HTG
+material surface, which clips boundary cells to one side of the interface.
 
 ## UnstructuredGrid and MultiBlockDataSet
 
