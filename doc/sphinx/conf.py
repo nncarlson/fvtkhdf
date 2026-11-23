@@ -69,15 +69,5 @@ exclude_patterns = []
 #html_theme = 'sphinx_book_theme'
 html_theme = 'furo'
 
-html_sidebars = {
-    "index": [] # This removes the sidebar ONLY from the index.html page
-}
 html_static_path = ['_static']
 html_css_files = ['custom.css']
-
-# get rid of navigation sidebar for single-page document
-#html_sidebars = { '**': [] }
-
-html_theme_options = {
-    'nosidebar': False,
-}
