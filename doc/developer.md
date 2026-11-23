@@ -327,8 +327,14 @@ that correctness does not depend on debug-only expressions.
 
 ## Building the Documentation
 
-For local documentation work, install `sphinx`, `furo`, and `sphinx-autobuild`,
-then run from the repository root:
+Install the Sphinx and Furo versions used by Read the Docs from the repository
+root:
+
+```sh
+python -m pip install -r doc/sphinx/requirements.txt
+```
+
+For a live local preview, also install `sphinx-autobuild`, then run:
 
 ```sh
 sphinx-autobuild doc/sphinx build-doc/doc/sphinx/html
