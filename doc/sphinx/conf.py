@@ -8,22 +8,10 @@
 
 from pathlib import Path
 import re
-import subprocess
 import sys
 
 
 source_root = Path(__file__).resolve().parents[2]
-
-
-def git_output(*args):
-    try:
-        result = subprocess.run(
-            ['git', *args], cwd=source_root, capture_output=True, text=True,
-            check=False,
-        )
-    except OSError:
-        return ''
-    return result.stdout.strip() if result.returncode == 0 else ''
 
 
 project = 'fVTKHDF'
@@ -35,19 +23,9 @@ version = re.search(
     r'project\(fVTKHDF\s+VERSION\s+(\d+\.\d+\.\d+)\b',
     (source_root / 'CMakeLists.txt').read_text(),
 ).group(1)
-release = f'{version}-dev'
-repo_revision = 'master'
-if (source_root / '.git').exists():
-    if git_output('describe', '--tags', '--exact-match') == f'v{version}':
-        release = version
-        repo_revision = f'v{version}'
-    else:
-        revision = git_output('rev-parse', '--short', 'HEAD')
-        if revision:
-            release += f'+g{revision}'
-        # Feature and detached builds link to their exact source revision.
-        if git_output('symbolic-ref', '--quiet', '--short', 'HEAD') != 'master':
-            repo_revision = git_output('rev-parse', 'HEAD') or 'master'
+# This documentation branch describes the source at the release tag.
+release = version
+repo_revision = f'v{version}'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
