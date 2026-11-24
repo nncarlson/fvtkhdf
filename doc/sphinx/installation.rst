@@ -7,8 +7,7 @@ Prerequisites
 
 * A Fortran 2018 compiler and companion C compiler.
 * CMake 3.28 or newer.
-* The HDF5 C library, version 1.10 or newer within the 1.x series, including
-  development headers. Compatibility with HDF5 2.x has not been verified.
+* The HDF5 C library, version 1.10 or newer, including development headers.
   The HDF5 Fortran library is not required. MPI builds require parallel HDF5.
 * Python 3 and ``fypp`` (``python3 -m pip install fypp``), with the ``fypp``
   executable on your ``PATH``.

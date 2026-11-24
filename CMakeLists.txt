@@ -50,7 +50,8 @@ endif()
 # 2. HDF5
 find_package(HDF5 REQUIRED COMPONENTS C)
 
-if(ENABLE_MPI AND NOT HDF5_IS_PARALLEL)
+# Older FindHDF5 modules do not map the HDF5 2.x package flag to HDF5_IS_PARALLEL.
+if(ENABLE_MPI AND NOT (HDF5_IS_PARALLEL OR HDF5_PROVIDES_PARALLEL))
   message(FATAL_ERROR "Parallel HDF5 is required when MPI is enabled, but only serial HDF5 was found.")
 endif()
 
