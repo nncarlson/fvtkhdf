@@ -1,5 +1,6 @@
 [![CI](https://github.com/nncarlson/fvtkhdf/actions/workflows/ci.yml/badge.svg)](https://github.com/nncarlson/fvtkhdf/actions/workflows/ci.yml)
 [![Docs on Read the Docs](.github/docs-badge.svg)](https://fvtkhdf.readthedocs.io/)
+[![Latest release](https://img.shields.io/github/v/release/nncarlson/fvtkhdf)](https://github.com/nncarlson/fvtkhdf/releases/latest)
 
 # fVTKHDF
 
