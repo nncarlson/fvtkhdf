@@ -1,5 +1,5 @@
 [![CI](https://github.com/nncarlson/fvtkhdf/actions/workflows/ci.yml/badge.svg)](https://github.com/nncarlson/fvtkhdf/actions/workflows/ci.yml)
-[![Docs](https://github.com/nncarlson/fvtkhdf/actions/workflows/docs.yml/badge.svg)](https://nncarlson.github.io/fvtkhdf/)
+[![Docs](https://app.readthedocs.org/projects/fvtkhdf/badge/?version=latest)](https://fvtkhdf.readthedocs.io/)
 
 # fVTKHDF
 
@@ -16,9 +16,9 @@ required only for parallel builds.
 
 ## Documentation
 
-* [Installation Guide](https://nncarlson.github.io/fvtkhdf/installation.html):
+* [Installation Guide](https://fvtkhdf.readthedocs.io/page/installation.html):
   prerequisites, building, testing, and project integration.
-* [Reference Manual](https://nncarlson.github.io/fvtkhdf/reference.html):
+* [Reference Manual](https://fvtkhdf.readthedocs.io/page/reference.html):
   writer interfaces, dataset types, and reader compatibility.
 
 ## Dataset Support
@@ -62,7 +62,7 @@ use the latest stable release of ParaView.
 | HyperTreeGrid | ParaView 6.2+ (VTK 9.7+) |
 | Dataset attribute designations (`Scalars`, `Vectors`, `Tensors`, `GlobalIds`, etc.) | ParaView 6.2+ (VTK 9.7+); older readers ignore these designations |
 
-See the [reference manual](https://nncarlson.github.io/fvtkhdf/reference.html) for
+See the [reference manual](https://fvtkhdf.readthedocs.io/page/reference.html) for
 format-specific reader limitations and workarounds.
 
 ## Installation
@@ -81,9 +81,9 @@ cmake --install build
 ```
 
 Use `-DENABLE_MPI=OFF` for a serial build. See the
-[Installation Guide](https://nncarlson.github.io/fvtkhdf/installation.html)
+[Installation Guide](https://fvtkhdf.readthedocs.io/page/installation.html)
 for prerequisites, MPI options, examples, fpm, Spack, and
-[project integration](https://nncarlson.github.io/fvtkhdf/installation.html#using-fvtkhdf-in-your-project).
+[project integration](https://fvtkhdf.readthedocs.io/page/installation.html#using-fvtkhdf-in-your-project).
 
 ## Quick Start
 

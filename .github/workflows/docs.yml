@@ -1,15 +1,9 @@
-name: Docs
+name: Docs redirects
 
 on:
   push:
     branches: [ master ]
-    tags: [ 'v*' ]
   workflow_dispatch:
-    inputs:
-      ref:
-        description: 'Source branch, tag, or commit to document (defaults to the workflow ref)'
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -23,33 +17,54 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: ghcr.io/${{ github.repository }}/fvtkhdf-ci:latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ inputs.ref || github.ref }}
 
-      - name: Enable Git metadata access in the container
+      - name: Generate documentation redirects
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git rev-parse HEAD
+          python3 - <<'PY'
+          from html import escape
+          from json import dumps
+          from pathlib import Path
 
-      - name: Configure CMake
-        run: |
-          cmake -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DENABLE_MPI=OFF \
-            -DBUILD_HTML=YES
+          docs = "https://fvtkhdf.readthedocs.io/"
+          output = Path("pages")
+          output.mkdir()
 
-      - name: Build Docs
-        run: cmake --build build --target docs
+          # Keep the old URLs working even if the Sphinx source tree changes.
+          pages = """
+          common composite field_data genindex hypertree image installation mb
+          overview pdc rectilinear reference search stitching structured
+          structured_grid unstructured vtk_cell_types
+          """.split()
+          redirects = {f"{page}.html": f"{docs}page/{page}.html" for page in pages}
+          redirects["index.html"] = docs
+          redirects["ug.html"] = f"{docs}en/docs-v0.7.0/ug.html"
+
+          for name, target in redirects.items():
+              url = escape(target, quote=True)
+              (output / name).write_text(f"""<!doctype html>
+          <html lang="en">
+          <meta charset="utf-8">
+          <title>fVTKHDF documentation moved</title>
+          <link rel="canonical" href="{url}">
+          <script>
+          const destination = new URL({dumps(target)});
+          destination.search = window.location.search;
+          destination.hash = window.location.hash;
+          window.location.replace(destination);
+          </script>
+          <noscript><meta http-equiv="refresh" content="0; url={url}"></noscript>
+          <p>The fVTKHDF documentation has moved to <a href="{url}">Read the Docs</a>.</p>
+          </html>
+          """, encoding="utf-8")
+          PY
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build/doc/sphinx/html
+          path: pages
 
   deploy:
     environment:
