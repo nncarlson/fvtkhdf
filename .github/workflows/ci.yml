@@ -76,10 +76,22 @@ jobs:
       if: always()
       run: cmake --build build-consumer --parallel 2
 
-    # Optional: run a consumer executable if you have one
-    # - name: Run consumer smoke
-    #   if: always()
-    #   run: ./build-consumer/consumer_smoke
+    - name: Build and run installed-package tutorial
+      run: |
+        cmake -S example/tutorial -B build-tutorial \
+          -DCMAKE_PREFIX_PATH="${{ runner.temp }}/fvtkhdf-stage" \
+          -DHDF5_PREFER_PARALLEL=${{ matrix.mpi }}
+        cmake --build build-tutorial --parallel 2
+        cd build-tutorial
+        if [ "${{ matrix.mpi }}" = "ON" ]; then
+          mpiexec -n 1 ./image_static
+          mpiexec -n 1 ./image_temporal
+          mpiexec -n 2 ./image_parallel
+          mpiexec -n 2 ./image_parallel_points
+        else
+          ./image_static
+          ./image_temporal
+        fi
 
     # --- Gate: fail job if either ctest failed or consumer build failed ---
     - name: Gate results

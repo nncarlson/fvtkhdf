@@ -9,7 +9,7 @@ From the `build/example` directory:
 **Parallel Build**
 
 ```bash
-mpiexec -np 3 ./unstructured_fixed_mesh
+mpiexec -n 3 ./unstructured_fixed_mesh
 paraview example.vtkhdf
 ```
 
