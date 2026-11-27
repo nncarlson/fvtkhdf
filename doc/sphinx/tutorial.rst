@@ -494,12 +494,12 @@ The temperature changes from step to step while the cell edges stay put.
 Move the mesh with the hot spot
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Now we’ll move the closely spaced x columns with the hot spot. We keep
-the y coordinates from the fixed-mesh exercise and use the same
-``clustered_axis`` function for x, with the current Gaussian center as
-its focus. The ends of the domain stay fixed. Each rank still owns 12
-columns, and the physical boundary between the two slabs now follows
-the hot spot.
+We’ll now cluster the x coordinates as well, moving their concentration
+with the hot spot. We keep the y coordinates from the fixed-mesh
+exercise and use the same ``clustered_axis`` function for x, with the
+current Gaussian center as its focus. The ends of the domain stay fixed.
+Each rank still owns 12 columns, and the physical boundary between the
+two slabs now follows the hot spot.
 
 We create the file with ``mode=VTKHDF_MOVING_MESH``. We pass only the
 point bounds to ``write_mesh`` to define the logical grid once. Each

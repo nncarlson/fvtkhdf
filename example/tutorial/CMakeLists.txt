@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.28)
 project(fvtkhdf_tutorial LANGUAGES C Fortran)
 
 find_package(fVTKHDF REQUIRED)
