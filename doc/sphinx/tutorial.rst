@@ -18,8 +18,8 @@ ParaView that supports the VTKHDF datasets in the exercises. See the
 :doc:`installation` for how to build and install the library and
 :ref:`using-fvtkhdf` for how to build your tutorial programs.
 
-Temperature on a regular grid
------------------------------
+Temperature on a regular grid (ImageData)
+-----------------------------------------
 
 We’ll write a temperature field on a regular two-dimensional grid and view
 it in ParaView. We’ll start with one MPI process to get the file-writing
@@ -398,3 +398,315 @@ cell.
 
 We’ve written the complete point field at every time step, with rank 0
 writing the shared column once per step.
+
+Temperature on a nonuniform grid (RectilinearGrid)
+--------------------------------------------------
+
+We’ll start with the two-rank, cell-centered ImageData program and vary
+the spacing along y to put more rows near the hot spot’s path.
+RectilinearGrid takes a vector of point coordinates for each axis, so
+neighboring coordinates can be different distances apart. To inspect
+the files in this chapter, use ParaView 6.2 or later.
+
+.. code-block:: fortran
+
+   use vtkhdf_rectilinear_file_type
+   type(vtkhdf_rectilinear_file) :: file
+
+Write temperature on a fixed nonuniform grid
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+We’ll keep the 1 by 0.75 domain, the 24 by 18 cells, and the same moving
+Gaussian. The mesh stays fixed throughout the run. We space the points
+uniformly along x and concentrate them near y = 0.45, where the hot spot
+travels.
+
+To set the y coordinates, we start with evenly spaced values of ``s``
+from −1 to 1.
+The factor ``0.35 + 0.65*s**2`` draws the interior points toward the
+focus while keeping the endpoints fixed. We scale each side by its
+distance from the focus to the corresponding end of the domain.
+
+.. literalinclude:: ../../example/tutorial/rectilinear_parallel.F90
+   :language: fortran
+   :start-at: function clustered_axis
+   :end-at: end function
+
+Both ranks compute the same vectors because both need the coordinates
+to evaluate temperature. Both call ``write_mesh`` with the same global
+point bounds. The writer takes the coordinate vectors from rank 0.
+The singleton z axis supplies one coordinate, ``0.0``.
+
+.. literalinclude:: ../../example/tutorial/rectilinear_parallel.F90
+   :language: fortran
+   :start-at: x_points =
+   :end-at: call file%write_mesh
+
+The logical grid and cell slabs work as before. The coordinate arrays
+start at Fortran subscript 0, so we can use global logical indices
+directly to look up the points. To find a cell center, we average its
+two bounding coordinates along each axis. We use ``array_origin`` to
+find the global x index for each local cell, and both slabs start at
+logical index 0 along y.
+
+.. literalinclude:: ../../example/tutorial/rectilinear_parallel.F90
+   :language: fortran
+   :start-at: do j = 1, ny
+   :end-at: call file%write_cell_data(temperature_var
+
+The collective time loop and the writes for ``mpi_rank`` work as in the
+ImageData version. See the :doc:`RectilinearGrid reference <rectilinear>`
+for the coordinate-vector arguments.
+
+.. raw:: html
+
+   <details>
+   <summary>View complete source <code>rectilinear_parallel.F90</code></summary>
+
+.. literalinclude:: ../../example/tutorial/rectilinear_parallel.F90
+   :language: fortran
+
+:download:`Download rectilinear_parallel.F90 <../../example/tutorial/rectilinear_parallel.F90>`
+
+.. raw:: html
+
+   </details>
+
+Build ``rectilinear_parallel`` from ``rectilinear_parallel.F90``
+and launch it with two processes.
+
+.. code-block:: bash
+
+   mpiexec -n 2 ./build/rectilinear_parallel
+
+Open ``rectilinear_parallel.vtkhdf`` in ParaView and color by
+``temperature`` with **Surface With Edges**. Play the time series and
+look for the narrow rows near y = 0.45.
+The temperature changes from step to step while the cell edges stay put.
+
+.. figure:: _static/tutorial/temperature-rectilinear.gif
+   :alt: The hot spot moves along a band of closely spaced rows on a fixed
+         grid with evenly spaced columns.
+   :width: 65%
+
+   The hot spot moves along the band of closely spaced rows.
+
+Move the mesh with the hot spot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Now we’ll move the closely spaced x columns with the hot spot. We keep
+the y coordinates from the fixed-mesh exercise and use the same
+``clustered_axis`` function for x, with the current Gaussian center as
+its focus. The ends of the domain stay fixed. Each rank still owns 12
+columns, and the physical boundary between the two slabs now follows
+the hot spot.
+
+We create the file with ``mode=VTKHDF_MOVING_MESH``. We pass only the
+point bounds to ``write_mesh`` to define the logical grid once. Each
+logical cell keeps its owner, so we write the static ``mpi_rank`` array
+before supplying the coordinates. We register ``temperature`` as temporal
+cell data before the first time step.
+
+.. literalinclude:: ../../example/tutorial/rectilinear_moving.F90
+   :language: fortran
+   :start-at: y_points = clustered_axis
+   :end-at: temperature_var = file%register_temporal_cell_data
+
+At each step, both ranks calculate the new x coordinates and call
+``write_mesh_geometry`` before writing temperature. This call takes
+all three coordinate vectors, including the same y and z coordinates
+each time.
+
+.. literalinclude:: ../../example/tutorial/rectilinear_moving.F90
+   :language: fortran
+   :start-at: do step = 0, 10
+   :end-at: call file%write_mesh_geometry
+
+The temperature loop still averages neighboring point coordinates to
+find each cell center. Because it uses the current x vector, the centers
+move with the mesh. We write the resulting temperatures and finalize
+the step as before.
+
+.. raw:: html
+
+   <details>
+   <summary>View complete source <code>rectilinear_moving.F90</code></summary>
+
+.. literalinclude:: ../../example/tutorial/rectilinear_moving.F90
+   :language: fortran
+
+:download:`Download rectilinear_moving.F90 <../../example/tutorial/rectilinear_moving.F90>`
+
+.. raw:: html
+
+   </details>
+
+Build ``rectilinear_moving`` from ``rectilinear_moving.F90`` and run
+it with two processes.
+
+.. code-block:: bash
+
+   mpiexec -n 2 ./build/rectilinear_moving
+
+Open ``rectilinear_moving.vtkhdf`` in ParaView and color by
+``temperature`` with **Surface With Edges**. As you play the time series,
+watch the narrow columns follow the hot spot while the row boundaries
+stay in place.
+
+.. figure:: _static/tutorial/temperature-rectilinear-moving.gif
+   :alt: Closely spaced vertical grid lines follow the hot spot from left
+         to right while the horizontal grid lines stay fixed.
+   :width: 65%
+
+   The mesh concentrates cells around the hot spot at each time step.
+
+Temperature on a curvilinear grid (StructuredGrid)
+--------------------------------------------------
+
+We’ll take the two-rank point-data ImageData program and bend its logical
+rectangle into a 60° annular sector. The cells still connect to their logical
+neighbors, and each point now has its own physical x, y, and z coordinates.
+We’ll write one snapshot of the curved grid, then rotate the grid through
+a stationary hot spot. To inspect the files in this chapter, use ParaView
+6.2 or later.
+
+.. code-block:: fortran
+
+   use vtkhdf_structured_file_type
+   type(vtkhdf_structured_file) :: file
+
+Write a point field on an annular sector
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+We’ll write a static temperature field on an annular sector in the z = 0
+plane. We keep the ImageData grid’s 24 by 18 cells. The first logical
+index steps clockwise from 100° to 40°, and the second steps outward
+from radius 0.65 to 1.25. The Gaussian is centered at (0.0, 0.95),
+halfway across the radial span and near the 100° end of the sector.
+
+We split the grid along the first logical axis as before. Each rank’s
+array holds 13 angular points and 19 radial points. Rank 0 owns shared
+column 12, which now forms a radial line at 70°. The ``points`` array has
+a leading dimension of length 3 for the x, y, and z coordinates of each
+point.
+
+.. literalinclude:: ../../example/tutorial/structured_parallel.F90
+   :language: fortran
+   :start-at: real :: points
+   :end-at: real :: temperature
+
+We use the global first index to get the angle and the second index to
+get the radius. Then we convert from polar to Cartesian coordinates and
+evaluate the temperature at the same point.
+
+.. literalinclude:: ../../example/tutorial/structured_parallel.F90
+   :language: fortran
+   :start-at: do j = 1, ny+1
+   :end-before: call file%create
+
+We create the file with ``mode=VTKHDF_STATIC``. Both ranks pass the same
+global point bounds to ``write_mesh``, then call ``write_mesh_geometry``
+with their local coordinates. We use the same ``array_origin`` and
+``write_bounds`` for geometry, ``mpi_rank``, and ``temperature``, so
+rank 0 writes all three arrays along the shared radial line. See the
+:doc:`StructuredGrid reference <structured_grid>` for the coordinate
+array and bounds arguments.
+
+.. literalinclude:: ../../example/tutorial/structured_parallel.F90
+   :language: fortran
+   :start-at: call file%write_mesh(point_bounds)
+   :end-at: call file%write_point_data('temperature'
+
+.. raw:: html
+
+   <details>
+   <summary>View complete source <code>structured_parallel.F90</code></summary>
+
+.. literalinclude:: ../../example/tutorial/structured_parallel.F90
+   :language: fortran
+
+:download:`Download structured_parallel.F90 <../../example/tutorial/structured_parallel.F90>`
+
+.. raw:: html
+
+   </details>
+
+Build ``structured_parallel`` from ``structured_parallel.F90`` and run
+it with two processes.
+
+.. code-block:: bash
+
+   mpiexec -n 2 ./build/structured_parallel
+
+Open ``structured_parallel.vtkhdf`` in ParaView, choose **Surface With
+Edges**, and color by point ``temperature``. Look for the hot spot halfway
+between the inner and outer edges, near the left end of the sector.
+To check ownership, switch to **Points** and color by ``mpi_rank``.
+The shared radial line belongs to rank 0.
+
+.. figure:: _static/tutorial/temperature-structured.png
+   :alt: A 60° annular sector with a hot spot near its left end.
+   :width: 65%
+
+   The hot spot sits near the 100° end of the sector.
+
+Rotate the grid through a fixed hot spot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Now we’ll rotate the sector 40° counterclockwise about the origin while
+keeping the Gaussian centered at (0.0, 0.95) in physical space. The
+sector finishes at 80° to 140°, so the hot spot is near the opposite
+end of the grid.
+
+We create the file with ``mode=VTKHDF_MOVING_MESH`` and define the logical
+grid once. Each logical point keeps its owner as the grid moves, so we can
+write the static ``mpi_rank`` array during setup, before writing any
+coordinates. The grid points move through the Gaussian, so we register
+``temperature`` as temporal point data.
+
+.. literalinclude:: ../../example/tutorial/structured_moving.F90
+   :language: fortran
+   :start-at: call file%write_mesh(point_bounds)
+   :end-at: temperature_var = file%register_temporal_point_data
+
+At each step, we add the current rotation to each point’s angle and
+evaluate the same Gaussian at the new coordinates. We write the geometry
+first, then the temperatures.
+
+.. literalinclude:: ../../example/tutorial/structured_moving.F90
+   :language: fortran
+   :start-at: do step = 0, 10
+   :end-before: call file%close
+
+.. raw:: html
+
+   <details>
+   <summary>View complete source <code>structured_moving.F90</code></summary>
+
+.. literalinclude:: ../../example/tutorial/structured_moving.F90
+   :language: fortran
+
+:download:`Download structured_moving.F90 <../../example/tutorial/structured_moving.F90>`
+
+.. raw:: html
+
+   </details>
+
+Build ``structured_moving`` from ``structured_moving.F90`` and run it
+with two processes.
+
+.. code-block:: bash
+
+   mpiexec -n 2 ./build/structured_moving
+
+Open ``structured_moving.vtkhdf`` in ParaView, choose **Surface With
+Edges**, and color by point ``temperature``. Play the time series and
+watch the hot spot stay in place as the grid rotates through it. The
+hot spot starts near one end of the sector and finishes near the other.
+
+.. figure:: _static/tutorial/temperature-structured-moving.gif
+   :alt: The annular sector rotates counterclockwise while the hot spot
+         stays at the same x and y coordinates.
+   :width: 65%
+
+   The sector rotates through a Gaussian whose center stays at (0.0, 0.95).

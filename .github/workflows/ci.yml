@@ -88,6 +88,10 @@ jobs:
           mpiexec -n 1 ./image_temporal
           mpiexec -n 2 ./image_parallel
           mpiexec -n 2 ./image_parallel_points
+          mpiexec -n 2 ./rectilinear_parallel
+          mpiexec -n 2 ./rectilinear_moving
+          mpiexec -n 2 ./structured_parallel
+          mpiexec -n 2 ./structured_moving
         else
           ./image_static
           ./image_temporal

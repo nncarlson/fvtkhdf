@@ -5,7 +5,9 @@ find_package(fVTKHDF REQUIRED)
 
 set(examples image_static image_temporal)
 if(fVTKHDF_MPI_SUPPORT)
-  list(APPEND examples image_parallel image_parallel_points)
+  list(APPEND examples image_parallel image_parallel_points
+                       rectilinear_parallel rectilinear_moving
+                       structured_parallel structured_moving)
 endif()
 
 foreach(example IN LISTS examples)
