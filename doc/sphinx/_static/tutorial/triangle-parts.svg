@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 612 316"
+     width="612" height="316" role="img" aria-labelledby="title description">
+  <title id="title">The mesh split between two MPI ranks</title>
+  <desc id="description">Each rank labels its local triangles T1 and T2. They are triangles 1 and 2 of the full mesh on rank 0 and triangles 3 and 4 on rank 1. Both parts include the three shared boundary points.</desc>
+  <rect width="612" height="316" rx="8" fill="#fff"/>
+  <style>
+    .triangle { stroke: #345168; stroke-width: 1.7; stroke-linejoin: round; }
+    .outline { stroke: #c9d4df; stroke-width: 1.4; fill: none; }
+    .point { fill: #174866; }
+    text { fill: #172c3d; font-family: sans-serif; }
+    .cell-label { font-size: 17px; font-weight: 650; text-anchor: middle; }
+    .point-label { font-size: 16px; font-weight: 600; }
+    .rank-label { font-size: 19px; font-weight: 650; text-anchor: middle; }
+  </style>
+  <text class="rank-label" x="153" y="25">Rank 0</text>
+  <rect class="outline" x="42" y="58" width="222" height="222"/>
+  <path class="outline" d="M42 58L130.8 157.9"/>
+  <polygon class="triangle" points="42.0,280.0 264.0,280.0 130.8,157.9" fill="#f5e7be"/>
+  <polygon class="triangle" points="264.0,280.0 264.0,58.0 130.8,157.9" fill="#d5ebf0"/>
+  <text class="cell-label" x="145.6" y="245.3">T1</text>
+  <text class="cell-label" x="219.6" y="171.3">T2</text>
+  <circle class="point" cx="42.0" cy="280.0" r="4"/>
+  <text class="point-label" x="34.0" y="299.0" text-anchor="end">P1</text>
+  <circle class="point" cx="264.0" cy="280.0" r="4"/>
+  <text class="point-label" x="272.0" y="299.0" text-anchor="start">P2</text>
+  <circle class="point" cx="264.0" cy="58.0" r="4"/>
+  <text class="point-label" x="272.0" y="49.0" text-anchor="start">P3</text>
+  <circle class="point" cx="130.8" cy="157.9" r="4"/>
+  <text class="point-label" x="140.8" y="162.9" text-anchor="start">P4</text>
+  <text class="rank-label" x="459" y="25">Rank 1</text>
+  <rect class="outline" x="348" y="58" width="222" height="222"/>
+  <path class="outline" d="M570 280L436.8 157.9"/>
+  <polygon class="triangle" points="570.0,58.0 348.0,58.0 436.8,157.9" fill="#dce9f6"/>
+  <polygon class="triangle" points="348.0,58.0 348.0,280.0 436.8,157.9" fill="#f1e1eb"/>
+  <text class="cell-label" x="451.6" y="97.3">T1</text>
+  <text class="cell-label" x="377.6" y="171.3">T2</text>
+  <circle class="point" cx="348.0" cy="280.0" r="4"/>
+  <text class="point-label" x="340.0" y="299.0" text-anchor="end">P1</text>
+  <circle class="point" cx="570.0" cy="58.0" r="4"/>
+  <text class="point-label" x="578.0" y="49.0" text-anchor="start">P2</text>
+  <circle class="point" cx="348.0" cy="58.0" r="4"/>
+  <text class="point-label" x="340.0" y="49.0" text-anchor="end">P3</text>
+  <circle class="point" cx="436.8" cy="157.9" r="4"/>
+  <text class="point-label" x="426.8" y="162.9" text-anchor="end">P4</text>
+</svg>

@@ -1,8 +1,8 @@
-An fVTKHDF Tutorial
-===================
+Getting Started with fVTKHDF
+============================
 
-In this tutorial, we'll write several small Fortran programs step by step
-to create VTKHDF files with different dataset types. After each exercise,
+In this tutorial, we'll write small Fortran programs step by step
+to create VTKHDF files for several dataset types. After each exercise,
 we'll compile and run the program, then open the resulting file in
 ParaView to inspect what we wrote. The exercises cover a basic selection of
 dataset types and writer features, and each includes a complete Fortran
@@ -13,10 +13,10 @@ describes the available dataset types and writer interfaces in detail.
 
 To build the programs, you’ll need CMake 3.28 or newer, an installed
 MPI-enabled fVTKHDF library, and the compatible C, Fortran, MPI, and
-parallel HDF5 environment used to build it. You’ll also need a version of
-ParaView that supports the VTKHDF datasets in the exercises. See the
-:doc:`installation` for how to build and install the library and
-:ref:`using-fvtkhdf` for how to build your tutorial programs.
+parallel HDF5 environment used to build it. You’ll need ParaView 6.2 or
+later to complete the full tutorial. See the :doc:`installation` for how
+to build and install the library and :ref:`using-fvtkhdf` for how to
+build your tutorial programs.
 
 Temperature on a regular grid (ImageData)
 -----------------------------------------
@@ -405,8 +405,7 @@ Temperature on a nonuniform grid (RectilinearGrid)
 We’ll start with the two-rank, cell-centered ImageData program and vary
 the spacing along y to put more rows near the hot spot’s path.
 RectilinearGrid takes a vector of point coordinates for each axis, so
-neighboring coordinates can be different distances apart. To inspect
-the files in this chapter, use ParaView 6.2 or later.
+neighboring coordinates can be different distances apart.
 
 .. code-block:: fortran
 
@@ -417,9 +416,9 @@ Write temperature on a fixed nonuniform grid
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We’ll keep the 1 by 0.75 domain, the 24 by 18 cells, and the same moving
-Gaussian. The mesh stays fixed throughout the run. We space the points
-uniformly along x and concentrate them near y = 0.45, where the hot spot
-travels.
+Gaussian. We use ``mode=VTKHDF_FIXED_MESH`` and write the mesh once before
+the time loop. We space the points uniformly along x and concentrate
+them near y = 0.45, where the hot spot travels.
 
 To set the y coordinates, we start with evenly spaced values of ``s``
 from −1 to 1.
@@ -567,8 +566,7 @@ We’ll take the two-rank point-data ImageData program and bend its logical
 rectangle into a 60° annular sector. The cells still connect to their logical
 neighbors, and each point now has its own physical x, y, and z coordinates.
 We’ll write one snapshot of the curved grid, then rotate the grid through
-a stationary hot spot. To inspect the files in this chapter, use ParaView
-6.2 or later.
+a stationary hot spot.
 
 .. code-block:: fortran
 
@@ -710,3 +708,233 @@ hot spot starts near one end of the sector and finishes near the other.
    :width: 65%
 
    The sector rotates through a Gaussian whose center stays at (0.0, 0.95).
+
+Temperature on a triangular mesh (UnstructuredGrid)
+---------------------------------------------------
+
+We’ll write a static cell temperature field on a unit square decomposed
+into four triangles, first with one MPI process and then with two.
+Finally, we’ll use a larger triangular mesh to follow the moving hot
+spot from the ImageData exercises.
+An UnstructuredGrid takes the point coordinates, the point numbers that
+form each cell, and a type for each cell.
+
+.. code-block:: fortran
+
+   use, intrinsic :: iso_fortran_env, only: int8
+   use vtkhdf_unstructured_file_type
+   use vtkhdf_vtk_cell_types, only: VTK_TRIANGLE
+
+   type(vtkhdf_unstructured_file) :: file
+
+Write four triangles on one process
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+We’ll write a static file using one MPI process. We number the corner
+points counterclockwise from the lower left and put the interior point
+last, at (0.4, 0.55). The triangles also go counterclockwise around that
+point, starting with triangle 1 at the bottom, ``[1, 2, 5]``.
+
+.. figure:: _static/tutorial/triangle-mesh.svg
+   :alt: A unit square with points P1 through P4 numbered counterclockwise
+         from the lower left and P5 in the interior. Triangles T1 through T4
+         run counterclockwise from the bottom.
+
+   Point and triangle numbers for the unit square.
+
+.. literalinclude:: ../../example/tutorial/triangles_static.F90
+   :language: fortran
+   :dedent: 2
+   :start-at: points = reshape
+   :end-at: types = [
+
+Each column of ``points`` holds one point’s x, y, and z coordinates.
+We set z to ``0.0`` throughout. The array ``cnode`` lists the point
+numbers for all four triangles in order. The Fortran indices in
+``xcnode`` pick out the list for each triangle. For triangle ``i``, the
+list is ``cnode(xcnode(i):xcnode(i+1)-1)``. The last entry of ``xcnode``
+is 13, one past the end of ``cnode``, so the same expression works for
+the last triangle. The ``int8`` array ``types`` holds one VTK cell type
+per cell.
+
+After creating the file with ``mode=VTKHDF_STATIC``, we write the mesh,
+set and write the cell temperatures, and close the file. See the
+:doc:`UnstructuredGrid reference <unstructured>` for the mesh arguments.
+
+.. literalinclude:: ../../example/tutorial/triangles_static.F90
+   :language: fortran
+   :start-at: call file%write_mesh
+   :end-at: call file%close
+
+.. raw:: html
+
+   <details>
+   <summary>View complete source <code>triangles_static.F90</code></summary>
+
+.. literalinclude:: ../../example/tutorial/triangles_static.F90
+   :language: fortran
+
+:download:`Download triangles_static.F90 <../../example/tutorial/triangles_static.F90>`
+
+.. raw:: html
+
+   </details>
+
+Build ``triangles_static`` from ``triangles_static.F90`` with
+``USE_MPI`` defined, then run it with one process.
+
+.. code-block:: bash
+
+   mpiexec -n 1 ./build/triangles_static
+
+Open ``triangles_static.vtkhdf`` in ParaView, choose **Surface With Edges**,
+and color by cell ``temperature``. The values 10, 20, 30, and 40 follow the
+triangle numbering from the bottom counterclockwise around the square.
+
+.. figure:: _static/tutorial/temperature-triangles.png
+   :alt: ParaView colors the four triangles by cell temperature, from
+         10 in the bottom triangle to 40 in the left triangle.
+   :width: 48.75%
+
+   The temperature is constant within each cell.
+
+Split the triangles across two processes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Now we’ll assign triangles 1 and 2 to rank 0, and triangles 3 and 4 to
+rank 1. In the structured chapters, we wrote the two slabs into one
+globally indexed grid. Here, each rank writes a mesh part with its
+own point numbers and includes every point its cells use. Each part
+therefore contains a copy of points 1, 3, and 5 from the full mesh.
+Those are the points on the shared boundary.
+
+.. figure:: _static/tutorial/triangle-parts.svg
+   :alt: Each rank labels its local triangles T1 and T2. They correspond
+         to full-mesh triangles 1 and 2 on rank 0 and 3 and 4 on rank 1.
+         Both parts include the three shared boundary points.
+   :width: 90%
+
+   Each part numbers its points and triangles locally. Light outlines
+   show the other rank’s triangles for context.
+
+Each rank passes four points to ``write_mesh`` and numbers them from 1
+to 4 in its own part. For example, the first triangle on rank 1 is
+triangle 3 in the full mesh. It uses full-mesh points ``[3, 4, 5]``,
+which are local points ``[2, 3, 4]``. Both ranks have two triangles
+and so use the same ``xcnode`` and ``types`` arrays.
+
+.. literalinclude:: ../../example/tutorial/triangles_parallel.F90
+   :language: fortran
+   :start-at: xcnode = [
+   :end-before: call file%create
+
+Both ranks call ``write_mesh`` and ``write_cell_data`` in the same
+order, supplying their own coordinates, connectivity, and temperature
+values. We also write the static cell array ``mpi_rank`` so we can check
+ownership in ParaView. Together the ranks write one VTKHDF file
+containing both parts.
+
+.. literalinclude:: ../../example/tutorial/triangles_parallel.F90
+   :language: fortran
+   :start-at: call file%write_mesh
+   :end-at: call file%close
+
+.. raw:: html
+
+   <details>
+   <summary>View complete source <code>triangles_parallel.F90</code></summary>
+
+.. literalinclude:: ../../example/tutorial/triangles_parallel.F90
+   :language: fortran
+
+:download:`Download triangles_parallel.F90 <../../example/tutorial/triangles_parallel.F90>`
+
+.. raw:: html
+
+   </details>
+
+Build ``triangles_parallel`` from ``triangles_parallel.F90`` and run it
+with two processes.
+
+.. code-block:: bash
+
+   mpiexec -n 2 ./build/triangles_parallel
+
+Open ``triangles_parallel.vtkhdf`` in ParaView, choose **Surface With
+Edges**, and color by ``mpi_rank``. The bottom and right triangles
+belong to rank 0, and the top and left belong to rank 1. Switch to
+``temperature`` to compare with the one-process result.
+
+Move the hot spot across a triangular mesh
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+We’ll return to the 1 by 0.75 rectangle in the ``z = 0.0`` plane from the
+ImageData exercises. We start with the same 24 by 18 squares and split
+each square into four triangles by adding a point at its center. Both
+ranks generate their own 12 by 18 slab of squares, with the slabs
+meeting at ``x = 0.5``.
+
+We pass the lower and upper corners of the local slab and its square
+counts to ``make_triangle_mesh``. The helper allocates and fills
+``points``, ``cnode``, ``xcnode``, and ``types``.
+
+.. literalinclude:: ../../example/tutorial/triangles_temporal.F90
+   :language: fortran
+   :start-at: lower = [
+   :end-at: call make_triangle_mesh
+
+The helper numbers all the lattice vertices first and then adds
+one center point per square. It visits the squares row by row, going
+left to right from the bottom row up. In each square it lists four
+triangles counterclockwise, starting with the bottom triangle, just as
+in the first exercise. Each rank includes its own copy of the points on
+the shared boundary. The complete source listing below includes the
+helper’s implementation.
+
+We create the file with ``mode=VTKHDF_FIXED_MESH`` and write the mesh
+once. We also write ``mpi_rank`` once as static cell data to record
+which rank wrote each triangle.
+
+Registering ``temperature`` as temporal point data gives us a
+``vtkhdf_point_data_handle`` to use at every step. We evaluate the same
+moving Gaussian as in ImageData, using the x and y coordinates in
+``points``. Both ranks use the same time and coordinates at the shared
+points, so their temperature values agree there.
+
+.. literalinclude:: ../../example/tutorial/triangles_temporal.F90
+   :language: fortran
+   :start-at: call file%write_mesh
+   :end-at: call file%close
+
+.. raw:: html
+
+   <details>
+   <summary>View complete source <code>triangles_temporal.F90</code></summary>
+
+.. literalinclude:: ../../example/tutorial/triangles_temporal.F90
+   :language: fortran
+
+:download:`Download triangles_temporal.F90 <../../example/tutorial/triangles_temporal.F90>`
+
+.. raw:: html
+
+   </details>
+
+Build ``triangles_temporal`` from ``triangles_temporal.F90`` and run it
+with two processes.
+
+.. code-block:: bash
+
+   mpiexec -n 2 ./build/triangles_temporal
+
+Open ``triangles_temporal.vtkhdf`` in ParaView, choose **Surface With
+Edges**, and color by ``mpi_rank``. Check that rank 0 wrote the left slab
+and rank 1 wrote the right slab. Then switch to point ``temperature``
+and play the time series. Watch the hot spot pass across the slab
+boundary while the triangles stay fixed.
+
+.. figure:: _static/tutorial/temperature-triangles-temporal.gif
+   :alt: The hot spot moves left to right across the fixed triangular mesh.
+   :width: 65%
+
+   The hot spot moves from x = 0.35 to x = 0.70.

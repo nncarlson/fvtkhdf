@@ -92,9 +92,13 @@ jobs:
           mpiexec -n 2 ./rectilinear_moving
           mpiexec -n 2 ./structured_parallel
           mpiexec -n 2 ./structured_moving
+          mpiexec -n 1 ./triangles_static
+          mpiexec -n 2 ./triangles_parallel
+          mpiexec -n 2 ./triangles_temporal
         else
           ./image_static
           ./image_temporal
+          ./triangles_static
         fi
 
     # --- Gate: fail job if either ctest failed or consumer build failed ---

@@ -3,11 +3,12 @@ project(fvtkhdf_tutorial LANGUAGES C Fortran)
 
 find_package(fVTKHDF REQUIRED)
 
-set(examples image_static image_temporal)
+set(examples image_static image_temporal triangles_static)
 if(fVTKHDF_MPI_SUPPORT)
   list(APPEND examples image_parallel image_parallel_points
                        rectilinear_parallel rectilinear_moving
-                       structured_parallel structured_moving)
+                       structured_parallel structured_moving
+                       triangles_parallel triangles_temporal)
 endif()
 
 foreach(example IN LISTS examples)

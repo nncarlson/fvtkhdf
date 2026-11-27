@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 306 304"
+     width="306" height="304" role="img" aria-labelledby="title description">
+  <title id="title">The four-triangle mesh</title>
+  <desc id="description">Corner points P1, P2, P3, and P4 run counterclockwise from the lower left. P5 is the interior point. T1 is below P5, T2 on its right, T3 above, and T4 on its left.</desc>
+  <rect width="306" height="304" rx="8" fill="#fff"/>
+  <style>
+    .triangle { stroke: #345168; stroke-width: 1.7; stroke-linejoin: round; }
+    .point { fill: #174866; }
+    text { fill: #172c3d; font-family: sans-serif; }
+    .cell-label { font-size: 17px; font-weight: 650; text-anchor: middle; }
+    .point-label { font-size: 16px; font-weight: 600; }
+  </style>
+  <polygon class="triangle" points="36.0,266.0 268.0,266.0 128.8,138.4" fill="#f5e7be"/>
+  <polygon class="triangle" points="268.0,266.0 268.0,34.0 128.8,138.4" fill="#d5ebf0"/>
+  <polygon class="triangle" points="268.0,34.0 36.0,34.0 128.8,138.4" fill="#dce9f6"/>
+  <polygon class="triangle" points="36.0,34.0 36.0,266.0 128.8,138.4" fill="#f1e1eb"/>
+  <text class="cell-label" x="144.3" y="229.5">T1</text>
+  <text class="cell-label" x="221.6" y="152.1">T2</text>
+  <text class="cell-label" x="144.3" y="74.8">T3</text>
+  <text class="cell-label" x="66.9" y="152.1">T4</text>
+  <circle class="point" cx="36.0" cy="266.0" r="4"/>
+  <text class="point-label" x="28.0" y="285.0" text-anchor="end">P1</text>
+  <circle class="point" cx="268.0" cy="266.0" r="4"/>
+  <text class="point-label" x="276.0" y="285.0" text-anchor="start">P2</text>
+  <circle class="point" cx="268.0" cy="34.0" r="4"/>
+  <text class="point-label" x="276.0" y="25.0" text-anchor="start">P3</text>
+  <circle class="point" cx="36.0" cy="34.0" r="4"/>
+  <text class="point-label" x="28.0" y="25.0" text-anchor="end">P4</text>
+  <circle class="point" cx="128.8" cy="138.4" r="4"/>
+  <text class="point-label" x="138.8" y="143.4" text-anchor="start">P5</text>
+</svg>
