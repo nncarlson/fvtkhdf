@@ -129,6 +129,7 @@ for mask in masks:
                         np.testing.assert_array_equal(root["Steps/PointDataOffsets/value"], DATA)
                         np.testing.assert_array_equal(root["Steps/CellDataOffsets/vector"], DATA)
                         for group, name, expected in (
+                                ("Point", "early_points", value+700),
                                 ("Point", "late_points", value+700),
                                 ("Cell", "between_cells", ci+10*cj+100*ck+700),
                                 ("Cell", "end_cells", ci+10*cj+100*ck+700)):
@@ -156,7 +157,9 @@ for mask in masks:
                             np.testing.assert_array_equal(vtk_to_numpy(output.GetPointData().GetArray("value")), value.ravel()+10*DATA_PHASES[DATA[step]])
                             np.testing.assert_array_equal(vtk_to_numpy(output.GetCellData().GetArray("vector")), cells.reshape(-1, 2)+10*DATA_PHASES[DATA[step]])
                             np.testing.assert_array_equal(vtk_to_numpy(output.GetFieldData().GetArray("energy")), [42+step-step % 2])
-                            np.testing.assert_array_equal(vtk_to_numpy(output.GetPointData().GetArray("late_points")), value.ravel()+700)
+                            for name in ("early_points", "late_points"):
+                                np.testing.assert_array_equal(vtk_to_numpy(output.GetPointData().GetArray(name)),
+                                                              value.ravel()+700)
                             for name in ("between_cells", "end_cells"):
                                 np.testing.assert_array_equal(vtk_to_numpy(output.GetCellData().GetArray(name)),
                                                               (ci+10*cj+100*ck+700).ravel())

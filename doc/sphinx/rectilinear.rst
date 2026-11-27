@@ -45,7 +45,8 @@ Mesh Data
    Write the complete geometry as three coordinate vectors. In static and
    fixed-mesh modes, call once. In moving-mesh mode, call for the initial
    geometry and whenever it changes, at most once per time step. Supply all
-   three vectors together, before writing point/cell data for that step.
+   three vectors together, before writing temporal point or cell data for that
+   step.
 
    * ``x(:)``, ``y(:)``, ``z(:)``: full physical coordinate vectors in logical
      index order, supplied by rank zero. Their lengths equal the corresponding

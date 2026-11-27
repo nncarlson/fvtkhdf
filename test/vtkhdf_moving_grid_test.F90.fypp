@@ -33,7 +33,7 @@ contains
     integer, intent(in) :: mask
     logical, intent(in) :: initial_before
     type(vtkhdf_${grid}$_file) :: file
-    type(vtkhdf_point_data_handle) :: point_var, static_point_var
+    type(vtkhdf_point_data_handle) :: point_var, early_point_var, static_point_var
     type(vtkhdf_cell_data_handle) :: cell_var, static_cell_var
     type(vtkhdf_field_data_handle) :: field_var
     integer :: dims(3), lo(3), bounds(3,2), step, stat
@@ -63,6 +63,9 @@ contains
 #:else
     call file%write_mesh(bounds)
 #:endif
+    ! Exercise static writes by name and by handle, including before geometry.
+    call static_point_${kind}$(file,dims,lo,'early_points',early_point_var,0)
+    call static_point_${kind}$(file,dims,lo,'early_points',early_point_var,1)
     point_var = file%register_temporal_point_data('value',0.0_${kind}$)
     cell_var = file%register_temporal_cell_data('vector',[0.0_${kind}$,0.0_${kind}$])
     field_var = file%register_temporal_field_data('energy',0.0_${kind}$)
@@ -71,11 +74,12 @@ contains
 #:endif
     do step = 0,6
       call file%start_time_step(real(step,${kind}$))
+      ! A static update leaves geometry writable in the same step.
+      if (step == 4) call static_point_${kind}$(file,dims,lo,'late_points',static_point_var,1)
       if ((step == 0 .and. .not.initial_before) .or. step == 2 .or. step == 4) then
         call geometry_${grid}$_${kind}$(file,dims,lo,step)
       end if
       if (step == 3) call static_point_${kind}$(file,dims,lo,'late_points',static_point_var,0)
-      if (step == 5) call static_point_${kind}$(file,dims,lo,'late_points',static_point_var,1)
       if (step == 0 .or. step == 3 .or. step == 5) then
         call data_${kind}$(file,point_var,cell_var,dims,lo,step)
       end if

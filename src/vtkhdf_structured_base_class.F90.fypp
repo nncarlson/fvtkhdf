@@ -331,7 +331,7 @@ contains
     type(vtkhdf_${loc}$_data_handle) :: var
     type(vtkhdf_h5e_context) :: err_ctx
     call err_ctx%capture
-    INSIST(this%root_id >= 0 .and. this%logical_grid_defined .and. this%geometry_written)
+    INSIST(this%root_id >= 0 .and. this%logical_grid_defined)
     ASSERT(this%ctx%identical(trim(name)))
     ASSERT(this%ctx%identical([merge(1,0,present(attribute))]))
     ASSERT(this%ctx%identical([${nums.index((kind,decl,h5type))}$]))
@@ -456,7 +456,7 @@ contains
     call this%${loc}$_selections(index, spatial_shape, array_origin, write_bounds, ms, mc, fs, fc)
     call h5_write_region(this%ctx, this%${loc}$_data%vars(index)%dataset_id, array, &
         ${'ms, mc' if rank == 3 else '[0_hsize_t,ms], [int(ncomp,hsize_t),mc]'}$, fs, fc)
-    this%mesh_locked = .true.
+    if (this%${loc}$_data%vars(index)%is_temporal) this%mesh_locked = .true.
     call err_ctx%restore(0)
   end subroutine
 #:endfor
@@ -614,7 +614,7 @@ contains
     integer, intent(in) :: index, ncomp
     integer(hid_t), intent(in) :: type_id
     logical, intent(in) :: vector
-    INSIST(this%logical_grid_defined .and. this%geometry_written)
+    INSIST(this%logical_grid_defined)
     INSIST(allocated(this%${loc}$_data%vars))
     INSIST(index >= 1 .and. index <= size(this%${loc}$_data%vars))
     ASSERT(this%ctx%identical([index, ncomp, merge(1,0,vector)]))
@@ -622,7 +622,7 @@ contains
       INSIST(var%type_id == type_id)
       INSIST(ncomp == var%ncomp .and. (vector .eqv. var%is_vector))
       if (var%is_temporal) then
-        INSIST(this%step_open)
+        INSIST(this%geometry_written .and. this%step_open)
         if (.not.var%wrote_this_step) then
           call h5_reserve_snapshot(this%ctx, var%dataset_id, var%offset)
           var%next_offset = var%offset + 1

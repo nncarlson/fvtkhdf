@@ -55,17 +55,17 @@ VTK dataset type: ``vtkhdf_image_file``, ``vtkhdf_rectilinear_file``, or
 Geometry Ordering
 -----------------
 
-Supply the mesh geometry before writing point or cell data. In temporal files,
-the initial geometry may be supplied before or during the first time step,
-but must be supplied before that step is finalized. Complete all geometry
-writes before the first point/cell data write or the first step's finalization.
-Static and fixed-mesh modes permit no subsequent geometry writes. In moving-mesh
-mode, each new step permits a replacement before that step's point/cell writes;
-omitting geometry writes reuses the previous coordinates.
-
-Point and cell data registration requires the logical grid dimensions.
+Define the logical grid before registering or writing point or cell data.
 Where the geometry interface permits separate coordinate writes, registration
-may precede those writes.
+and static point and cell writes may precede geometry. Static writes leave
+geometry writable within the limits of the writer mode and time step.
+
+In temporal files, supply the initial geometry before the first temporal
+point or cell write and before finalizing the first time step. Geometry
+supplied before the first step belongs to that step. Static and fixed-mesh
+modes store a single geometry snapshot. In moving-mesh mode, each new step
+may reuse the previous geometry or replace it. Complete any replacement
+before writing temporal point or cell data for that step.
 
 Grid Indices and Data Layout
 ----------------------------
@@ -154,9 +154,9 @@ Static Point and Cell Data
    array arguments have the same meaning as in the calls by name.
 
    Static point and cell data are supported in all structured writer modes.
-   Define the mesh before creating or writing these datasets. In a temporal
-   file, static datasets may also be written after time stepping begins,
-   including after the last step has been finalized and before closing the file.
+   These datasets may be created or written at any time after defining the
+   logical grid and before closing the file, including after the last step
+   has been finalized.
    Their values apply to every step, including earlier steps. Further writes
    through a static handle modify the same dataset for all steps; they do not
    create temporal replacements.

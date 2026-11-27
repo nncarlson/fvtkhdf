@@ -37,9 +37,14 @@ program vtkhdf_grid_fail_test
     call grid%create('grid_fail_'//trim(scenario)//'.vtkhdf',stat,errmsg,mode=VTKHDF_FIXED_MESH)
 #endif
     if (stat /= 0) error stop errmsg
-    if (scenario == 'before_mesh') then
+    select case (trim(scenario))
+    case ('before_mesh')
       call grid%write_mesh_geometry(points,bounds(:,1))
-    else
+    case ('cell_before_mesh')
+      call grid%write_cell_data('cell',reshape([1.0_real64],[1,1,1]),bounds(:,1))
+    case ('point_before_mesh')
+      call grid%write_point_data('point',points(1,:,:,:),bounds(:,1))
+    case default
       call grid%write_mesh(bounds)
       select case (trim(scenario))
       case ('missing_close')
@@ -48,10 +53,6 @@ program vtkhdf_grid_fail_test
       case ('missing_step')
         call grid%start_time_step(0.0)
         call grid%finalize_time_step()
-      case ('cell_before_geometry')
-        call grid%write_cell_data('cell',reshape([1.0_real64],[1,1,1]),bounds(:,1))
-      case ('point_before_geometry')
-        call grid%write_point_data('point',points(1,:,:,:),bounds(:,1))
       case ('temporal_before_geometry')
         cell_var = grid%register_temporal_cell_data('cell',0.0_real64)
         call grid%start_time_step(0.0)
@@ -74,10 +75,12 @@ program vtkhdf_grid_fail_test
           call grid%start_time_step(0.0)
           call grid%finalize_time_step()
           call grid%write_mesh_geometry(points,bounds(:,1),selected)
-        case ('geometry_after_data')
+        case ('geometry_after_temporal_data')
+          cell_var = grid%register_temporal_cell_data('cell',0.0_real64)
+          call grid%start_time_step(0.0)
           selected(:,2) = bounds(:,1)
           if (rank /= 0) selected(1,2) = selected(1,1)-1
-          call grid%write_cell_data('cell',reshape([1.0_real64],[1,1,1]),bounds(:,1),selected)
+          call grid%write_cell_data(cell_var,reshape([1.0_real64],[1,1,1]),bounds(:,1),selected)
           call grid%write_mesh_geometry(points,bounds(:,1),selected)
         case ('duplicate')
           call grid%write_mesh(bounds)
@@ -85,7 +88,7 @@ program vtkhdf_grid_fail_test
           error stop 'unknown scenario'
         end select
       end select
-    end if
+    end select
   end if
   call test_env_finalize()
 end program

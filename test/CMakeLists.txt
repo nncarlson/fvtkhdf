@@ -627,7 +627,7 @@ foreach(mask RANGE 1 7)
 endforeach()
 vtkhdf_add_test_target(vtkhdf_grid_fail_test vtkhdf_grid_fail_test.F90)
 foreach(case axis_length before_mesh missing_close missing_step components bounds source kind late duplicate
-             cell_before_geometry point_before_geometry temporal_before_geometry geometry_after_data)
+             cell_before_mesh point_before_mesh temporal_before_geometry geometry_after_temporal_data)
   vtkhdf_add_runtime_test(vtkhdf_grid_fail_${case} vtkhdf_grid_fail_test ${case})
   set_tests_properties(vtkhdf_grid_fail_${case} PROPERTIES WILL_FAIL TRUE TIMEOUT 30)
 endforeach()

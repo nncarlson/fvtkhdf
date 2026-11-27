@@ -43,8 +43,8 @@ Mesh Data
    call file%write_mesh_geometry(points, array_origin [, write_bounds])
 
    Write a rectangular region of physical point coordinates. Repeated calls
-   assemble the global geometry. Complete these writes before writing point or
-   cell data and before finalizing the corresponding time step. Initial
+   assemble the global geometry. Complete these writes before writing temporal
+   point or cell data and before finalizing the corresponding time step. Initial
    geometry may be supplied before or during the first step. Static and
    fixed-mesh modes permit only this initial geometry; moving-mesh mode permits
    a replacement during each subsequent step.
@@ -72,8 +72,8 @@ In moving-mesh mode, the first geometry call in a step begins a replacement;
 subsequent calls in that step supply further regions of the same replacement.
 An all-empty collective call also begins a replacement. Unwritten regions follow
 the build-dependent fill policy above rather than reusing the preceding
-geometry snapshot. Complete all visible regions before writing point/cell data
-or finalizing the step.
+geometry snapshot. Complete all visible regions before writing temporal point
+or cell data or finalizing the step.
 
 Omitting all geometry calls during a step reuses the most recently written
 geometry. A stored geometry snapshot is therefore distinct from a time step:

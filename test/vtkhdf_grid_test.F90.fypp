@@ -55,6 +55,19 @@ contains
     call file%create(trim(filename), stat, errmsg, mode=mode, data_chunk_bytes=64_int64)
 #endif
     if (stat /= 0) error stop errmsg
+    call file%write_mesh(bounds)
+    ! Write static cell data before geometry, using an independent partition.
+    first = rank*cdims(1)/nproc + 1
+    last = (rank+1)*cdims(1)/nproc
+    allocate(cells(last-first+1,cdims(2),cdims(3)))
+    do k = 1,cdims(3)
+      do j = 1,cdims(2)
+        do i = first,last
+          cells(i-first+1,j,k) = i-1 + 10*(j-1) + 100*(k-1)
+        end do
+      end do
+    end do
+    call file%write_cell_data('cell',cells,bounds(:,1)+[first-1,0,0],handle=cell_var)
 #:if grid == 'rectilinear'
     if (rank == 0) then
       x = [(real(i*i,${kind}$),i=0,dims(1)-1)]
@@ -65,9 +78,7 @@ contains
       allocate(x(0),y(2),z(0))
       y = -999
     end if
-    call file%write_mesh(bounds,x,y,z)
-#:else
-    call file%write_mesh(bounds)
+    call file%write_mesh_geometry(x,y,z)
 #:endif
     if (temporal) then
       point_var = file%register_temporal_point_data('value',0.0_${kind}$,attribute='Scalars')
@@ -109,18 +120,6 @@ contains
     points = -999
     call file%write_mesh_geometry(points,[0,0,0],reshape([1,1,1,0,0,0],[3,2]))
 #:endif
-    ! Cell regions use a different partition from geometry/point regions.
-    first = rank*cdims(1)/nproc + 1
-    last = (rank+1)*cdims(1)/nproc
-    allocate(cells(last-first+1,cdims(2),cdims(3)))
-    do k = 1,cdims(3)
-      do j = 1,cdims(2)
-        do i = first,last
-          cells(i-first+1,j,k) = i-1 + 10*(j-1) + 100*(k-1)
-        end do
-      end do
-    end do
-    call file%write_cell_data('cell',cells,bounds(:,1)+[first-1,0,0],handle=cell_var)
     do step = 0, merge(2,0,temporal)
       if (temporal) then
 #:if grid == 'structured'
