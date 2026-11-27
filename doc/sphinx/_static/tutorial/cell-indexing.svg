@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 790 325" width="790" height="325"
+     role="img" aria-labelledby="title description">
+  <title id="title">Indexing the lower-left cell</title>
+  <desc id="description">Two by two cells at the lower-left corner of the grid. The
+    highlighted cell stores temperature(1,1,1). Its lower corner has logical point
+    index (0, 0, 0), and its center has physical coordinates (dx/2, dy/2, 0.0).</desc>
+  <rect width="790" height="325" rx="8" fill="#fff"/>
+
+  <path d="M244 8V288H528 M376 8V288 M508 8V288 M244 24H528 M244 156H528"
+        fill="none" stroke="#85909e" stroke-width="1.5"/>
+  <rect x="244" y="156" width="132" height="132" fill="#e5f1f8"
+        stroke="#224e6b" stroke-width="3"/>
+  <path d="M181 275H215L244 288 M310 222H545"
+        fill="none" stroke="#46596a" stroke-width="1.5"/>
+  <circle cx="244" cy="288" r="4.5" fill="#224e6b"/>
+  <circle cx="310" cy="222" r="4.5" fill="#224e6b"/>
+
+  <g fill="#172c3d" font-family="sans-serif" font-size="17">
+    <text x="30" y="266">Logical point index</text>
+    <text x="558" y="211">Physical cell center</text>
+  </g>
+  <g fill="#172c3d" font-family="monospace">
+    <text x="30" y="289" font-size="16">(0, 0, 0)</text>
+    <text x="558" y="235" font-size="16">(dx/2, dy/2, 0.0)</text>
+    <text x="310" y="255" font-size="12" text-anchor="middle">temperature(1,1,1)</text>
+  </g>
+</svg>

@@ -9,6 +9,7 @@ A serial build is also available.
 
 * :doc:`installation`: prerequisites, serial and MPI builds, examples, and
   integration with your project.
+* :doc:`Tutorial <tutorial>`: write VTKHDF files and view the results in ParaView.
 * :doc:`reference`: writer interfaces, dataset types, and reader compatibility.
 
 .. toctree::
@@ -16,4 +17,5 @@ A serial build is also available.
    :maxdepth: 1
 
    installation
+   Tutorial <tutorial>
    reference

@@ -2,3 +2,32 @@
 .method-description {
   margin-left: 2em;
 }
+
+/* Scale Furo's document headings while preserving their proportions. */
+article[role="main"] {
+  --fvtkhdf-heading-scale: 0.85;
+}
+
+article[role="main"] h1 {
+  font-size: calc(2.5em * var(--fvtkhdf-heading-scale));
+}
+
+article[role="main"] h2 {
+  font-size: calc(2em * var(--fvtkhdf-heading-scale));
+}
+
+article[role="main"] h3 {
+  font-size: calc(1.5em * var(--fvtkhdf-heading-scale));
+}
+
+article[role="main"] h4 {
+  font-size: calc(1.25em * var(--fvtkhdf-heading-scale));
+}
+
+article[role="main"] h5 {
+  font-size: calc(1.125em * var(--fvtkhdf-heading-scale));
+}
+
+article[role="main"] h6 {
+  font-size: calc(1em * var(--fvtkhdf-heading-scale));
+}

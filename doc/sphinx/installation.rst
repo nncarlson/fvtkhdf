@@ -126,21 +126,39 @@ existing file with that name. Open it in ParaView with
 ``paraview example.vtkhdf``. See the :repo:`example directory <example/README.md>`
 for the full set of serial and MPI examples.
 
+.. _using-fvtkhdf:
+
 Using fVTKHDF in your project
 =============================
 
-The installation includes Fortran module files, the library, and CMake package
-configuration files. In your application's ``CMakeLists.txt``, enable both C
-and Fortran so the package can discover its HDF5 C dependency:
+Use C and Fortran compilers and an HDF5 library compatible with your
+fVTKHDF installation. The example below uses an MPI-enabled installation,
+which also requires compatible MPI and parallel HDF5.
+
+The installation includes Fortran module files, the library, and CMake
+package configuration files. In your application's ``CMakeLists.txt``,
+enable C and Fortran so the package can discover its HDF5 C dependency.
+The ``MPI`` component requires an MPI-enabled fVTKHDF installation,
+and the imported target carries the library's dependencies.
 
 .. code-block:: cmake
 
    cmake_minimum_required(VERSION 3.28)
-   project(my_simulation LANGUAGES C Fortran)
+   project(my_app LANGUAGES C Fortran)
 
-   find_package(fVTKHDF REQUIRED)
-   add_executable(my_simulation main.f90)
-   target_link_libraries(my_simulation PRIVATE fVTKHDF::fvtkhdf)
+   find_package(fVTKHDF REQUIRED COMPONENTS MPI)
+   add_executable(my_app my_app.F90)
+   target_link_libraries(my_app PRIVATE fVTKHDF::fvtkhdf)
+
+Use the uppercase ``.F90`` suffix for sources that rely on preprocessing,
+such as the tutorial programs with ``#ifdef`` directives. The suffix
+convention tells Fortran compilers to preprocess the source. If your
+program selects its MPI code with ``#ifdef USE_MPI``, define that macro
+on its target.
+
+.. code-block:: cmake
+
+   target_compile_definitions(my_app PRIVATE USE_MPI)
 
 Configure and build your application with the installation prefix:
 
@@ -149,10 +167,25 @@ Configure and build your application with the installation prefix:
    cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/install
    cmake --build build --parallel
 
-Keep the compatible compiler, HDF5, and MPI environment selected while building
-your application. The imported target carries the library's dependencies. To
-require an MPI-enabled installation explicitly, use
-``find_package(fVTKHDF REQUIRED COMPONENTS MPI)``.
+For an application using the serial library, omit ``COMPONENTS MPI`` and
+any ``USE_MPI`` definition. Configure in a separate build directory with
+the serial installation prefix.
+
+For a complete example with multiple targets, see the
+:repo:`tutorial CMake project <example/tutorial/CMakeLists.txt>`.
+
+Finding the installed dependencies
+----------------------------------
+
+If CMake cannot find the intended HDF5 installation or selects a serial
+HDF5 library for your MPI application, add
+``-DHDF5_ROOT=/path/to/parallel-hdf5`` to the configure command. If you
+know the directory containing HDF5's CMake package configuration, you
+can pass it as ``-DHDF5_DIR=/path/to/hdf5-cmake``.
+
+If CMake cannot find fVTKHDF using the installation prefix, point
+``-DfVTKHDF_DIR=/path/to/package`` at the directory containing
+``fVTKHDFConfig.cmake``.
 
 Other installation routes
 =========================
