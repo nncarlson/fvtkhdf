@@ -130,19 +130,17 @@ reference pages describe the mesh and cell-data arguments in detail.
 .. literalinclude:: ../../example/tutorial/image_static.F90
    :language: fortran
 
-:download:`Download image_static.F90 <../../example/tutorial/image_static.F90>`
-
 .. raw:: html
 
    </details>
 
+:download:`Download image_static.F90 <../../example/tutorial/image_static.F90>`
+
 Follow :ref:`using-fvtkhdf`, replacing ``my_app`` with ``image_static``
-and using the downloaded
-:download:`image_static.F90 <../../example/tutorial/image_static.F90>`
-as the source. Include the ``USE_MPI`` target definition so the
-preprocessor selects the MPI code. Then run the compiled program as shown
-below, assuming the executable is in ``build/`` relative to the working
-directory.
+and using the downloaded ``image_static.F90`` as the source. Include the
+``USE_MPI`` target definition so the preprocessor selects the MPI code.
+Then run the compiled program as shown below, assuming the executable
+is in ``build/`` relative to the working directory.
 
 .. code-block:: bash
 
@@ -189,11 +187,11 @@ finalize MPI.
 .. literalinclude:: ../../example/tutorial/image_temporal.F90
    :language: fortran
 
-:download:`Download image_temporal.F90 <../../example/tutorial/image_temporal.F90>`
-
 .. raw:: html
 
    </details>
+
+:download:`Download image_temporal.F90 <../../example/tutorial/image_temporal.F90>`
 
 Build ``image_temporal`` from ``image_temporal.F90``, again
 defining ``USE_MPI``.
@@ -286,11 +284,11 @@ for collective call requirements.
 .. literalinclude:: ../../example/tutorial/image_parallel.F90
    :language: fortran
 
-:download:`Download image_parallel.F90 <../../example/tutorial/image_parallel.F90>`
-
 .. raw:: html
 
    </details>
+
+:download:`Download image_parallel.F90 <../../example/tutorial/image_parallel.F90>`
 
 Build ``image_parallel`` from ``image_parallel.F90`` and
 launch it with two processes.
@@ -376,11 +374,11 @@ their own bounds at every step.
 .. literalinclude:: ../../example/tutorial/image_parallel_points.F90
    :language: fortran
 
-:download:`Download image_parallel_points.F90 <../../example/tutorial/image_parallel_points.F90>`
-
 .. raw:: html
 
    </details>
+
+:download:`Download image_parallel_points.F90 <../../example/tutorial/image_parallel_points.F90>`
 
 Build ``image_parallel_points`` from
 ``image_parallel_points.F90`` and run it with two processes too.
@@ -465,11 +463,11 @@ for the coordinate-vector arguments.
 .. literalinclude:: ../../example/tutorial/rectilinear_parallel.F90
    :language: fortran
 
-:download:`Download rectilinear_parallel.F90 <../../example/tutorial/rectilinear_parallel.F90>`
-
 .. raw:: html
 
    </details>
+
+:download:`Download rectilinear_parallel.F90 <../../example/tutorial/rectilinear_parallel.F90>`
 
 Build ``rectilinear_parallel`` from ``rectilinear_parallel.F90``
 and launch it with two processes.
@@ -534,11 +532,11 @@ the step as before.
 .. literalinclude:: ../../example/tutorial/rectilinear_moving.F90
    :language: fortran
 
-:download:`Download rectilinear_moving.F90 <../../example/tutorial/rectilinear_moving.F90>`
-
 .. raw:: html
 
    </details>
+
+:download:`Download rectilinear_moving.F90 <../../example/tutorial/rectilinear_moving.F90>`
 
 Build ``rectilinear_moving`` from ``rectilinear_moving.F90`` and run
 it with two processes.
@@ -623,11 +621,11 @@ array and bounds arguments.
 .. literalinclude:: ../../example/tutorial/structured_parallel.F90
    :language: fortran
 
-:download:`Download structured_parallel.F90 <../../example/tutorial/structured_parallel.F90>`
-
 .. raw:: html
 
    </details>
+
+:download:`Download structured_parallel.F90 <../../example/tutorial/structured_parallel.F90>`
 
 Build ``structured_parallel`` from ``structured_parallel.F90`` and run
 it with two processes.
@@ -684,11 +682,11 @@ first, then the temperatures.
 .. literalinclude:: ../../example/tutorial/structured_moving.F90
    :language: fortran
 
-:download:`Download structured_moving.F90 <../../example/tutorial/structured_moving.F90>`
-
 .. raw:: html
 
    </details>
+
+:download:`Download structured_moving.F90 <../../example/tutorial/structured_moving.F90>`
 
 Build ``structured_moving`` from ``structured_moving.F90`` and run it
 with two processes.
@@ -758,7 +756,11 @@ the last triangle. The ``int8`` array ``types`` holds one VTK cell type
 per cell.
 
 After creating the file with ``mode=VTKHDF_STATIC``, we write the mesh,
-set and write the cell temperatures, and close the file. See the
+set and write the cell temperatures, and close the file. In the
+structured exercises, we used ``array_origin`` to place values in the
+global grid and ``write_bounds`` to select which shared points to write.
+Here, ``write_cell_data`` matches each value to a triangle in the local
+order supplied to ``write_mesh``. See the
 :doc:`UnstructuredGrid reference <unstructured>` for the mesh arguments.
 
 .. literalinclude:: ../../example/tutorial/triangles_static.F90
@@ -774,11 +776,11 @@ set and write the cell temperatures, and close the file. See the
 .. literalinclude:: ../../example/tutorial/triangles_static.F90
    :language: fortran
 
-:download:`Download triangles_static.F90 <../../example/tutorial/triangles_static.F90>`
-
 .. raw:: html
 
    </details>
+
+:download:`Download triangles_static.F90 <../../example/tutorial/triangles_static.F90>`
 
 Build ``triangles_static`` from ``triangles_static.F90`` with
 ``USE_MPI`` defined, then run it with one process.
@@ -847,11 +849,11 @@ containing both parts.
 .. literalinclude:: ../../example/tutorial/triangles_parallel.F90
    :language: fortran
 
-:download:`Download triangles_parallel.F90 <../../example/tutorial/triangles_parallel.F90>`
-
 .. raw:: html
 
    </details>
+
+:download:`Download triangles_parallel.F90 <../../example/tutorial/triangles_parallel.F90>`
 
 Build ``triangles_parallel`` from ``triangles_parallel.F90`` and run it
 with two processes.
@@ -914,11 +916,11 @@ points, so their temperature values agree there.
 .. literalinclude:: ../../example/tutorial/triangles_temporal.F90
    :language: fortran
 
-:download:`Download triangles_temporal.F90 <../../example/tutorial/triangles_temporal.F90>`
-
 .. raw:: html
 
    </details>
+
+:download:`Download triangles_temporal.F90 <../../example/tutorial/triangles_temporal.F90>`
 
 Build ``triangles_temporal`` from ``triangles_temporal.F90`` and run it
 with two processes.
@@ -938,3 +940,12 @@ boundary while the triangles stay fixed.
    :width: 65%
 
    The hot spot moves from x = 0.35 to x = 0.70.
+
+Next steps
+----------
+
+We’ve written and inspected VTKHDF files for four grid types, from a
+single snapshot to time series written by two MPI processes. The
+:repo:`example programs <example/README.md>` demonstrate more writer
+features and additional dataset types, and the :doc:`reference manual
+<reference>` describes the writer interfaces and their options.
